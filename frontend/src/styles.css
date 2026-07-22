@@ -487,11 +487,76 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
 .guide-list strong { color: var(--ink); }
 
 .ad-slot {
-  margin: 1rem 0; border: 1px dashed color-mix(in srgb, var(--signal-2) 40%, var(--border));
-  border-radius: var(--radius); padding: 1rem; background: color-mix(in srgb, var(--signal-2) 6%, var(--card));
-  font-size: 0.88rem; color: var(--muted);
+  margin: 1rem 0;
+  border: 1px dashed color-mix(in srgb, var(--signal-2) 45%, var(--border));
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--signal-2) 7%, var(--card));
+  overflow: hidden;
 }
-.ad-slot strong { color: var(--ink-soft); display: block; margin-bottom: 0.25rem; }
+.ad-slot--leaderboard { min-height: 90px; }
+.ad-slot--billboard { min-height: 140px; }
+.ad-slot--rectangle { min-height: 120px; }
+
+.ad-billboard { position: relative; }
+.ad-billboard__badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal-2);
+  margin-bottom: 0.45rem;
+}
+.ad-billboard__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+.ad-billboard__icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  background: color-mix(in srgb, var(--signal-2) 16%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--signal-2) 28%, var(--border));
+  color: var(--signal-2);
+}
+.ad-billboard__copy { flex: 1 1 160px; min-width: 0; }
+.ad-billboard__title {
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+.ad-billboard__subtitle {
+  margin-top: 0.2rem;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.ad-billboard__meta {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.ad-billboard__cta {
+  flex-shrink: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ad-billboard--billboard .ad-billboard__body {
+  min-height: 100px;
+}
+@media (max-width: 720px) {
+  .ad-slot { padding: 0.75rem 0.85rem; }
+  .ad-billboard__body { flex-direction: column; align-items: stretch; }
+  .ad-billboard__cta { width: 100%; text-align: center; justify-content: center; }
+}
 
 .hidden { display: none !important; }
 .stats { display: flex; flex-wrap: wrap; gap: 0.55rem; }

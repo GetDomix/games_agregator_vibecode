@@ -15,6 +15,26 @@ type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: 
 type PopularItem = { query: string; game_name?: string | null; appid?: number | null; header_image?: string | null; count?: number }
 type Fav = { id: number; appid: number; game_name: string; header_image?: string | null; target_price_rub?: number | null; last_steam_price_rub?: number | null; price_below_target?: boolean }
 type Hist = { id: number; query: string; appid?: number | null; game_name?: string | null; header_image?: string | null; steam_price_rub?: number | null; plati_min_rub?: number | null; ggsel_min_rub?: number | null; created_at?: string }
+type AdSlotDef = {
+  id: string
+  placement: string
+  format: string
+  size_hint?: string
+  title: string
+  subtitle?: string
+  cta?: string
+  provider?: string
+  click_url?: string | null
+  image_url?: string | null
+  html?: string | null
+}
+type AdsConfig = {
+  enabled: boolean
+  contact_email?: string
+  label?: string
+  note?: string
+  slots: AdSlotDef[]
+}
 
 const rub = (v?: number | null) =>
   v == null || Number.isNaN(Number(v))
@@ -55,8 +75,14 @@ export default function App() {
     alerts_count: number
     ctas: string[]
   } | null>(null)
+  const [ads, setAds] = useState<AdsConfig | null>(null)
 
   const loggedIn = Boolean(token && user)
+
+  const adByPlacement = useCallback(
+    (placement: string) => (ads?.enabled ? ads.slots.find((s) => s.placement === placement) : undefined),
+    [ads],
+  )
 
   const refreshMe = useCallback(async () => {
     if (!getToken()) return
@@ -76,6 +102,9 @@ export default function App() {
     api<{ items: PopularItem[] }>('/api/trends/popular?limit=8')
       .then((d) => setPopular(d.items || []))
       .catch(() => {})
+    api<AdsConfig>('/api/ads/config')
+      .then((d) => setAds(d))
+      .catch(() => setAds(null))
   }, [refreshMe])
 
   const loadDashboard = useCallback(async () => {
@@ -242,6 +271,10 @@ export default function App() {
       </header>
 
       <main className="shell">
+        {adByPlacement('header') && (
+          <AdSlot slot={adByPlacement('header')!} label={ads?.label} />
+        )}
+
         {view === 'home' && (
           <>
             <section className="hero">
@@ -285,6 +318,10 @@ export default function App() {
                 </button>
               </p>
             </section>
+
+            {adByPlacement('mid') && (
+              <AdSlot slot={adByPlacement('mid')!} label={ads?.label} />
+            )}
 
             <section className="section panel">
               <h3>Зачем это нужно</h3>
@@ -414,6 +451,10 @@ export default function App() {
                       </div>
                     </div>
                   </article>
+                )}
+
+                {adByPlacement('inline_results') && (
+                  <AdSlot slot={adByPlacement('inline_results')!} label={ads?.label} />
                 )}
 
                 <div className="grid-2">
@@ -608,6 +649,9 @@ export default function App() {
             </div>
           </section>
         )}
+        {adByPlacement('footer') && (
+          <AdSlot slot={adByPlacement('footer')!} label={ads?.label} />
+        )}
       </main>
 
       <footer className="shell footer">
@@ -615,7 +659,7 @@ export default function App() {
           KeySignal помогает сравнивать цены. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
-
+        {ads?.note && <p className="muted" style={{ marginTop: '0.65rem' }}>{ads.note}</p>}
       </footer>
 
       <AnimatePresence>
@@ -652,6 +696,40 @@ export default function App() {
         )}
       </AnimatePresence>
     </>
+  )
+}
+
+function AdSlot({ slot, label }: { slot: AdSlotDef; label?: string }) {
+  const href = slot.click_url || '#'
+  const isMailto = href.startsWith('mailto:')
+  return (
+    <aside className={`ad-slot ad-slot--${slot.format}`} aria-label={slot.title} data-ad-id={slot.id}>
+      <div className={`ad-billboard ad-billboard--${slot.format}`}>
+        <span className="ad-billboard__badge">{label || 'Реклама'}</span>
+        <div className="ad-billboard__body">
+          <div className="ad-billboard__icon" aria-hidden>
+            ▣
+          </div>
+          <div className="ad-billboard__copy">
+            <div className="ad-billboard__title">{slot.title}</div>
+            {slot.subtitle && <div className="ad-billboard__subtitle">{slot.subtitle}</div>}
+            {slot.size_hint && (
+              <div className="ad-billboard__meta">
+                Формат: {slot.size_hint}
+                {slot.provider ? ` · ${slot.provider}` : ''}
+              </div>
+            )}
+          </div>
+          <a
+            className="ad-billboard__cta btn sm primary"
+            href={href}
+            {...(isMailto ? {} : { target: '_blank', rel: 'noopener noreferrer sponsored' })}
+          >
+            {slot.cta || 'Разместить'}
+          </a>
+        </div>
+      </div>
+    </aside>
   )
 }
 
