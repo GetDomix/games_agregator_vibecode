@@ -616,11 +616,10 @@ export default function App() {
           Перед оплатой проверяйте продавца и условия.
         </p>
         <p className="footer-links muted">
-          HTTPS:{' '}
-          <a href="https://gpa.185.100.157.180.sslip.io">gpa…sslip.io</a>
-          {' · '}
-          если Wi‑Fi не пускает — откройте через мобильный интернет или Cloudflare Tunnel
-          (URL в <code>docker logs gpa-tunnel-1</code>).
+          Основной HTTPS:{' '}
+          <a href="https://gpa.185.100.157.180.sslip.io">gpa.185.100.157.180.sslip.io</a>
+          . Если домашний Wi‑Fi не открывает сайт — попробуйте мобильный интернет
+          или зеркало Cloudflare (см. README / сообщение в чате деплоя).
         </p>
       </footer>
 
