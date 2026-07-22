@@ -615,12 +615,7 @@ export default function App() {
           KeySignal помогает сравнивать цены. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
-        <p className="footer-links muted">
-          Основной HTTPS:{' '}
-          <a href="https://gpa.185.100.157.180.sslip.io">gpa.185.100.157.180.sslip.io</a>
-          . Если домашний Wi‑Fi не открывает сайт — попробуйте мобильный интернет
-          или зеркало Cloudflare (см. README / сообщение в чате деплоя).
-        </p>
+
       </footer>
 
       <AnimatePresence>
