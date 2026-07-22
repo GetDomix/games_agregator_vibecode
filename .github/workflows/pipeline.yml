@@ -130,44 +130,106 @@ jobs:
           APP_KEY: ${{ secrets.APP_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
-          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<EOS
+          # Pass deploy vars into remote shell (quoted heredoc would drop them)
+          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            env \
+              DEPLOY_PATH="$DEPLOY_PATH" \
+              APP_KEY="${APP_KEY:-}" \
+              POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}" \
+              bash -s <<'EOS'
           set -euo pipefail
-          cd "${DEPLOY_PATH}"
-          # root .env for compose variable substitution
+          cd "$DEPLOY_PATH"
+
+          # Free host :80 (system nginx / apache from older stack)
+          for svc in nginx apache2 httpd caddy; do
+            if systemctl is-active --quiet "$svc" 2>/dev/null; then
+              systemctl stop "$svc" || true
+              systemctl disable "$svc" || true
+              echo "stopped host $svc to free port 80"
+            fi
+          done
+
+          # Legacy Python container name from previous compose service
+          docker rm -f gpa-web-1 2>/dev/null || true
+
+          # Drop other compose orphans and anything still binding :80 before recreate
+          docker compose down --remove-orphans 2>/dev/null || true
+          if ss -tlnp 2>/dev/null | grep -qE ':80 '; then
+            echo "port 80 still in use — forcing free"
+            fuser -k 80/tcp 2>/dev/null || true
+            sleep 1
+          fi
+
+          # Create .env once; never rotate POSTGRES_PASSWORD after volume init
           if [ ! -f .env ]; then
-            APP_KEY_VAL='${APP_KEY}'
-            if [ -z "\$APP_KEY_VAL" ]; then
-              APP_KEY_VAL=\$(openssl rand -base64 32 | tr -d '\n' | sed 's/^/base64:/')
+            APP_KEY_VAL="${APP_KEY:-}"
+            if [ -z "$APP_KEY_VAL" ]; then
+              APP_KEY_VAL="base64:$(openssl rand -base64 32 | tr -d '\n')"
             fi
-            PG_PASS='${POSTGRES_PASSWORD}'
-            if [ -z "\$PG_PASS" ]; then
-              PG_PASS=\$(openssl rand -hex 16)
+            PG_PASS="${POSTGRES_PASSWORD:-}"
+            if [ -z "$PG_PASS" ]; then
+              PG_PASS="$(openssl rand -hex 16)"
             fi
+            HOST_IP="$(hostname -I | awk '{print $1}')"
             cat > .env <<EOF
           APP_ENV=production
           APP_DEBUG=false
-          APP_KEY=\${APP_KEY_VAL}
-          APP_URL=http://\$(hostname -I | awk '{print \$1}')
-          FRONTEND_URL=http://\$(hostname -I | awk '{print \$1}')
+          APP_KEY=${APP_KEY_VAL}
+          APP_URL=http://${HOST_IP}
+          FRONTEND_URL=http://${HOST_IP}
           POSTGRES_DB=gpa
           POSTGRES_USER=gpa
-          POSTGRES_PASSWORD=\${PG_PASS}
+          POSTGRES_PASSWORD=${PG_PASS}
           FRONTEND_PORT=80
           BACKEND_PORT=8080
           CORS_ORIGINS=*
           EOF
-            # strip accidental leading spaces
             sed -i 's/^[[:space:]]*//' .env
             chmod 600 .env
+            echo "wrote compose .env"
+          else
+            # Ensure required keys exist without overwriting password
+            grep -q '^POSTGRES_DB=' .env || echo 'POSTGRES_DB=gpa' >> .env
+            grep -q '^POSTGRES_USER=' .env || echo 'POSTGRES_USER=gpa' >> .env
+            grep -q '^FRONTEND_PORT=' .env || echo 'FRONTEND_PORT=80' >> .env
+            grep -q '^BACKEND_PORT=' .env || echo 'BACKEND_PORT=8080' >> .env
+            if ! grep -qE '^POSTGRES_PASSWORD=.+' .env; then
+              PG_PASS="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
+              echo "POSTGRES_PASSWORD=${PG_PASS}" >> .env
+            fi
+            if ! grep -qE '^APP_KEY=base64:.+' .env; then
+              if [ -n "${APP_KEY:-}" ]; then
+                echo "APP_KEY=${APP_KEY}" >> .env
+              else
+                echo "APP_KEY=base64:$(openssl rand -base64 32 | tr -d '\n')" >> .env
+              fi
+            fi
+            echo "reusing existing compose .env"
           fi
-          docker compose up -d --build
+
+          docker compose up -d --build --remove-orphans
           docker compose ps
+
+          # Wait for API before leaving deploy step (migrations need a moment)
+          echo "waiting for /api/health via frontend..."
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1; then
+              curl -fsS http://127.0.0.1/api/health
+              echo
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "health check failed; backend logs:" >&2
+          docker logs --tail 40 gpa-backend-1 >&2 || true
+          docker logs --tail 20 gpa-frontend-1 >&2 || true
+          exit 1
           EOS
-      - name: Health
+      - name: Health (public)
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          for i in $(seq 1 50); do
+          for i in $(seq 1 30); do
             if curl -fsS "http://${DEPLOY_HOST}/api/health"; then
               echo
               exit 0
