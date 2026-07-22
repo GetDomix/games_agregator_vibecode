@@ -23,3 +23,13 @@ cd frontend && npm install && npm run dev
 
 - 99 ₽/мес · 790 ₽/год (env)
 - Промокод: `KEYSIGNAL-PRO` (30 дней)
+
+## Радар (Telegram)
+
+См. [`bot/README.md`](bot/README.md).
+
+- Имя бота: **Игроскан Радар**
+- Username (проверить в BotFather): **`@igroscan_radar_bot`**
+- Лого: `bot/assets/bot_logo.jpg`
+- Скан: `php artisan radar:scan` + `php artisan schedule:work`
+- Бот: `cd bot && pip install -r requirements.txt && python main.py`

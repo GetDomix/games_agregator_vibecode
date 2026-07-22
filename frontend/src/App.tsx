@@ -136,6 +136,13 @@ export default function App() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [suggests, setSuggests] = useState<{ appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]>([])
   const [suggestOpen, setSuggestOpen] = useState(false)
+  const [tgStatus, setTgStatus] = useState<{
+    linked: boolean
+    telegram_username?: string | null
+    radar_enabled?: boolean
+    bot_username?: string | null
+  } | null>(null)
+  const [tgBusy, setTgBusy] = useState(false)
 
   const loggedIn = Boolean(token && user)
   const isPro = Boolean(
@@ -182,7 +189,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (loggedIn && view === 'cabinet') loadDashboard().catch(() => {})
+    if (loggedIn && view === 'cabinet') {
+      loadDashboard().catch(() => {})
+      api<{
+        linked: boolean
+        telegram_username?: string | null
+        radar_enabled?: boolean
+        bot_username?: string | null
+      }>('/api/telegram/status')
+        .then(setTgStatus)
+        .catch(() => setTgStatus(null))
+    }
   }, [loggedIn, view, loadDashboard])
 
   useEffect(() => {
@@ -1028,6 +1045,108 @@ export default function App() {
             {dashboard?.ctas?.map((c) => (
               <p key={c} className="muted" style={{ marginTop: 8 }}>💡 {c}</p>
             ))}
+
+            <div className="panel section radar-panel">
+              <h3 style={{ marginTop: 0 }}>📡 Радар цен (Telegram)</h3>
+              <p className="muted">
+                Следим за <strong>ценой Steam</strong> в избранном: цель достигнута или заметное снижение
+                (от 5% / 30 ₽). Маркетплейсы в радаре не спамим — только Steam.
+              </p>
+              {tgStatus?.linked ? (
+                <>
+                  <p>
+                    Привязан{tgStatus.telegram_username ? `: @${tgStatus.telegram_username}` : ''} · радар{' '}
+                    <strong>{tgStatus.radar_enabled ? 'вкл' : 'выкл'}</strong>
+                  </p>
+                  <div className="actions" style={{ marginTop: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={tgBusy}
+                      onClick={async () => {
+                        setTgBusy(true)
+                        try {
+                          const r = await api<{ radar_enabled: boolean }>('/api/telegram/radar', {
+                            method: 'POST',
+                            body: JSON.stringify({ radar_enabled: !tgStatus.radar_enabled }),
+                          })
+                          setTgStatus({ ...tgStatus, radar_enabled: r.radar_enabled })
+                          setToast(r.radar_enabled ? 'Радар включён' : 'Радар выключен')
+                        } catch (e) {
+                          setToast(e instanceof Error ? e.message : 'Ошибка')
+                        } finally {
+                          setTgBusy(false)
+                        }
+                      }}
+                    >
+                      {tgStatus.radar_enabled ? 'Выключить радар' : 'Включить радар'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={tgBusy}
+                      onClick={async () => {
+                        setTgBusy(true)
+                        try {
+                          await api('/api/telegram/link', { method: 'DELETE' })
+                          setTgStatus({ linked: false, radar_enabled: true, bot_username: tgStatus.bot_username })
+                          setToast('Telegram отвязан')
+                        } catch (e) {
+                          setToast(e instanceof Error ? e.message : 'Ошибка')
+                        } finally {
+                          setTgBusy(false)
+                        }
+                      }}
+                    >
+                      Отвязать Telegram
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="muted">Telegram ещё не привязан.</p>
+                  <div className="actions" style={{ marginTop: '0.75rem' }}>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={tgBusy}
+                      onClick={async () => {
+                        setTgBusy(true)
+                        try {
+                          const r = await api<{
+                            code: string
+                            deep_link?: string | null
+                            bot_username?: string | null
+                            instruction: string
+                          }>('/api/telegram/link-code', { method: 'POST' })
+                          if (r.deep_link) {
+                            window.open(r.deep_link, '_blank', 'noopener')
+                          }
+                          setToast(`Код: ${r.code} — открой бота или /start ${r.code}`)
+                          setTgStatus({
+                            linked: false,
+                            bot_username: r.bot_username,
+                            radar_enabled: true,
+                          })
+                        } catch (e) {
+                          setToast(e instanceof Error ? e.message : 'Ошибка')
+                        } finally {
+                          setTgBusy(false)
+                        }
+                      }}
+                    >
+                      Привязать Telegram
+                    </button>
+                  </div>
+                  {tgStatus?.bot_username && (
+                    <p className="muted" style={{ marginTop: '0.5rem' }}>
+                      Бот: @{tgStatus.bot_username}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
             {dashboard?.price_hits && dashboard.price_hits.length > 0 && (
               <div className="panel section">
                 <h3>На цели</h3>

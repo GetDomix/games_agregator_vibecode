@@ -15,6 +15,9 @@ class Favorite extends Model
         'notes',
         'target_price_rub',
         'last_steam_price_rub',
+        'radar_enabled',
+        'last_notified_price_rub',
+        'last_notified_at',
     ];
 
     protected function casts(): array
@@ -22,6 +25,9 @@ class Favorite extends Model
         return [
             'target_price_rub' => 'float',
             'last_steam_price_rub' => 'float',
+            'radar_enabled' => 'boolean',
+            'last_notified_price_rub' => 'float',
+            'last_notified_at' => 'datetime',
         ];
     }
 

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\PriceController;
+use App\Http\Controllers\Api\TelegramController;
 use App\Http\Controllers\Api\TrackingController;
 use Illuminate\Support\Facades\Route;
 
@@ -53,4 +54,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/overview', [AdminController::class, 'overview']);
     Route::post('/admin/users/{id}/plan', [AdminController::class, 'setUserPlan']);
     Route::post('/admin/users/{id}/admin', [AdminController::class, 'setUserAdmin']);
+
+    Route::post('/telegram/link-code', [TelegramController::class, 'createLinkCode']);
+    Route::get('/telegram/status', [TelegramController::class, 'status']);
+    Route::post('/telegram/radar', [TelegramController::class, 'updateRadar']);
+    Route::delete('/telegram/link', [TelegramController::class, 'unlink']);
 });
+
+// Service token for the Python bot / cron
+Route::post('/internal/telegram/bind', [TelegramController::class, 'bind'])
+    ->middleware('throttle:60,1');
+Route::post('/internal/radar/run', [TelegramController::class, 'runScan'])
+    ->middleware('throttle:10,1');

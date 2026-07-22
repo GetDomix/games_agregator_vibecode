@@ -27,4 +27,13 @@ return [
     // Comma-separated admin emails (also users.is_admin flag)
     'admin_emails' => env('ADMIN_EMAILS', ''),
     'brand_name' => env('BRAND_NAME', 'Игроскан'),
+
+    // Telegram Price Radar
+    'telegram_bot_token' => env('TELEGRAM_BOT_TOKEN', ''),
+    'telegram_bot_username' => env('TELEGRAM_BOT_USERNAME', ''),
+    'radar_service_token' => env('RADAR_SERVICE_TOKEN', ''),
+    'radar_interval_hours' => (int) env('RADAR_INTERVAL_HOURS', 6),
+    'radar_drop_percent' => (int) env('RADAR_DROP_PERCENT', 5),
+    'radar_min_drop_rub' => (float) env('RADAR_MIN_DROP_RUB', 30),
+    'radar_steam_delay_ms' => (int) env('RADAR_STEAM_DELAY_MS', 400),
 ];

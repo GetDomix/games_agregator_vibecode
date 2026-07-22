@@ -23,6 +23,10 @@ class User extends Authenticatable
         'plan',
         'plan_expires_at',
         'is_admin',
+        'telegram_chat_id',
+        'telegram_username',
+        'telegram_linked_at',
+        'radar_enabled',
     ];
 
     protected $hidden = [
@@ -38,6 +42,8 @@ class User extends Authenticatable
             'plan_expires_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'telegram_linked_at' => 'datetime',
+            'radar_enabled' => 'boolean',
         ];
     }
 
@@ -111,6 +117,8 @@ class User extends Authenticatable
             'plan_label' => $this->planLabel(),
             'plan_expires_at' => $this->hasActivePro() ? $this->plan_expires_at?->toIso8601String() : null,
             'is_admin' => $this->isAdminUser(),
+            'telegram_linked' => (bool) $this->telegram_chat_id,
+            'radar_enabled' => (bool) ($this->radar_enabled ?? true),
             'created_at' => $this->created_at?->toIso8601String(),
             'last_login_at' => $this->last_login_at?->toIso8601String(),
         ];

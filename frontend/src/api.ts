@@ -9,6 +9,8 @@ export type User = {
   plan_label?: string
   plan_expires_at?: string | null
   is_admin?: boolean
+  telegram_linked?: boolean
+  radar_enabled?: boolean
   created_at?: string
   last_login_at?: string | null
 }
