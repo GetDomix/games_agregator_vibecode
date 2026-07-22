@@ -1,0 +1,9 @@
+# Used on the VPS together with root docker-compose.yml
+# Host port can be overridden: COMPOSE_HTTP_PORT=8000 docker compose ...
+services:
+  web:
+    ports:
+      - "${COMPOSE_HTTP_PORT:-8000}:8000"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: sqlite:////data/app.db

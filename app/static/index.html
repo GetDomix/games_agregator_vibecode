@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Game Price Aggregator — цены Steam · Plati · GGsel</title>
+  <meta name="description" content="Сравни цены на игры: Steam RU, Plati.Market и GGsel. История поисков, избранное, цели по цене." />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="header">
+    <div class="brand" id="brand-home" role="button" tabindex="0" title="На главную">
+      <span class="brand-mark">₽</span>
+      <div>
+        <h1>Game Price Aggregator</h1>
+        <p class="subtitle">Steam RU · Plati · GGsel — находи дешевле, возвращайся чаще</p>
+      </div>
+    </div>
+    <div class="header-actions" id="header-actions">
+      <button type="button" class="btn ghost" id="btn-cabinet" hidden>Кабинет</button>
+      <button type="button" class="btn ghost" id="btn-login">Войти</button>
+      <button type="button" class="btn primary" id="btn-register">Регистрация</button>
+      <div class="user-chip" id="user-chip" hidden>
+        <span class="user-avatar" id="user-avatar">?</span>
+        <span id="user-name"></span>
+        <button type="button" class="btn ghost btn-sm" id="btn-logout">Выйти</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <aside class="ad-slot ad-slot--leaderboard" data-ad-placement="header" aria-label="Рекламный слот header" hidden></aside>
+
+    <!-- Home / search view -->
+    <div id="view-home">
+      <section class="search-card">
+        <form id="search-form" autocomplete="off">
+          <label class="sr-only" for="query">Название игры</label>
+          <div class="search-row">
+            <input
+              id="query"
+              name="query"
+              type="search"
+              placeholder="Введите игру: Hades, Cyberpunk 2077, Elden Ring…"
+              required
+              minlength="1"
+              maxlength="120"
+            />
+            <button type="submit" id="search-btn">Найти цены</button>
+          </div>
+        </form>
+        <p class="hint">Регион MVP: <strong>RU / ₽</strong>. Гость может искать; аккаунт сохраняет историю и избранное.</p>
+      </section>
+
+      <div id="guest-banner" class="convert-banner hidden">
+        <div>
+          <strong>Сохрани историю и цели по цене</strong>
+          <p>Ты уже сравнивал игры. Зарегистрируйся за 20 секунд — история, избранное и алерты «ниже цели».</p>
+        </div>
+        <button type="button" class="btn primary" id="banner-register">Создать аккаунт</button>
+      </div>
+
+      <section class="retention-grid" id="retention">
+        <article class="panel" id="continue-panel" hidden>
+          <h2>Продолжить</h2>
+          <div id="continue-body" class="chip-list"></div>
+        </article>
+        <article class="panel" id="popular-panel">
+          <h2>Популярно сейчас</h2>
+          <div id="popular-body" class="chip-list">
+            <p class="empty">Загрузка…</p>
+          </div>
+        </article>
+      </section>
+
+      <aside class="ad-slot ad-slot--billboard" data-ad-placement="mid" aria-label="Рекламный билборд" hidden></aside>
+
+      <section id="status" class="status hidden" aria-live="polite"></section>
+      <section id="warnings" class="warnings hidden"></section>
+      <section id="candidates" class="candidates hidden"></section>
+      <section id="results" class="results hidden"></section>
+    </div>
+
+    <!-- Cabinet view -->
+    <div id="view-cabinet" class="hidden">
+      <section class="panel cabinet-hero">
+        <div>
+          <h2>Личный кабинет</h2>
+          <p class="empty" id="cabinet-subtitle">История, избранное, цели по цене</p>
+        </div>
+        <div class="stat-row" id="cabinet-stats"></div>
+      </section>
+      <section class="panel" id="cabinet-ctas"></section>
+      <div class="cabinet-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>История поисков</h2>
+            <button type="button" class="btn ghost btn-sm" id="btn-clear-history">Очистить</button>
+          </div>
+          <div id="history-list" class="list-cards"><p class="empty">Пока пусто</p></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Избранное</h2>
+          </div>
+          <div id="favorites-list" class="list-cards"><p class="empty">Добавляй ☆ на карточке игры</p></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <aside class="ad-slot ad-slot--leaderboard ad-slot--footer" data-ad-placement="footer" aria-label="Рекламный слот footer" hidden></aside>
+    <p>MVP · Steam / Plati / GGsel · цены ориентировочные. HTTPS обязателен в проде (JWT в браузере).</p>
+    <p class="footer-ads-note" id="ads-note" hidden></p>
+  </footer>
+
+  <!-- Auth modal -->
+  <div class="modal-backdrop hidden" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="modal">
+      <button type="button" class="modal-close" id="auth-close" aria-label="Закрыть">×</button>
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="login">Вход</button>
+        <button type="button" class="tab" data-tab="register">Регистрация</button>
+      </div>
+      <h2 id="auth-title" class="sr-only">Авторизация</h2>
+      <form id="form-login" class="auth-form">
+        <label>Email<input type="email" name="email" required autocomplete="email" /></label>
+        <label>Пароль<input type="password" name="password" required minlength="8" autocomplete="current-password" /></label>
+        <button type="submit" class="btn primary block">Войти</button>
+      </form>
+      <form id="form-register" class="auth-form hidden">
+        <label>Имя <span class="muted">(необязательно)</span><input type="text" name="display_name" maxlength="80" autocomplete="nickname" /></label>
+        <label>Email<input type="email" name="email" required autocomplete="email" /></label>
+        <label>Пароль (≥ 8)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
+        <p class="hint">Подтверждение email в MVP не требуется. Не используй пароль от банка.</p>
+        <button type="submit" class="btn primary block">Создать аккаунт</button>
+      </form>
+      <p class="auth-error hidden" id="auth-error"></p>
+    </div>
+  </div>
+
+  <script src="/static/ads.js"></script>
+  <script src="/static/auth.js"></script>
+  <script src="/static/cabinet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

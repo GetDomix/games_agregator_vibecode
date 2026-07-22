@@ -1,0 +1,31 @@
+services:
+  web:
+    build: .
+    ports:
+      - "${COMPOSE_HTTP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:-please-change-me-to-a-long-random-string}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/app.db}
+      HTTP_TIMEOUT_SECONDS: ${HTTP_TIMEOUT_SECONDS:-20}
+      PLATI_MAX_PAGES: ${PLATI_MAX_PAGES:-5}
+      PLATI_PAGE_SIZE: ${PLATI_PAGE_SIZE:-100}
+      GGSEL_LIMIT: ${GGSEL_LIMIT:-100}
+      DIGISELLER_PARTNER_ID: ${DIGISELLER_PARTNER_ID:-}
+      ADS_ENABLED: ${ADS_ENABLED:-true}
+      ADS_CONTACT_EMAIL: ${ADS_CONTACT_EMAIL:-ads@example.com}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    volumes:
+      - gpa_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  gpa_data:
