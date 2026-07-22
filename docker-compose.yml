@@ -1,4 +1,4 @@
-# KeySignal — Laravel API + React + PostgreSQL
+# Игроскан (Igroscan) — Laravel API + React + PostgreSQL
 # Edge: Caddy (free HTTPS via sslip.io) + optional Cloudflare Tunnel (no domain)
 services:
   db:
@@ -31,7 +31,7 @@ services:
     env_file:
       - .env
     environment:
-      APP_NAME: KeySignal
+      APP_NAME: Игроскан
       APP_ENV: ${APP_ENV:-production}
       APP_DEBUG: ${APP_DEBUG:-false}
       APP_URL: ${APP_URL:-https://gpa.185.100.157.180.sslip.io}

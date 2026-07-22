@@ -24,4 +24,7 @@ return [
     'promo_codes' => env('PROMO_CODES', 'KEYSIGNAL-PRO:30,KEYSIGNAL-YEAR:365'),
     'billing_contact_email' => env('BILLING_CONTACT_EMAIL', env('ADS_CONTACT_EMAIL', 'ads@example.com')),
     'watchlist_refresh_max' => (int) env('WATCHLIST_REFRESH_MAX', 5),
+    // Comma-separated admin emails (also users.is_admin flag)
+    'admin_emails' => env('ADMIN_EMAILS', ''),
+    'brand_name' => env('BRAND_NAME', 'Игроскан'),
 ];

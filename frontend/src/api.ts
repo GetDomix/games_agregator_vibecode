@@ -8,6 +8,7 @@ export type User = {
   plan?: 'free' | 'pro' | 'unlimited' | string
   plan_label?: string
   plan_expires_at?: string | null
+  is_admin?: boolean
   created_at?: string
   last_login_at?: string | null
 }

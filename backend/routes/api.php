@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
@@ -48,4 +49,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/me/favorites/refresh', [FavoriteController::class, 'refresh']);
     Route::patch('/me/favorites/{appid}', [FavoriteController::class, 'update']);
     Route::delete('/me/favorites/{appid}', [FavoriteController::class, 'destroy']);
+
+    Route::get('/admin/overview', [AdminController::class, 'overview']);
+    Route::post('/admin/users/{id}/plan', [AdminController::class, 'setUserPlan']);
+    Route::post('/admin/users/{id}/admin', [AdminController::class, 'setUserAdmin']);
 });

@@ -122,9 +122,9 @@ class BillingController extends Controller
         return response()->json([
             'status' => 'pending_manual',
             'plan_id' => $planId,
-            'message' => 'Оплата картой скоро. Напишите на '.$email.' с темой «KeySignal Pro»'
+            'message' => 'Оплата картой скоро. Напишите на '.$email.' с темой «Игроскан Pro»'
                 .($user ? ' и email '.$user->email : ', или зарегистрируйтесь и активируйте промокод KEYSIGNAL-PRO.'),
-            'mailto' => 'mailto:'.rawurlencode($email).'?subject='.rawurlencode('KeySignal Pro ('.$planId.')'),
+            'mailto' => 'mailto:'.rawurlencode($email).'?subject='.rawurlencode('Igroscan Pro ('.$planId.')'),
         ], 202);
     }
 

@@ -1,75 +1,25 @@
-# KeySignal (Laravel + React)
+# Игроскан (Igroscan)
 
-Сравнение цен на игры: **Steam RU**, **Plati.Market**, **GGsel**.  
-Аккаунты, история, избранное, целевая цена, оценка сделки, дневные лимиты поиска.
+Агрегатор цен на игры: **Steam RU · Plati.Market · GGsel**.
 
-## Стек
+Стек: Laravel API + React (Vite) + PostgreSQL + Docker (Caddy HTTPS).
 
-| Слой | Технологии |
-|------|------------|
-| Backend | **Laravel 13** + Sanctum + Guzzle HTTP |
-| Frontend | **React 19** + Vite + TypeScript + Framer Motion |
-| DB | **PostgreSQL 16** (обязательно, SQLite не используется) |
-| Deploy | Docker Compose + GitHub Actions |
-
-Старый Python/FastAPI-код: `legacy/` (архив, не в проде).
-
-## Локальный запуск
-
-### PostgreSQL (локально)
-
-Нужен Postgres 16. Проще всего через Docker:
+## Локально
 
 ```bash
-# только БД
-docker compose up -d db
+# backend
+cd backend && cp .env.example .env && composer install && php artisan key:generate
+# frontend
+cd frontend && npm install && npm run dev
 ```
 
-Или свой инстанс: БД `gpa`, user/password как в `backend/.env.example`.
+## Админка
 
-### Backend
-```bash
-cd backend
-composer install
-cp .env.example .env
-# проверь DB_* → pgsql
-php artisan key:generate
-php artisan migrate
-php artisan serve --host=127.0.0.1 --port=8080
-```
+- Поле `users.is_admin` или env `ADMIN_EMAILS=you@mail.com`
+- UI: кабинет → «Админка» / кнопка Admin (desktop)
+- API: `GET /api/admin/overview`, `POST /api/admin/users/{id}/plan`
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## Pro
 
-Открой http://127.0.0.1:5173 — API проксируется на `:8080`.
-
-### Docker (полный стек: Postgres + Laravel + React)
-```bash
-docker compose up --build
-```
-Сайт: http://IP/ · API: http://IP/api/health
-
-Переменные: `POSTGRES_PASSWORD`, `APP_KEY` (сгенерируй: `php artisan key:generate --show`).
-
-## API (кратко)
-
-- `POST /api/auth/register|login`
-- `GET /api/auth/me` (Bearer)
-- `GET /api/prices?q=&appid=`
-- `GET /api/me/dashboard|history|favorites`
-- `POST /api/me/favorites/refresh`
-- `POST /api/track/click`
-- `GET /api/ads/config`
-- `GET /api/health`
-
-## Secrets (GitHub Actions)
-
-`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (+ опционально `DEPLOY_PATH`)
-
-## Лицензия / дисклеймер
-
-Сервис сравнивает публичные цены. Покупка — на сторонних площадках. Проверяйте продавца перед оплатой.
+- 99 ₽/мес · 790 ₽/год (env)
+- Промокод: `KEYSIGNAL-PRO` (30 дней)

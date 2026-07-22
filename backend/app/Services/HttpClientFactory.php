@@ -15,7 +15,7 @@ class HttpClientFactory
         return Http::timeout($timeout)
             ->retry($retries, 350, throw: false)
             ->withHeaders([
-                'User-Agent' => 'KeySignal/2.0 (+https://gpa.local; price-aggregator; contact=ops)',
+                'User-Agent' => 'Igroscan/2.1 (+game-price-aggregator; contact=ops)',
                 'Accept' => 'application/json, text/plain, */*',
             ]);
     }

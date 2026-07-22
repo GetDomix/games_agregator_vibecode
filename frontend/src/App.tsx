@@ -3,7 +3,25 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from './api'
 import type { User } from './api'
+import { BRAND, BrandMark } from './brand'
 import './styles.css'
+
+type RecentItem = { q: string; appid?: number | null; at: number }
+const RECENT_KEY = 'gpa_recent_v1'
+function loadRecents(): RecentItem[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentItem[]
+  } catch {
+    return []
+  }
+}
+function pushRecent(q: string, appid?: number | null) {
+  const term = q.trim()
+  if (!term) return
+  const prev = loadRecents().filter((r) => r.q.toLowerCase() !== term.toLowerCase())
+  const next = [{ q: term, appid: appid ?? null, at: Date.now() }, ...prev].slice(0, 8)
+  localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+}
 
 type Offer = { title: string; url: string; price_rub: number; sales?: number; seller_name?: string | null; kind?: string }
 type KindStats = { kind: string; label: string; count: number; min_price: number | null; avg_price: number | null; popular?: Offer | null; cheapest?: Offer | null }
@@ -84,7 +102,7 @@ export default function App() {
   const { theme, toggle } = useTheme()
   const [user, setUser] = useState<User | null>(getStoredUser())
   const [token, setToken] = useState<string | null>(getToken())
-  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'plans'>('home')
+  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'plans' | 'admin'>('home')
   const [plans, setPlans] = useState<PlansResponse | null>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoMsg, setPromoMsg] = useState('')
@@ -93,6 +111,8 @@ export default function App() {
   const [error, setError] = useState('')
   const [result, setResult] = useState<PriceResponse | null>(null)
   const [popular, setPopular] = useState<PopularItem[]>([])
+  const [recents, setRecents] = useState<RecentItem[]>(() => loadRecents())
+  const [toast, setToast] = useState('')
   const [authOpen, setAuthOpen] = useState(false)
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login')
   const [authError, setAuthError] = useState('')
@@ -105,6 +125,11 @@ export default function App() {
     searches_this_week: number
     alerts_count: number
     ctas: string[]
+  } | null>(null)
+  const [adminData, setAdminData] = useState<{
+    stats: Record<string, number | Record<string, number>>
+    recent_users: { id: number; email: string; display_name: string; plan: string; is_admin: boolean; created_at?: string }[]
+    promo_codes: string
   } | null>(null)
   const [ads, setAds] = useState<AdsConfig | null>(null)
   const [marketTab, setMarketTab] = useState<'plati' | 'ggsel'>('plati')
@@ -153,6 +178,31 @@ export default function App() {
     if (loggedIn && view === 'cabinet') loadDashboard().catch(() => {})
   }, [loggedIn, view, loadDashboard])
 
+  useEffect(() => {
+    if (loggedIn && view === 'admin' && user?.is_admin) {
+      api<NonNullable<typeof adminData>>('/api/admin/overview')
+        .then(setAdminData)
+        .catch((e) => setError(e instanceof Error ? e.message : 'Админка'))
+    }
+  }, [loggedIn, view, user?.is_admin])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(''), 2400)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  // Deep link ?q=&appid=
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    const q = sp.get('q')
+    if (q) {
+      const appid = sp.get('appid')
+      runSearch(q, appid ? Number(appid) : null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function runSearch(q: string, appid?: number | null) {
     const term = q.trim()
     if (!term) return
@@ -165,12 +215,30 @@ export default function App() {
       if (appid) params.set('appid', String(appid))
       const data = await api<PriceResponse>(`/api/prices?${params}`, { headers: authHeaders() })
       setResult(data)
+      pushRecent(term, appid ?? data.steam?.appid)
+      setRecents(loadRecents())
+      const url = new URL(window.location.href)
+      url.searchParams.set('q', term)
+      if (data.steam?.appid) url.searchParams.set('appid', String(data.steam.appid))
+      else url.searchParams.delete('appid')
+      window.history.replaceState({}, '', url.toString())
       if (loggedIn) loadDashboard().catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка поиска')
       setResult(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  function shareResult() {
+    if (!result) return
+    const url = window.location.href
+    const title = result.steam?.name || result.query
+    if (navigator.share) {
+      navigator.share({ title: `${title} — ${BRAND.name}`, url }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(url).then(() => setToast('Ссылка скопирована')).catch(() => setToast(url))
     }
   }
 
@@ -268,10 +336,12 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <button type="button" className="brand" onClick={() => setView('home')}>
-            <span className="brand-mark">₽</span>
+            <span className="brand-mark-wrap">
+              <BrandMark size={42} />
+            </span>
             <div className="brand-text">
-              <h1>KeySignal</h1>
-              <p className="brand-tagline">Цены на игры · Steam · Plati · GGsel</p>
+              <h1>{BRAND.name}</h1>
+              <p className="brand-tagline">{BRAND.tagline} · {BRAND.shortTagline}</p>
             </div>
           </button>
           <button type="button" className="btn ghost sm icon-btn m-only" onClick={toggle} aria-label="Тема">
@@ -287,6 +357,11 @@ export default function App() {
             <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
               Pro
             </button>
+            {user?.is_admin && (
+              <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
+                Admin
+              </button>
+            )}
             {loggedIn ? (
               <>
                 <button type="button" className="btn ghost" onClick={() => setView('cabinet')}>
@@ -321,9 +396,8 @@ export default function App() {
               <p className="eyebrow desk-only">Сравнение цен · регион RU · ₽</p>
               <h2 className="search-title">Найти цену</h2>
               <p className="lead desk-only">
-                KeySignal — сервис для тех, кто покупает игры на PC и хочет понять, где сейчас дешевле:
-                официальный Steam или предложения на маркетплейсах Plati.Market и GGsel.
-                Мы не продаём ключи сами — собираем цены и ссылки, чтобы вы быстрее приняли решение.
+                {BRAND.name} — {BRAND.tagline}: сравниваем Steam RU, Plati.Market и GGsel.
+                Мы не продаём ключи — собираем цены и ссылки, чтобы быстрее решить, где выгоднее.
               </p>
               <form
                 className="search-row"
@@ -347,6 +421,15 @@ export default function App() {
                   {loading ? 'Ищем…' : 'Сравнить'}
                 </button>
               </form>
+              {recents.length > 0 && (
+                <div className="recent-row" aria-label="Недавние поиски">
+                  {recents.slice(0, 6).map((r) => (
+                    <button key={r.q + String(r.at)} type="button" className="recent-chip" onClick={() => runSearch(r.q, r.appid)}>
+                      {r.q}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="pills desk-only">
                 <span className="pill steam">Steam RU</span>
                 <span className="pill plati">Plati.Market</span>
@@ -366,7 +449,7 @@ export default function App() {
               <div className={`about-body ${aboutOpen ? 'open' : ''}`}>
                 <p className="lead" style={{ marginBottom: '1rem' }}>
                   Цены на одну и ту же игру на разных площадках отличаются: регион, скидки, тип товара
-                  (ключ, гифт, аккаунт, аренда). KeySignal сводит это в одном экране и показывает,
+                  (ключ, гифт, аккаунт, аренда). Игроскан сводит это в одном экране и показывает,
                   насколько рынок дешевле Steam.
                 </p>
                 <div className="steps">
@@ -501,6 +584,9 @@ export default function App() {
                         <button type="button" className={`btn ${result.is_favorite ? 'primary' : 'ghost'}`} onClick={toggleFavorite}>
                           {result.is_favorite ? '★ В избранном' : '☆ В избранное'}
                         </button>
+                        <button type="button" className="btn ghost" onClick={shareResult}>
+                          Поделиться
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -547,7 +633,7 @@ export default function App() {
         {view === 'guide' && (
           <section className="section hero">
             <p className="eyebrow">Инструкция</p>
-            <h2>Как пользоваться KeySignal</h2>
+            <h2>Как пользоваться Игроскан</h2>
             <p className="lead">
               Сервис создан, чтобы за 30–60 секунд понять: покупать игру в Steam сейчас или смотреть
               предложения на маркетплейсах — и какие варианты (ключ, гифт, аккаунт) вообще есть.
@@ -729,8 +815,90 @@ export default function App() {
           </section>
         )}
 
+        {view === 'admin' && loggedIn && user?.is_admin && (
+          <section className="section page-enter">
+            <div className="hero">
+              <p className="eyebrow">Админка</p>
+              <h2>Панель {BRAND.name}</h2>
+              <p className="muted">Метрики, пользователи, выдача Pro. Доступ: is_admin или ADMIN_EMAILS.</p>
+            </div>
+            {adminData && (
+              <>
+                <div className="stats section stagger">
+                  <div className="stat"><b>{adminData.stats.users_total as number}</b><span>пользователей</span></div>
+                  <div className="stat"><b>{adminData.stats.pro_active as number}</b><span>Pro</span></div>
+                  <div className="stat"><b>{adminData.stats.searches_today as number}</b><span>поисков сегодня</span></div>
+                  <div className="stat"><b>{adminData.stats.partner_clicks_7d as number}</b><span>клики 7д</span></div>
+                </div>
+                <div className="panel section">
+                  <h3>Пользователи</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Email</th>
+                          <th>План</th>
+                          <th>Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminData.recent_users.map((u) => (
+                          <tr key={u.id}>
+                            <td>{u.id}</td>
+                            <td>
+                              {u.display_name}
+                              <span className="offer-meta">{u.email}{u.is_admin ? ' · admin' : ''}</span>
+                            </td>
+                            <td>{u.plan}</td>
+                            <td>
+                              <div className="actions">
+                                <button
+                                  type="button"
+                                  className="btn ghost sm"
+                                  onClick={async () => {
+                                    await api(`/api/admin/users/${u.id}/plan`, {
+                                      method: 'POST',
+                                      body: JSON.stringify({ plan: 'pro', days: 30 }),
+                                    })
+                                    setToast(`Pro 30д → ${u.email}`)
+                                    const d = await api<NonNullable<typeof adminData>>('/api/admin/overview')
+                                    setAdminData(d)
+                                  }}
+                                >
+                                  +Pro 30д
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn ghost sm"
+                                  onClick={async () => {
+                                    await api(`/api/admin/users/${u.id}/plan`, {
+                                      method: 'POST',
+                                      body: JSON.stringify({ plan: 'free' }),
+                                    })
+                                    setToast(`Free → ${u.email}`)
+                                    const d = await api<NonNullable<typeof adminData>>('/api/admin/overview')
+                                    setAdminData(d)
+                                  }}
+                                >
+                                  Free
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="muted" style={{ marginTop: '0.75rem' }}>Промокоды: {adminData.promo_codes || '—'}</p>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         {view === 'cabinet' && loggedIn && (
-          <section className="section">
+          <section className="section page-enter">
             <div className="hero" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '1rem' }}>
               <div>
                 <p className="eyebrow">Кабинет</p>
@@ -747,10 +915,15 @@ export default function App() {
                   <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
                     Тарифы / Pro
                   </button>
+                  {user?.is_admin && (
+                    <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
+                      Админка
+                    </button>
+                  )}
                 </p>
               </div>
               {dashboard && (
-                <div className="stats">
+                <div className="stats stagger">
                   <div className="stat"><b>{dashboard.searches_total}</b><span>поисков</span></div>
                   <div className="stat"><b>{dashboard.searches_this_week}</b><span>за 7 дней</span></div>
                   <div className="stat"><b>{dashboard.favorites_count}</b><span>избранное</span></div>
@@ -865,11 +1038,19 @@ export default function App() {
 
       <footer className="shell footer has-tabbar">
         <p>
-          KeySignal помогает сравнивать цены. Мы не продаём ключи напрямую — покупка на сторонних площадках.
+          {BRAND.name} — {BRAND.tagline}. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
         {ads?.note && <p className="muted" style={{ marginTop: '0.65rem' }}>{ads.note}</p>}
       </footer>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div className="toast" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <nav className="m-tabbar m-only" aria-label="Основное меню">
         <button type="button" className={view === 'home' ? 'active' : ''} onClick={() => setView('home')}>

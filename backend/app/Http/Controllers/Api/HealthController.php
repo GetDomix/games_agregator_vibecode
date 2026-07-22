@@ -20,7 +20,7 @@ class HealthController extends Controller
         return response()->json([
             'status' => $dbOk ? 'ok' : 'degraded',
             'db' => $dbOk ? 'ok' : 'error',
-            'version' => '2.0.0-laravel',
+            'version' => '2.1.0-igroscan',
         ]);
     }
 }

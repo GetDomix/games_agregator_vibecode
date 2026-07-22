@@ -22,6 +22,7 @@ class User extends Authenticatable
         'last_login_at',
         'plan',
         'plan_expires_at',
+        'is_admin',
     ];
 
     protected $hidden = [
@@ -36,7 +37,22 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'plan_expires_at' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
         ];
+    }
+
+    public function isAdminUser(): bool
+    {
+        if ($this->is_admin) {
+            return true;
+        }
+        $list = (string) config('gpa.admin_emails', '');
+        if ($list === '') {
+            return false;
+        }
+        $emails = array_map(fn ($e) => mb_strtolower(trim($e)), explode(',', $list));
+
+        return in_array(mb_strtolower($this->email), $emails, true);
     }
 
     public function favorites(): HasMany
@@ -94,6 +110,7 @@ class User extends Authenticatable
             'plan' => $this->hasActivePro() ? (strtolower((string) $this->plan) === 'unlimited' ? 'unlimited' : 'pro') : 'free',
             'plan_label' => $this->planLabel(),
             'plan_expires_at' => $this->hasActivePro() ? $this->plan_expires_at?->toIso8601String() : null,
+            'is_admin' => $this->isAdminUser(),
             'created_at' => $this->created_at?->toIso8601String(),
             'last_login_at' => $this->last_login_at?->toIso8601String(),
         ];
