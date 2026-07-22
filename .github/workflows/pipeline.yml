@@ -1,26 +1,33 @@
-name: Deploy
+# Single pipeline: test → docker smoke → deploy (sequential, one workflow)
+name: Pipeline
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
   workflow_dispatch:
     inputs:
       skip_tests:
-        description: "Skip CI tests (emergency only)"
+        description: "Skip tests (emergency deploy only)"
         required: false
         default: "false"
         type: choice
-        options:
-          - "false"
-          - "true"
+        options: ["false", "true"]
+      skip_deploy:
+        description: "Skip deploy (CI only)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    name: Pre-deploy tests
+    name: 1 · Tests
     if: github.event_name != 'workflow_dispatch' || inputs.skip_tests != 'true'
     runs-on: ubuntu-latest
     steps:
@@ -32,27 +39,63 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
-      - name: Install & test
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Pytest
         env:
           APP_ENV: development
           SECRET_KEY: ci-test-secret-not-for-production
           DATABASE_URL: sqlite://
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pytest -v --tb=short
+          ADS_ENABLED: "true"
+        run: pytest -v --tb=short
 
-  deploy:
-    name: Deploy to VPS (by IP)
+  docker:
+    name: 2 · Docker build
     needs: [test]
-    # success after tests, or skipped tests on manual emergency deploy
     if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
-    environment: production
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t gpa:ci .
+      - name: Container healthcheck
+        run: |
+          docker run -d --name gpa-ci \
+            -e APP_ENV=production \
+            -e SECRET_KEY=ci-docker-secret-key-min-32-chars-long \
+            -e DATABASE_URL=sqlite:////data/app.db \
+            -e CORS_ORIGINS=* \
+            -p 8000:8000 \
+            gpa:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/health; then
+              echo
+              echo "Health OK"
+              docker stop gpa-ci
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs gpa-ci || true
+          docker stop gpa-ci || true
+          exit 1
+
+  deploy:
+    name: 3 · Deploy VPS
+    needs: [test, docker]
+    if: |
+      always() &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.docker.result == 'success' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+        (github.event_name == 'workflow_dispatch' && inputs.skip_deploy != 'true')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Validate secrets
         env:
@@ -61,37 +104,54 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           missing=0
-          [ -z "$DEPLOY_HOST" ] && echo "::error::Secret DEPLOY_HOST is empty (VPS IP)" && missing=1
-          [ -z "$DEPLOY_USER" ] && echo "::error::Secret DEPLOY_USER is empty" && missing=1
-          [ -z "$DEPLOY_SSH_KEY" ] && echo "::error::Secret DEPLOY_SSH_KEY is empty" && missing=1
-          exit $missing
+          if [ -z "$DEPLOY_HOST" ]; then
+            echo "::error::Secret DEPLOY_HOST empty — set VPS IP (e.g. 185.100.157.180)"
+            missing=1
+          fi
+          if [ -z "$DEPLOY_USER" ]; then
+            echo "::error::Secret DEPLOY_USER empty — set SSH user (e.g. root)"
+            missing=1
+          fi
+          if [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::error::Secret DEPLOY_SSH_KEY empty — paste private key (BEGIN/END)"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Repo Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "OK host=$DEPLOY_HOST user=$DEPLOY_USER"
 
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
-      - name: Add host to known_hosts
+      - name: known_hosts
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || {
-            echo "ssh-keyscan failed, retry..."
-            sleep 2
-            ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-          }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          for i in 1 2 3 4 5; do
+            if ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+              echo "known_hosts ok"
+              exit 0
+            fi
+            sleep 3
+          done
+          exit 1
 
-      - name: Rsync project to server
+      - name: Rsync to VPS
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/gpa' }}
         run: |
+          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}'"
           rsync -az --delete \
-            -e "ssh -p $DEPLOY_PORT -o StrictHostKeyChecking=yes" \
+            -e "ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=yes" \
             --exclude '.git/' \
             --exclude '.venv/' \
             --exclude 'venv/' \
@@ -101,6 +161,7 @@ jobs:
             --exclude '.env' \
             --exclude '*.db' \
             --exclude '*.db-*' \
+            --exclude '.idea/' \
             ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
       - name: Ensure .env on server
@@ -114,20 +175,17 @@ jobs:
           ADS_CONTACT_EMAIL: ${{ secrets.ADS_CONTACT_EMAIL }}
         run: |
           ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            DEPLOY_PATH="$DEPLOY_PATH" \
-            APP_SECRET_KEY="$APP_SECRET_KEY" \
-            DIGISELLER_PARTNER_ID="$DIGISELLER_PARTNER_ID" \
-            ADS_CONTACT_EMAIL="$ADS_CONTACT_EMAIL" \
-            'bash -s' <<'EOS'
+            "DEPLOY_PATH='$DEPLOY_PATH' APP_SECRET_KEY='$APP_SECRET_KEY' DIGISELLER_PARTNER_ID='$DIGISELLER_PARTNER_ID' ADS_CONTACT_EMAIL='$ADS_CONTACT_EMAIL' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
           if [ ! -f .env ]; then
-            echo "Creating .env on server..."
+            echo "Creating .env..."
             SECRET="${APP_SECRET_KEY:-}"
             if [ -z "$SECRET" ]; then
               SECRET=$(openssl rand -hex 32)
-              echo "Generated random SECRET_KEY (stored only on server .env)"
+              echo "Generated SECRET_KEY on server"
             fi
+            EMAIL="${ADS_CONTACT_EMAIL:-ads@example.com}"
             cat > .env <<EOF
           APP_ENV=production
           SECRET_KEY=${SECRET}
@@ -136,18 +194,19 @@ jobs:
           CORS_ORIGINS=*
           DIGISELLER_PARTNER_ID=${DIGISELLER_PARTNER_ID:-}
           ADS_ENABLED=true
-          ADS_CONTACT_EMAIL=${ADS_CONTACT_EMAIL:-ads@example.com}
+          ADS_CONTACT_EMAIL=${EMAIL}
           ADS_LABEL=Реклама
           HTTP_TIMEOUT_SECONDS=20
           PLATI_MAX_PAGES=5
           PLATI_PAGE_SIZE=100
           GGSEL_LIMIT=100
           EOF
+            sed -i 's/^[[:space:]]*//' .env
             chmod 600 .env
           else
-            echo ".env already exists — not overwriting"
+            echo ".env exists — keep"
           fi
-          EOS
+          REMOTE
 
       - name: Docker compose up
         env:
@@ -158,29 +217,23 @@ jobs:
           DEPLOY_HTTP_PORT: ${{ secrets.DEPLOY_HTTP_PORT || '8000' }}
         run: |
           ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            DEPLOY_PATH="$DEPLOY_PATH" \
-            DEPLOY_HTTP_PORT="$DEPLOY_HTTP_PORT" \
-            'bash -s' <<'EOS'
+            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_HTTP_PORT='${DEPLOY_HTTP_PORT:-8000}' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
-          if ! command -v docker >/dev/null 2>&1; then
-            echo "Docker not installed. Run deploy/setup-server.sh once on the VPS."
-            exit 1
-          fi
-          # Allow binding host port from env
-          export COMPOSE_HTTP_PORT="${DEPLOY_HTTP_PORT:-8000}"
+          command -v docker >/dev/null
           docker compose -f docker-compose.yml -f deploy/docker-compose.override.yml up -d --build --remove-orphans
-          docker compose ps
-          EOS
+          docker compose -f docker-compose.yml -f deploy/docker-compose.override.yml ps
+          docker ps --format 'table {{.Names}}\t{{.Status}}'
+          REMOTE
 
-      - name: Health check via IP
+      - name: Health check
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_HTTP_PORT: ${{ secrets.DEPLOY_HTTP_PORT || '8000' }}
         run: |
           url="http://${DEPLOY_HOST}:${DEPLOY_HTTP_PORT}/api/health"
           echo "Checking $url"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 40); do
             if curl -fsS --connect-timeout 5 "$url"; then
               echo
               echo "Deploy OK → http://${DEPLOY_HOST}:${DEPLOY_HTTP_PORT}/"

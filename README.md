@@ -44,39 +44,30 @@ docker compose up --build -d
 Сайт: `http://127.0.0.1:8000` или `http://IP_СЕРВЕРА:8000`  
 Данные SQLite в volume `gpa_data` (`/data/app.db`).
 
-## CI/CD (GitHub Actions) — без домена, по IP
+## CI/CD (GitHub Actions) — один pipeline, без домена
 
-Уже в репо:
+Один workflow: [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml)
 
-| Workflow | Файл | Когда |
-|----------|------|--------|
-| **CI** | `.github/workflows/ci.yml` | push/PR → pytest + docker smoke |
-| **Deploy** | `.github/workflows/deploy.yml` | push в `main`/`master` → rsync + `docker compose up` + healthcheck |
-
-### Один раз на VPS
-
-```bash
-curl -fsSL https://get.docker.com | sh
-adduser deploy && usermod -aG docker deploy   # или root
-mkdir -p /opt/gpa && chown deploy:deploy /opt/gpa
-# положить SSH public key в authorized_keys
-# открыть порт 8000/tcp
+```
+1 · Tests  →  2 · Docker build  →  3 · Deploy VPS (только master/main)
 ```
 
+На PR/develop деплой **не** идёт (только test + docker).
+
+### Secrets (Settings → Secrets and variables → Actions)
+
+| Secret | Обязательно | Значение |
+|--------|-------------|----------|
+| `DEPLOY_HOST` | да | IP, напр. `185.100.157.180` |
+| `DEPLOY_USER` | да | `root` |
+| `DEPLOY_SSH_KEY` | да | private key целиком |
+| `DEPLOY_PATH` | нет | `/opt/gpa` |
+| `DEPLOY_HTTP_PORT` | нет | `8000` |
+| `APP_SECRET_KEY` | нет | иначе сгенерится на сервере |
+
+После push в `master` → **Actions → Pipeline**. Сайт: **`http://IP:8000/`**.
+
 Подробнее: [`deploy/README.md`](deploy/README.md).
-
-### Secrets в GitHub (Settings → Secrets → Actions)
-
-| Secret | Значение |
-|--------|----------|
-| `DEPLOY_HOST` | IP VPS, например `203.0.113.10` |
-| `DEPLOY_USER` | `deploy` |
-| `DEPLOY_SSH_KEY` | приватный ключ целиком |
-| `DEPLOY_PATH` | `/opt/gpa` (опционально) |
-| `DEPLOY_HTTP_PORT` | `8000` (опционально) |
-| `APP_SECRET_KEY` | длинный секрет (опционально, иначе сгенерится на сервере) |
-
-После `git push origin main` → Actions → Deploy → сайт: **`http://IP:8000/`**.
 
 ### Postgres (опционально)
 

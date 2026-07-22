@@ -37,18 +37,21 @@ Repo → **Settings → Secrets and variables → Actions**:
 
 Also create Environment **production** (Settings → Environments) if you want protection rules; the workflow references `environment: production`.
 
-## 3. Push → auto deploy
+## 3. Push → auto pipeline
 
 ```bash
-git push origin main
+git push origin master
 ```
 
-Workflows:
+Один workflow **Pipeline** (`.github/workflows/pipeline.yml`):
 
-1. **CI** — pytest + docker build smoke (every PR/push)
-2. **Deploy** — on `main`/`master`: tests → rsync → `docker compose up --build -d` → healthcheck `http://IP:8000/api/health`
+1. **Tests** — pytest  
+2. **Docker build** — image + healthcheck  
+3. **Deploy VPS** — только `master`/`main`: rsync → compose up → `http://IP:8000/api/health`
 
-Manual: Actions → **Deploy** → Run workflow.
+PR/develop: шаги 1–2 без деплоя.
+
+Manual: Actions → **Pipeline** → Run workflow.
 
 ## 4. Open site
 
