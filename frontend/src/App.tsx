@@ -611,6 +611,10 @@ export default function App() {
           KeySignal помогает сравнивать цены. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
+        <p className="muted" style={{ marginTop: '0.5rem' }}>
+          Стабильный HTTPS:{' '}
+          <a href="https://gpa.185.100.157.180.sslip.io">https://gpa.185.100.157.180.sslip.io</a>
+        </p>
       </footer>
 
       <AnimatePresence>

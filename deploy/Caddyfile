@@ -1,0 +1,38 @@
+# Edge proxy — free trusted HTTPS without buying a domain (sslip.io + Let's Encrypt).
+# Main URL: https://gpa.185.100.157.180.sslip.io
+# Bare IP http://185.100.157.180 still works over HTTP.
+{
+	email keysig-ssl@sslip.io
+}
+
+gpa.185.100.157.180.sslip.io {
+	encode gzip zstd
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy frontend:80 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			read_timeout 180s
+			write_timeout 180s
+		}
+	}
+}
+
+# Direct IP and other hosts on port 80 (no public cert for bare IPs)
+http:// {
+	encode gzip zstd
+	reverse_proxy frontend:80 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		transport http {
+			read_timeout 180s
+			write_timeout 180s
+		}
+	}
+}

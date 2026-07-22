@@ -140,25 +140,31 @@ jobs:
           set -euo pipefail
           cd "$DEPLOY_PATH"
 
-          # Free host :80 (system nginx / apache from older stack)
+          # Free host :80/:443 (system nginx / apache / host caddy from older stack)
           for svc in nginx apache2 httpd caddy; do
             if systemctl is-active --quiet "$svc" 2>/dev/null; then
               systemctl stop "$svc" || true
               systemctl disable "$svc" || true
-              echo "stopped host $svc to free port 80"
+              echo "stopped host $svc to free ports"
             fi
           done
 
           # Legacy Python container name from previous compose service
           docker rm -f gpa-web-1 2>/dev/null || true
 
-          # Drop other compose orphans and anything still binding :80 before recreate
+          # Drop orphans and free 80/443 before recreate (Caddy needs both)
           docker compose down --remove-orphans 2>/dev/null || true
-          if ss -tlnp 2>/dev/null | grep -qE ':80 '; then
-            echo "port 80 still in use — forcing free"
-            fuser -k 80/tcp 2>/dev/null || true
-            sleep 1
-          fi
+          for p in 80 443; do
+            if ss -tlnp 2>/dev/null | grep -qE ":${p} "; then
+              echo "port ${p} still in use — forcing free"
+              fuser -k "${p}/tcp" 2>/dev/null || true
+            fi
+          done
+          sleep 1
+
+          HOST_IP="$(hostname -I | awk '{print $1}')"
+          HTTPS_HOST="gpa.${HOST_IP}.sslip.io"
+          HTTPS_URL="https://${HTTPS_HOST}"
 
           # Create .env once; never rotate POSTGRES_PASSWORD after volume init
           if [ ! -f .env ]; then
@@ -170,29 +176,31 @@ jobs:
             if [ -z "$PG_PASS" ]; then
               PG_PASS="$(openssl rand -hex 16)"
             fi
-            HOST_IP="$(hostname -I | awk '{print $1}')"
             cat > .env <<EOF
           APP_ENV=production
           APP_DEBUG=false
           APP_KEY=${APP_KEY_VAL}
-          APP_URL=http://${HOST_IP}
-          FRONTEND_URL=http://${HOST_IP}
+          APP_URL=${HTTPS_URL}
+          FRONTEND_URL=${HTTPS_URL}
           POSTGRES_DB=gpa
           POSTGRES_USER=gpa
           POSTGRES_PASSWORD=${PG_PASS}
-          FRONTEND_PORT=80
           BACKEND_PORT=8080
           CORS_ORIGINS=*
+          SANCTUM_STATEFUL_DOMAINS=${HTTPS_HOST},${HOST_IP},localhost,127.0.0.1
           EOF
             sed -i 's/^[[:space:]]*//' .env
             chmod 600 .env
             echo "wrote compose .env"
           else
-            # Ensure required keys exist without overwriting password
             grep -q '^POSTGRES_DB=' .env || echo 'POSTGRES_DB=gpa' >> .env
             grep -q '^POSTGRES_USER=' .env || echo 'POSTGRES_USER=gpa' >> .env
-            grep -q '^FRONTEND_PORT=' .env || echo 'FRONTEND_PORT=80' >> .env
             grep -q '^BACKEND_PORT=' .env || echo 'BACKEND_PORT=8080' >> .env
+            # Prefer free HTTPS hostname (sslip.io) for APP_URL
+            if grep -qE '^APP_URL=http://' .env; then
+              sed -i "s|^APP_URL=.*|APP_URL=${HTTPS_URL}|" .env
+              sed -i "s|^FRONTEND_URL=.*|FRONTEND_URL=${HTTPS_URL}|" .env
+            fi
             if ! grep -qE '^POSTGRES_PASSWORD=.+' .env; then
               PG_PASS="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
               echo "POSTGRES_PASSWORD=${PG_PASS}" >> .env
@@ -210,18 +218,22 @@ jobs:
           docker compose up -d --build --remove-orphans
           docker compose ps
 
-          # Wait for API before leaving deploy step (migrations need a moment)
-          echo "waiting for /api/health via frontend..."
-          for i in $(seq 1 40); do
+          # Wait for API via Caddy edge
+          echo "waiting for /api/health..."
+          for i in $(seq 1 50); do
             if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1; then
               curl -fsS http://127.0.0.1/api/health
               echo
+              # Best-effort HTTPS (cert may take a few seconds on first boot)
+              curl -fsSk "${HTTPS_URL}/api/health" >/dev/null 2>&1 && echo "https ok: ${HTTPS_URL}" || echo "https pending: ${HTTPS_URL}"
+              docker logs --tail 15 gpa-tunnel-1 2>&1 | grep -oE 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' | tail -1 || true
               exit 0
             fi
             sleep 3
           done
-          echo "health check failed; backend logs:" >&2
+          echo "health check failed; logs:" >&2
           docker logs --tail 40 gpa-backend-1 >&2 || true
+          docker logs --tail 30 gpa-caddy-1 >&2 || true
           docker logs --tail 20 gpa-frontend-1 >&2 || true
           exit 1
           EOS
@@ -232,6 +244,7 @@ jobs:
           for i in $(seq 1 30); do
             if curl -fsS "http://${DEPLOY_HOST}/api/health"; then
               echo
+              curl -fsSk "https://gpa.${DEPLOY_HOST}.sslip.io/api/health" && echo || true
               exit 0
             fi
             sleep 4

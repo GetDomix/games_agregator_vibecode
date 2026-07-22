@@ -1,4 +1,5 @@
-# KeySignal — Laravel API + React + PostgreSQL (no SQLite in prod stack)
+# KeySignal — Laravel API + React + PostgreSQL
+# Edge: Caddy (free HTTPS via sslip.io) + optional Cloudflare Tunnel (no domain)
 services:
   db:
     image: postgres:16-alpine
@@ -29,8 +30,8 @@ services:
       APP_ENV: ${APP_ENV:-production}
       APP_DEBUG: ${APP_DEBUG:-false}
       APP_KEY: ${APP_KEY:-}
-      APP_URL: ${APP_URL:-http://localhost:8080}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      APP_URL: ${APP_URL:-https://gpa.185.100.157.180.sslip.io}
+      FRONTEND_URL: ${FRONTEND_URL:-https://gpa.185.100.157.180.sslip.io}
       LOG_CHANNEL: stderr
       DB_CONNECTION: pgsql
       DB_HOST: db
@@ -41,8 +42,9 @@ services:
       SESSION_DRIVER: database
       CACHE_STORE: database
       QUEUE_CONNECTION: database
-      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost,127.0.0.1}
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-gpa.185.100.157.180.sslip.io,185.100.157.180,localhost,127.0.0.1}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
       DIGISELLER_PARTNER_ID: ${DIGISELLER_PARTNER_ID:-}
       ADS_ENABLED: ${ADS_ENABLED:-true}
       ADS_CONTACT_EMAIL: ${ADS_CONTACT_EMAIL:-ads@example.com}
@@ -63,11 +65,38 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE: ""
-    ports:
-      - "${FRONTEND_PORT:-80}:80"
+    # Internal only — public traffic goes through Caddy (80/443)
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+  # Free Cloudflare edge access WITHOUT buying a domain (temporary *.trycloudflare.com URL).
+  # Traffic goes via Cloudflare anycast → often works without VPN when bare IP is filtered.
+  # Permanent custom hostname still needs any domain on a free Cloudflare plan.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://frontend:80
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
 volumes:
   gpa_pgdata:
+  caddy_data:
+  caddy_config:

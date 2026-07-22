@@ -39,7 +39,17 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const res = await fetch(path, { ...options, headers })
+  let res: Response
+  try {
+    res = await fetch(path, { ...options, headers })
+  } catch {
+    const host = typeof window !== 'undefined' ? window.location.host : ''
+    const hint =
+      host.includes('sslip.io') || host.includes('trycloudflare.com')
+        ? 'Нет связи с API. Обновите страницу или попробуйте позже.'
+        : 'Нет связи с сервером. Откройте сайт по HTTPS: https://gpa.185.100.157.180.sslip.io'
+    throw new Error(hint)
+  }
   if (res.status === 204) return null as T
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
