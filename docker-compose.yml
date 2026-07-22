@@ -59,6 +59,13 @@ services:
       PLATI_MAX_PAGES: ${PLATI_MAX_PAGES:-5}
       PLATI_PAGE_SIZE: ${PLATI_PAGE_SIZE:-100}
       GGSEL_LIMIT: ${GGSEL_LIMIT:-100}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
+      RADAR_INTERVAL_HOURS: ${RADAR_INTERVAL_HOURS:-6}
+      RADAR_DROP_PERCENT: ${RADAR_DROP_PERCENT:-5}
+      RADAR_MIN_DROP_RUB: ${RADAR_MIN_DROP_RUB:-30}
+      RADAR_STEAM_DELAY_MS: ${RADAR_STEAM_DELAY_MS:-400}
     depends_on:
       db:
         condition: service_healthy
@@ -99,6 +106,21 @@ services:
     command: tunnel --no-autoupdate --url http://frontend:80
     depends_on:
       - frontend
+    restart: unless-stopped
+
+  # Telegram Price Radar (aiogram3) — polls updates + triggers Laravel radar scan
+  radar-bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-igroscan_radar_bot}
+      API_BASE_URL: http://backend:8000
+      RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
+      RADAR_TRIGGER_HOURS: ${RADAR_INTERVAL_HOURS:-6}
+    depends_on:
+      - backend
     restart: unless-stopped
 
 volumes:

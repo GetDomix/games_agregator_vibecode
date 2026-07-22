@@ -545,6 +545,48 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
   line-height: 1.4;
 }
 
+.radar-steps {
+  display: grid;
+  gap: 0.75rem;
+}
+@media (min-width: 820px) {
+  .radar-steps { grid-template-columns: repeat(3, 1fr); }
+}
+.radar-step { position: relative; padding-top: 1.1rem; }
+.radar-step-n {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--signal), var(--signal-2));
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  margin-bottom: 0.45rem;
+}
+.radar-step h3 { margin: 0 0 0.35rem; font-size: 1rem; }
+.radar-status { font-weight: 700; margin: 0.35rem 0; }
+.radar-status.ok { color: var(--signal-3, #16a34a); }
+.radar-status.warn { color: var(--muted); }
+.text-ok { color: var(--signal-3, #16a34a); }
+.text-warn { color: var(--signal); }
+.link-code-box {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--signal) 40%, var(--border));
+  background: color-mix(in srgb, var(--signal) 6%, var(--card));
+}
+.link-code {
+  display: inline-block;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-family: ui-monospace, monospace;
+  color: var(--ink);
+}
+
 .about-toggle {
   width: 100%;
   display: flex;

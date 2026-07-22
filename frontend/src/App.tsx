@@ -102,7 +102,9 @@ export default function App() {
   const { theme, toggle } = useTheme()
   const [user, setUser] = useState<User | null>(getStoredUser())
   const [token, setToken] = useState<string | null>(getToken())
-  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'plans' | 'admin'>('home')
+  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'plans' | 'admin' | 'radar'>('home')
+  const [linkCode, setLinkCode] = useState<string | null>(null)
+  const [linkDeep, setLinkDeep] = useState<string | null>(null)
   const [plans, setPlans] = useState<PlansResponse | null>(null)
   const [promoCode, setPromoCode] = useState('')
   const [promoMsg, setPromoMsg] = useState('')
@@ -188,19 +190,28 @@ export default function App() {
     setDashboard(d as NonNullable<typeof dashboard>)
   }, [])
 
-  useEffect(() => {
-    if (loggedIn && view === 'cabinet') {
-      loadDashboard().catch(() => {})
-      api<{
+  const loadTgStatus = useCallback(async () => {
+    if (!getToken()) {
+      setTgStatus(null)
+      return
+    }
+    try {
+      const s = await api<{
         linked: boolean
         telegram_username?: string | null
         radar_enabled?: boolean
         bot_username?: string | null
       }>('/api/telegram/status')
-        .then(setTgStatus)
-        .catch(() => setTgStatus(null))
+      setTgStatus(s)
+    } catch {
+      setTgStatus(null)
     }
-  }, [loggedIn, view, loadDashboard])
+  }, [])
+
+  useEffect(() => {
+    if (loggedIn && view === 'cabinet') loadDashboard().catch(() => {})
+    if (loggedIn && (view === 'cabinet' || view === 'radar')) loadTgStatus()
+  }, [loggedIn, view, loadDashboard, loadTgStatus])
 
   useEffect(() => {
     if (loggedIn && view === 'admin' && user?.is_admin) {
@@ -406,6 +417,19 @@ export default function App() {
             <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
               Pro
             </button>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => {
+                if (loggedIn) setView('radar')
+                else {
+                  setAuthTab('login')
+                  setAuthOpen(true)
+                }
+              }}
+            >
+              📡 Радар
+            </button>
             {user?.is_admin && (
               <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
                 Admin
@@ -578,6 +602,27 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section className="section panel radar-home-cta">
+              <h3 style={{ marginTop: 0 }}>📡 Не пропусти скидку в Steam</h3>
+              <p className="muted">
+                Радар + бот <strong>@igroscan_bot</strong>: избранное, целевая цена, уведомление в Telegram.
+              </p>
+              <button
+                type="button"
+                className="btn primary"
+                style={{ marginTop: '0.5rem' }}
+                onClick={() => {
+                  if (loggedIn) setView('radar')
+                  else {
+                    setAuthTab('register')
+                    setAuthOpen(true)
+                  }
+                }}
+              >
+                {loggedIn ? 'Настроить радар' : 'Войти и включить радар'}
+              </button>
             </section>
 
             {popular.length > 0 && (
@@ -926,6 +971,230 @@ export default function App() {
           </section>
         )}
 
+        {view === 'radar' && (
+          <section className="section page-enter radar-page">
+            <div className="hero">
+              <p className="eyebrow">Уведомления</p>
+              <h2>📡 Радар цен</h2>
+              <p className="lead">
+                Бот <strong>@igroscan_bot</strong> (Игроскан Радар) пишет в Telegram, когда в{' '}
+                <strong>Steam</strong> у игры из избранного цена упала или достигла твоей цели.
+              </p>
+            </div>
+
+            {!loggedIn ? (
+              <div className="panel section">
+                <h3>Сначала войди</h3>
+                <p className="muted">Радар привязан к аккаунту: избранное и цели хранятся у тебя в профиле.</p>
+                <div className="actions" style={{ marginTop: '0.85rem' }}>
+                  <button type="button" className="btn primary" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>
+                    Войти
+                  </button>
+                  <button type="button" className="btn ghost" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>
+                    Регистрация
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="radar-steps section">
+                  <article className="panel radar-step">
+                    <span className="radar-step-n">1</span>
+                    <h3>Избранное + цель</h3>
+                    <p className="muted">
+                      Найди игру → ☆ в избранное → укажи целевую цену Steam (или не указывай — тогда только «цена упала»).
+                    </p>
+                    <button type="button" className="btn ghost sm" onClick={() => setView('home')}>
+                      К поиску
+                    </button>
+                  </article>
+                  <article className="panel radar-step">
+                    <span className="radar-step-n">2</span>
+                    <h3>Привяжи Telegram</h3>
+                    <p className="muted">
+                      Нажми кнопку ниже — откроется бот <strong>@igroscan_bot</strong> с кодом. Или скопируй код и отправь{' '}
+                      <code>/start КОД</code>.
+                    </p>
+                  </article>
+                  <article className="panel radar-step">
+                    <span className="radar-step-n">3</span>
+                    <h3>Жди уведомления</h3>
+                    <p className="muted">
+                      Раз в несколько часов проверяем Steam. Цель достигнута → 🎯. Заметное падение → 📉.
+                    </p>
+                  </article>
+                </div>
+
+                <div className="panel section radar-panel">
+                  <h3 style={{ marginTop: 0 }}>Статус</h3>
+                  {tgStatus?.linked ? (
+                    <>
+                      <p className="radar-status ok">
+                        ✅ Telegram привязан
+                        {tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''}
+                      </p>
+                      <p>
+                        Уведомления:{' '}
+                        <strong className={tgStatus.radar_enabled ? 'text-ok' : 'text-warn'}>
+                          {tgStatus.radar_enabled ? 'включены' : 'выключены'}
+                        </strong>
+                      </p>
+                      <div className="actions" style={{ marginTop: '0.85rem' }}>
+                        <button
+                          type="button"
+                          className="btn primary"
+                          disabled={tgBusy}
+                          onClick={async () => {
+                            setTgBusy(true)
+                            try {
+                              const r = await api<{ radar_enabled: boolean }>('/api/telegram/radar', {
+                                method: 'POST',
+                                body: JSON.stringify({ radar_enabled: !tgStatus.radar_enabled }),
+                              })
+                              setTgStatus({ ...tgStatus, radar_enabled: r.radar_enabled })
+                              setToast(r.radar_enabled ? 'Уведомления включены' : 'Уведомления выключены')
+                            } catch (e) {
+                              setToast(e instanceof Error ? e.message : 'Ошибка')
+                            } finally {
+                              setTgBusy(false)
+                            }
+                          }}
+                        >
+                          {tgStatus.radar_enabled ? 'Выключить уведомления' : 'Включить уведомления'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          disabled={tgBusy}
+                          onClick={async () => {
+                            setTgBusy(true)
+                            try {
+                              await api('/api/telegram/link', { method: 'DELETE' })
+                              setLinkCode(null)
+                              setLinkDeep(null)
+                              setTgStatus({
+                                linked: false,
+                                radar_enabled: true,
+                                bot_username: tgStatus.bot_username || 'igroscan_bot',
+                              })
+                              setToast('Telegram отвязан')
+                            } catch (e) {
+                              setToast(e instanceof Error ? e.message : 'Ошибка')
+                            } finally {
+                              setTgBusy(false)
+                            }
+                          }}
+                        >
+                          Отвязать бота
+                        </button>
+                        <a
+                          className="btn ghost"
+                          href="https://t.me/igroscan_bot"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Открыть @igroscan_bot
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="radar-status warn">⚪ Telegram ещё не привязан</p>
+                      <div className="actions" style={{ marginTop: '0.85rem' }}>
+                        <button
+                          type="button"
+                          className="btn primary"
+                          disabled={tgBusy}
+                          onClick={async () => {
+                            setTgBusy(true)
+                            try {
+                              const r = await api<{
+                                code: string
+                                deep_link?: string | null
+                                bot_username?: string | null
+                              }>('/api/telegram/link-code', { method: 'POST' })
+                              setLinkCode(r.code)
+                              setLinkDeep(r.deep_link || `https://t.me/igroscan_bot?start=${r.code}`)
+                              setTgStatus({
+                                linked: false,
+                                bot_username: r.bot_username || 'igroscan_bot',
+                                radar_enabled: true,
+                              })
+                              if (r.deep_link) window.open(r.deep_link, '_blank', 'noopener')
+                              setToast('Код создан — подтверди в Telegram')
+                            } catch (e) {
+                              setToast(e instanceof Error ? e.message : 'Ошибка')
+                            } finally {
+                              setTgBusy(false)
+                            }
+                          }}
+                        >
+                          Привязать Telegram
+                        </button>
+                        <a className="btn ghost" href="https://t.me/igroscan_bot" target="_blank" rel="noreferrer">
+                          Открыть бота
+                        </a>
+                      </div>
+                      {linkCode && (
+                        <div className="link-code-box">
+                          <p className="muted" style={{ margin: '0 0 0.35rem' }}>Твой код (20 минут):</p>
+                          <code className="link-code">{linkCode}</code>
+                          <p className="muted" style={{ marginTop: '0.65rem' }}>
+                            В боте: <code>/start {linkCode}</code>
+                            {linkDeep && (
+                              <>
+                                {' · '}
+                                <a href={linkDeep} target="_blank" rel="noreferrer">
+                                  открыть ссылку
+                                </a>
+                              </>
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            className="btn ghost sm"
+                            style={{ marginTop: '0.5rem' }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(`/start ${linkCode}`).then(() => setToast('Скопировано'))
+                            }}
+                          >
+                            Копировать /start {linkCode}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn ghost sm"
+                            style={{ marginTop: '0.5rem', marginLeft: '0.35rem' }}
+                            onClick={() => loadTgStatus().then(() => setToast('Статус обновлён'))}
+                          >
+                            Я привязал — проверить
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div className="panel section">
+                  <h3>Когда придёт сообщение</h3>
+                  <ul className="guide-list">
+                    <li>
+                      <strong>🎯 Цель</strong> — цена Steam ≤ твоей целевой (задаётся при добавлении в избранное).
+                    </li>
+                    <li>
+                      <strong>📉 Скидка Steam</strong> — цена упала минимум на 5% или на 30 ₽ (если цели нет).
+                    </li>
+                    <li>Проверка несколько раз в сутки (не мгновенно после каждой скидки Steam).</li>
+                    <li>Pro не обязателен для радара; без привязки Telegram уведомлений не будет.</li>
+                  </ul>
+                  <button type="button" className="btn ghost" style={{ marginTop: '0.75rem' }} onClick={() => setView('cabinet')}>
+                    К избранному в кабинете
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         {view === 'admin' && loggedIn && user?.is_admin && (
           <section className="section page-enter">
             <div className="hero">
@@ -1047,104 +1316,15 @@ export default function App() {
             ))}
 
             <div className="panel section radar-panel">
-              <h3 style={{ marginTop: 0 }}>📡 Радар цен (Telegram)</h3>
-              <p className="muted">
-                Следим за <strong>ценой Steam</strong> в избранном: цель достигнута или заметное снижение
-                (от 5% / 30 ₽). Маркетплейсы в радаре не спамим — только Steam.
+              <h3 style={{ marginTop: 0 }}>📡 Радар / Telegram</h3>
+              <p className="muted" style={{ marginBottom: '0.75rem' }}>
+                {tgStatus?.linked
+                  ? `Привязан${tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''} · уведомления ${tgStatus.radar_enabled ? 'вкл' : 'выкл'}`
+                  : 'Не привязан — не получишь алерты о скидках Steam.'}
               </p>
-              {tgStatus?.linked ? (
-                <>
-                  <p>
-                    Привязан{tgStatus.telegram_username ? `: @${tgStatus.telegram_username}` : ''} · радар{' '}
-                    <strong>{tgStatus.radar_enabled ? 'вкл' : 'выкл'}</strong>
-                  </p>
-                  <div className="actions" style={{ marginTop: '0.75rem' }}>
-                    <button
-                      type="button"
-                      className="btn ghost"
-                      disabled={tgBusy}
-                      onClick={async () => {
-                        setTgBusy(true)
-                        try {
-                          const r = await api<{ radar_enabled: boolean }>('/api/telegram/radar', {
-                            method: 'POST',
-                            body: JSON.stringify({ radar_enabled: !tgStatus.radar_enabled }),
-                          })
-                          setTgStatus({ ...tgStatus, radar_enabled: r.radar_enabled })
-                          setToast(r.radar_enabled ? 'Радар включён' : 'Радар выключен')
-                        } catch (e) {
-                          setToast(e instanceof Error ? e.message : 'Ошибка')
-                        } finally {
-                          setTgBusy(false)
-                        }
-                      }}
-                    >
-                      {tgStatus.radar_enabled ? 'Выключить радар' : 'Включить радар'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn ghost"
-                      disabled={tgBusy}
-                      onClick={async () => {
-                        setTgBusy(true)
-                        try {
-                          await api('/api/telegram/link', { method: 'DELETE' })
-                          setTgStatus({ linked: false, radar_enabled: true, bot_username: tgStatus.bot_username })
-                          setToast('Telegram отвязан')
-                        } catch (e) {
-                          setToast(e instanceof Error ? e.message : 'Ошибка')
-                        } finally {
-                          setTgBusy(false)
-                        }
-                      }}
-                    >
-                      Отвязать Telegram
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="muted">Telegram ещё не привязан.</p>
-                  <div className="actions" style={{ marginTop: '0.75rem' }}>
-                    <button
-                      type="button"
-                      className="btn primary"
-                      disabled={tgBusy}
-                      onClick={async () => {
-                        setTgBusy(true)
-                        try {
-                          const r = await api<{
-                            code: string
-                            deep_link?: string | null
-                            bot_username?: string | null
-                            instruction: string
-                          }>('/api/telegram/link-code', { method: 'POST' })
-                          if (r.deep_link) {
-                            window.open(r.deep_link, '_blank', 'noopener')
-                          }
-                          setToast(`Код: ${r.code} — открой бота или /start ${r.code}`)
-                          setTgStatus({
-                            linked: false,
-                            bot_username: r.bot_username,
-                            radar_enabled: true,
-                          })
-                        } catch (e) {
-                          setToast(e instanceof Error ? e.message : 'Ошибка')
-                        } finally {
-                          setTgBusy(false)
-                        }
-                      }}
-                    >
-                      Привязать Telegram
-                    </button>
-                  </div>
-                  {tgStatus?.bot_username && (
-                    <p className="muted" style={{ marginTop: '0.5rem' }}>
-                      Бот: @{tgStatus.bot_username}
-                    </p>
-                  )}
-                </>
-              )}
+              <button type="button" className="btn primary" onClick={() => setView('radar')}>
+                Открыть радар
+              </button>
             </div>
 
             {dashboard?.price_hits && dashboard.price_hits.length > 0 && (
@@ -1271,9 +1451,19 @@ export default function App() {
           <span className="m-tab-ico" aria-hidden>⌕</span>
           Поиск
         </button>
-        <button type="button" className={view === 'guide' ? 'active' : ''} onClick={() => setView('guide')}>
-          <span className="m-tab-ico" aria-hidden>?</span>
-          Гайд
+        <button
+          type="button"
+          className={view === 'radar' ? 'active' : ''}
+          onClick={() => {
+            if (loggedIn) setView('radar')
+            else {
+              setAuthTab('login')
+              setAuthOpen(true)
+            }
+          }}
+        >
+          <span className="m-tab-ico" aria-hidden>📡</span>
+          Радар
         </button>
         <button type="button" className={view === 'plans' ? 'active' : ''} onClick={() => setView('plans')}>
           <span className="m-tab-ico" aria-hidden>★</span>
