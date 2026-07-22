@@ -80,31 +80,41 @@ class PriceController extends Controller
     private function quotaInfo(?User $user, ?string $ip): array
     {
         $isGuest = $user === null;
+        $isPro = $user?->hasActivePro() ?? false;
         $limit = $isGuest
             ? (int) config('gpa.guest_searches_per_day', 5)
-            : (int) config('gpa.free_searches_per_day', 15);
+            : $user->dailySearchLimit();
+        $unlimited = ! $isGuest && $limit === null;
         $key = $isGuest ? 'ip:'.($ip ?: 'unknown') : 'user:'.$user->id;
         $day = now()->utc()->format('Y-m-d');
         $row = DailySearchQuota::query()->where('quota_key', $key)->where('day', $day)->first();
         $used = (int) ($row->count ?? 0);
 
         return [
-            'limit' => $limit,
+            'limit' => $unlimited ? null : $limit,
             'used' => $used,
-            'remaining' => max(0, $limit - $used),
+            'remaining' => $unlimited ? null : max(0, (int) $limit - $used),
             'is_guest' => $isGuest,
-            'reset_hint' => 'обновится завтра (UTC)',
+            'is_pro' => $isPro,
+            'unlimited' => $unlimited,
+            'plan' => $isGuest ? 'guest' : ($isPro ? 'pro' : 'free'),
+            'reset_hint' => $unlimited ? 'без дневного лимита (Pro)' : 'обновится завтра (UTC)',
+            'upgrade_hint' => $unlimited
+                ? null
+                : ($isGuest
+                    ? 'Зарегистрируйся — больше поисков. Pro снимает лимит.'
+                    : 'Pro — без дневного лимита. Промокод KEYSIGNAL-PRO в кабинете.'),
         ];
     }
 
     private function consumeQuota(?User $user, ?string $ip): array
     {
         $info = $this->quotaInfo($user, $ip);
-        if ($info['remaining'] <= 0) {
+        if (! $info['unlimited'] && ($info['remaining'] ?? 0) <= 0) {
             throw new \RuntimeException(
                 $info['is_guest']
-                    ? "Лимит гостя: {$info['limit']} поисков/день. Зарегистрируйся — больше поисков и избранное."
-                    : "Дневной лимит: {$info['limit']} поисков. Зайди завтра или следи за избранным."
+                    ? "Лимит гостя: {$info['limit']} поисков/день. Зарегистрируйся — больше поисков, или возьми Pro."
+                    : "Дневной лимит Free: {$info['limit']} поисков. Оформи Pro (кабинет → тарифы) или промокод KEYSIGNAL-PRO."
             );
         }
         $key = $info['is_guest'] ? 'ip:'.($ip ?: 'unknown') : 'user:'.$user->id;
@@ -119,9 +129,13 @@ class PriceController extends Controller
         return [
             'limit' => $info['limit'],
             'used' => $used,
-            'remaining' => max(0, $info['limit'] - $used),
+            'remaining' => $info['unlimited'] ? null : max(0, (int) $info['limit'] - $used),
             'is_guest' => $info['is_guest'],
+            'is_pro' => $info['is_pro'],
+            'unlimited' => $info['unlimited'],
+            'plan' => $info['plan'],
             'reset_hint' => $info['reset_hint'],
+            'upgrade_hint' => $info['upgrade_hint'],
         ];
     }
 

@@ -11,5 +11,14 @@ return [
     'ads_label' => env('ADS_LABEL', 'Реклама'),
     'free_searches_per_day' => (int) env('FREE_SEARCHES_PER_DAY', 15),
     'guest_searches_per_day' => (int) env('GUEST_SEARCHES_PER_DAY', 5),
+    // null / 0 = unlimited for Pro
+    'pro_searches_per_day' => env('PRO_SEARCHES_PER_DAY') !== null && env('PRO_SEARCHES_PER_DAY') !== ''
+        ? (int) env('PRO_SEARCHES_PER_DAY')
+        : null,
+    'pro_price_rub_month' => (int) env('PRO_PRICE_RUB_MONTH', 199),
+    'pro_price_rub_year' => (int) env('PRO_PRICE_RUB_YEAR', 1490),
+    // Comma-separated: CODE:days, e.g. KEYSIGNAL-PRO:30,VIP2026:365
+    'promo_codes' => env('PROMO_CODES', 'KEYSIGNAL-PRO:30,KEYSIGNAL-YEAR:365'),
+    'billing_contact_email' => env('BILLING_CONTACT_EMAIL', env('ADS_CONTACT_EMAIL', 'ads@example.com')),
     'watchlist_refresh_max' => (int) env('WATCHLIST_REFRESH_MAX', 5),
 ];

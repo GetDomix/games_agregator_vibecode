@@ -10,7 +10,35 @@ type KindStats = { kind: string; label: string; count: number; min_price: number
 type Market = { marketplace: string; label: string; total_offers: number; scanned_offers: number; by_kind: KindStats[]; error?: string | null }
 type Steam = { appid: number; name: string; header_image?: string | null; store_url: string; price_rub?: number | null; price_initial_rub?: number | null; discount_percent?: number; is_free?: boolean; available_in_ru?: boolean; note?: string | null }
 type Deal = { score: number; label: string; is_better: boolean; market_min_rub?: number | null; market_source?: string | null; savings_rub?: number | null; savings_percent?: number | null }
-type Quota = { limit: number; used: number; remaining: number; is_guest: boolean; reset_hint?: string }
+type Quota = {
+  limit: number | null
+  used: number
+  remaining: number | null
+  is_guest: boolean
+  is_pro?: boolean
+  unlimited?: boolean
+  plan?: string
+  reset_hint?: string
+  upgrade_hint?: string | null
+}
+type PlanCard = {
+  id: string
+  name: string
+  price_rub: number
+  period?: string | null
+  searches_per_day?: number | null
+  unlimited?: boolean
+  features: string[]
+  cta?: string
+}
+type PlansResponse = {
+  currency: string
+  note?: string
+  billing_contact_email?: string
+  plans: PlanCard[]
+  promo_hint?: string
+  checkout_message?: string
+}
 type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]; plati: Market; ggsel: Market; warnings: string[]; saved_to_history?: boolean; is_favorite?: boolean; deal?: Deal | null; quota?: Quota | null }
 type PopularItem = { query: string; game_name?: string | null; appid?: number | null; header_image?: string | null; count?: number }
 type Fav = { id: number; appid: number; game_name: string; header_image?: string | null; target_price_rub?: number | null; last_steam_price_rub?: number | null; price_below_target?: boolean }
@@ -56,7 +84,10 @@ export default function App() {
   const { theme, toggle } = useTheme()
   const [user, setUser] = useState<User | null>(getStoredUser())
   const [token, setToken] = useState<string | null>(getToken())
-  const [view, setView] = useState<'home' | 'cabinet' | 'guide'>('home')
+  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'plans'>('home')
+  const [plans, setPlans] = useState<PlansResponse | null>(null)
+  const [promoCode, setPromoCode] = useState('')
+  const [promoMsg, setPromoMsg] = useState('')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -105,6 +136,9 @@ export default function App() {
     api<AdsConfig>('/api/ads/config')
       .then((d) => setAds(d))
       .catch(() => setAds(null))
+    api<PlansResponse>('/api/plans')
+      .then((d) => setPlans(d))
+      .catch(() => setPlans(null))
   }, [refreshMe])
 
   const loadDashboard = useCallback(async () => {
@@ -245,6 +279,9 @@ export default function App() {
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
               <span className="btn-label-full">Как пользоваться</span>
               <span className="btn-label-short">Гайд</span>
+            </button>
+            <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
+              Pro
             </button>
             {loggedIn ? (
               <>
@@ -392,9 +429,22 @@ export default function App() {
                     </div>
                   )}
                   {result.quota && (
-                    <div className={`quota-pill ${result.quota.remaining <= 1 ? 'low' : ''}`}>
-                      поисков сегодня: {result.quota.used}/{result.quota.limit}
-                      {result.quota.is_guest ? ' · гость' : ''}
+                    <div
+                      className={`quota-pill ${
+                        !result.quota.unlimited && result.quota.remaining != null && result.quota.remaining <= 1
+                          ? 'low'
+                          : ''
+                      }`}
+                    >
+                      {result.quota.unlimited
+                        ? `поисков сегодня: ${result.quota.used} · Pro ∞`
+                        : `поисков сегодня: ${result.quota.used}/${result.quota.limit}`}
+                      {result.quota.is_guest ? ' · гость' : result.quota.is_pro ? '' : ' · free'}
+                      {!result.quota.unlimited && (
+                        <button type="button" className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setView('plans')}>
+                          Снять лимит
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -509,7 +559,10 @@ export default function App() {
             <ul className="guide-list">
               <li>Цены ориентировочные: у продавца может закончиться товар или смениться стоимость.</li>
               <li>Некоторые игры недоступны в Steam RU — тогда сравниваем только маркетплейсы.</li>
-              <li>Гостям доступно ограниченное число поисков в сутки; аккаунт даёт больше и сохраняет историю.</li>
+              <li>
+                Лимит поисков (гость / Free) защищает сервер: каждый запрос ходит на Steam, Plati и GGsel.
+                Тариф Pro снимает дневной кап — раздел «Pro» в шапке.
+              </li>
               <li>Мы не принимаем оплату за игры: покупка всегда на стороне Steam / Plati / GGsel.</li>
             </ul>
 
@@ -532,6 +585,122 @@ export default function App() {
           </section>
         )}
 
+        {view === 'plans' && (
+          <section className="section">
+            <div className="hero">
+              <p className="eyebrow">Тарифы</p>
+              <h2>Зачем лимит и как его снять</h2>
+              <p className="lead">
+                {plans?.note ||
+                  'Каждый поиск дергает Steam, Plati и GGsel. Лимит на Free/гостя — чтобы сервис не клали боты и не сжигали исходящий трафик. Pro убирает дневной кап.'}
+              </p>
+            </div>
+            <div className="plans-grid section">
+              {(plans?.plans || []).map((p) => (
+                <article key={p.id} className={`panel plan-card ${p.unlimited ? 'plan-card--pro' : ''}`}>
+                  <h3>{p.name}</h3>
+                  <div className="plan-price">
+                    {p.price_rub > 0 ? (
+                      <>
+                        <strong>{p.price_rub.toLocaleString('ru-RU')} ₽</strong>
+                        <span className="muted">/{p.period === 'year' ? 'год' : 'мес'}</span>
+                      </>
+                    ) : (
+                      <strong>0 ₽</strong>
+                    )}
+                  </div>
+                  <p className="muted">
+                    {p.unlimited ? 'Поиски без дневного лимита' : `${p.searches_per_day ?? '—'} поисков / сутки`}
+                  </p>
+                  <ul className="guide-list">
+                    {p.features.map((f) => (
+                      <li key={f}>{f}</li>
+                    ))}
+                  </ul>
+                  {p.unlimited && (
+                    <div className="actions" style={{ marginTop: '0.85rem' }}>
+                      {loggedIn ? (
+                        <button
+                          type="button"
+                          className="btn primary"
+                          onClick={async () => {
+                            try {
+                              const r = await api<{ message: string; mailto?: string }>('/api/billing/request', {
+                                method: 'POST',
+                                body: JSON.stringify({ plan_id: p.id }),
+                              })
+                              setPromoMsg(r.message)
+                              if (r.mailto) window.location.href = r.mailto
+                            } catch (e) {
+                              setPromoMsg(e instanceof Error ? e.message : 'Ошибка')
+                            }
+                          }}
+                        >
+                          {p.cta || 'Оформить'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn primary"
+                          onClick={() => {
+                            setAuthTab('register')
+                            setAuthOpen(true)
+                          }}
+                        >
+                          Сначала аккаунт
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+            <div className="panel section">
+              <h3>Промокод</h3>
+              <p className="muted">Для теста Pro: <code>KEYSIGNAL-PRO</code> (30 дней).</p>
+              {loggedIn ? (
+                <form
+                  className="search-row"
+                  style={{ marginTop: '0.75rem' }}
+                  onSubmit={async (e) => {
+                    e.preventDefault()
+                    setPromoMsg('')
+                    try {
+                      const r = await api<{ message: string; user: User }>('/api/billing/promo', {
+                        method: 'POST',
+                        body: JSON.stringify({ code: promoCode }),
+                      })
+                      setSession(getToken(), r.user)
+                      setUser(r.user)
+                      setPromoMsg(r.message)
+                      setPromoCode('')
+                    } catch (err) {
+                      setPromoMsg(err instanceof Error ? err.message : 'Ошибка')
+                    }
+                  }}
+                >
+                  <div className="search-field">
+                    <input
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value)}
+                      placeholder="Промокод"
+                      maxLength={40}
+                      required
+                    />
+                  </div>
+                  <button className="btn primary" type="submit">
+                    Активировать
+                  </button>
+                </form>
+              ) : (
+                <p className="muted">Войдите в аккаунт, чтобы активировать промокод.</p>
+              )}
+              {promoMsg && <p className="status" style={{ marginTop: '0.75rem' }}>{promoMsg}</p>}
+              {plans?.checkout_message && <p className="muted" style={{ marginTop: '0.75rem' }}>{plans.checkout_message}</p>}
+            </div>
+          </section>
+        )}
+
         {view === 'cabinet' && loggedIn && (
           <section className="section">
             <div className="hero" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '1rem' }}>
@@ -539,6 +708,18 @@ export default function App() {
                 <p className="eyebrow">Кабинет</p>
                 <h2 style={{ margin: 0 }}>{user?.display_name}</h2>
                 <p className="muted">{user?.email}</p>
+                <p className="muted" style={{ marginTop: 6 }}>
+                  Тариф: <strong>{user?.plan_label || 'Free'}</strong>
+                  {user?.plan_expires_at
+                    ? ` · до ${new Date(user.plan_expires_at).toLocaleDateString('ru-RU')}`
+                    : user?.plan === 'pro' || user?.plan === 'unlimited'
+                      ? ' · без срока'
+                      : ''}
+                  {' · '}
+                  <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
+                    Тарифы / Pro
+                  </button>
+                </p>
               </div>
               {dashboard && (
                 <div className="stats">

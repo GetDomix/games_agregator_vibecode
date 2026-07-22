@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdsController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\HealthController;
@@ -19,6 +20,8 @@ Route::get('/search', [PriceController::class, 'search']);
 Route::get('/prices', [PriceController::class, 'prices']);
 Route::get('/quota', [PriceController::class, 'quota']);
 Route::get('/ads/config', [AdsController::class, 'config']);
+Route::get('/plans', [BillingController::class, 'plans']);
+Route::post('/billing/request', [BillingController::class, 'requestCheckout']);
 Route::get('/trends/popular', [DashboardController::class, 'popular']);
 Route::post('/track/click', [TrackingController::class, 'click']);
 
@@ -26,6 +29,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::patch('/auth/me', [AuthController::class, 'updateMe']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::post('/billing/promo', [BillingController::class, 'activatePromo']);
 
     Route::get('/me/dashboard', [DashboardController::class, 'me']);
     Route::get('/me/history', [HistoryController::class, 'index']);

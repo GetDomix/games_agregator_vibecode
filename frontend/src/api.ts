@@ -5,6 +5,9 @@ export type User = {
   id: number
   email: string
   display_name: string
+  plan?: 'free' | 'pro' | 'unlimited' | string
+  plan_label?: string
+  plan_expires_at?: string | null
   created_at?: string
   last_login_at?: string | null
 }

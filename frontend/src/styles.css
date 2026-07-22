@@ -248,8 +248,30 @@ button, input { font: inherit; }
 .deal-card.hot { border-color: color-mix(in srgb, var(--signal) 45%, var(--border)); }
 .deal-score { font-size: 1.7rem; font-weight: 800; color: var(--signal); min-width: 4rem; }
 .deal-score span { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
-.quota-pill { font-size: 0.85rem; font-weight: 650; color: var(--ink-soft); }
+.quota-pill {
+  font-size: 0.85rem; font-weight: 650; color: var(--ink-soft);
+  flex-wrap: wrap;
+}
 .quota-pill.low { color: var(--signal); }
+
+.plans-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .plans-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1020px) {
+  .plans-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.plan-card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.plan-price { margin-bottom: 0.35rem; font-size: 1.25rem; }
+.plan-price strong { letter-spacing: -0.02em; }
+.plan-card--pro {
+  border-color: color-mix(in srgb, var(--signal) 40%, var(--border));
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--signal) 12%, transparent);
+}
 
 .steam-card {
   display: grid; gap: 1rem; padding: 1rem; margin-bottom: 1rem;
@@ -401,10 +423,10 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
     gap: 0.4rem;
   }
   .header-actions[data-auth="guest"] {
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr);
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 1.1fr);
   }
   .header-actions[data-auth="user"] {
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1fr);
   }
   .header-actions .btn {
     width: 100%;
