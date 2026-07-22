@@ -36,15 +36,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.3"
-          extensions: mbstring, pdo_pgsql, pgsql, zip
+          php-version: "8.4"
+          extensions: mbstring, pdo_pgsql, pgsql, zip, tokenizer, xml, ctype, json, bcmath
           coverage: none
       - name: Install Composer deps
-        run: composer install --no-interaction --prefer-dist
-      - name: Configure env (PostgreSQL)
         run: |
           cp .env.example .env
+          # skip artisan scripts until key + DB env exist
+          composer install --no-interaction --prefer-dist --no-scripts
           php artisan key:generate --force
+          composer dump-autoload -o
+          php artisan package:discover --ansi
+      - name: Configure env (PostgreSQL)
+        run: |
           sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=pgsql/' .env
           sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env
           sed -i 's/^DB_PORT=.*/DB_PORT=5432/' .env
@@ -56,14 +60,14 @@ jobs:
       - name: Feature smoke (health + register)
         run: |
           php artisan serve --host=127.0.0.1 --port=8080 &
-          sleep 2
+          sleep 3
           curl -fsS http://127.0.0.1:8080/api/health
           curl -fsS -X POST http://127.0.0.1:8080/api/auth/register \
             -H 'Content-Type: application/json' \
             -H 'Accept: application/json' \
             -d '{"email":"ci@test.local","password":"password1","display_name":"CI"}'
       - name: PHPUnit
-        run: php artisan test || true
+        run: php artisan test
 
   frontend-build:
     name: 2 · Frontend

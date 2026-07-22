@@ -340,6 +340,15 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
 .footer { margin-top: 2.5rem; padding: 1.5rem 0 0.5rem; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
 .footer a { color: var(--ink-soft); }
 
+.guide-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+.guide-list li { margin: 0.4rem 0; }
+.guide-list strong { color: var(--ink); }
+
 .ad-slot {
   margin: 1rem 0; border: 1px dashed color-mix(in srgb, var(--signal-2) 40%, var(--border));
   border-radius: var(--radius); padding: 1rem; background: color-mix(in srgb, var(--signal-2) 6%, var(--card));
