@@ -1,4 +1,3 @@
-# Single pipeline: test → docker smoke → deploy (sequential, one workflow)
 name: Pipeline
 
 on:
@@ -7,142 +6,75 @@ on:
   pull_request:
     branches: [main, master, develop]
   workflow_dispatch:
-    inputs:
-      skip_tests:
-        description: "Skip tests (emergency deploy only)"
-        required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
-      skip_deploy:
-        description: "Skip deploy (CI only)"
-        required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
 
 concurrency:
   group: pipeline-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: 1 · Tests
-    if: github.event_name != 'workflow_dispatch' || inputs.skip_tests != 'true'
+  backend-test:
+    name: 1 · Backend
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: shivammathur/setup-php@v2
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-      - name: Install dependencies
+          php-version: '8.3'
+          extensions: mbstring, sqlite, pdo_sqlite, zip
+          coverage: none
+      - name: Install Composer deps
+        run: composer install --no-interaction --prefer-dist
+      - name: App key & migrate
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-      - name: Pytest
-        env:
-          APP_ENV: development
-          SECRET_KEY: ci-test-secret-not-for-production
-          DATABASE_URL: sqlite://
-          ADS_ENABLED: "true"
-        run: pytest -v --tb=short
+          cp .env.example .env
+          php artisan key:generate
+          touch database/database.sqlite
+          php artisan migrate --force
+      - name: PHPUnit
+        run: php artisan test --parallel=0 || ./vendor/bin/phpunit
 
-  docker:
-    name: 2 · Docker build
-    needs: [test]
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+  frontend-build:
+    name: 2 · Frontend
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t gpa:ci .
-      - name: Container healthcheck
-        run: |
-          docker run -d --name gpa-ci \
-            -e APP_ENV=production \
-            -e SECRET_KEY=ci-docker-secret-key-min-32-chars-long \
-            -e DATABASE_URL=sqlite:////data/app.db \
-            -e CORS_ORIGINS=* \
-            -p 8000:8000 \
-            gpa:ci
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/api/health; then
-              echo
-              echo "Health OK"
-              docker stop gpa-ci
-              exit 0
-            fi
-            sleep 2
-          done
-          docker logs gpa-ci || true
-          docker stop gpa-ci || true
-          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci || npm install
+      - run: npm run build
 
   deploy:
     name: 3 · Deploy VPS
-    needs: [test, docker]
-    if: |
-      always() &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
-      needs.docker.result == 'success' &&
-      (
-        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
-        (github.event_name == 'workflow_dispatch' && inputs.skip_deploy != 'true')
-      )
+    needs: [backend-test, frontend-build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Validate secrets
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
-          missing=0
-          if [ -z "$DEPLOY_HOST" ]; then
-            echo "::error::Secret DEPLOY_HOST empty — set VPS IP (e.g. 185.100.157.180)"
-            missing=1
-          fi
-          if [ -z "$DEPLOY_USER" ]; then
-            echo "::error::Secret DEPLOY_USER empty — set SSH user (e.g. root)"
-            missing=1
-          fi
-          if [ -z "$DEPLOY_SSH_KEY" ]; then
-            echo "::error::Secret DEPLOY_SSH_KEY empty — paste private key (BEGIN/END)"
-            missing=1
-          fi
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::Repo Settings → Secrets and variables → Actions"
-            exit 1
-          fi
-          echo "OK host=$DEPLOY_HOST user=$DEPLOY_USER"
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_SSH_KEY"
+      - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-
       - name: known_hosts
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          for i in 1 2 3 4 5; do
-            if ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
-              echo "known_hosts ok"
-              exit 0
-            fi
-            sleep 3
-          done
-          exit 1
-
-      - name: Rsync to VPS
+        run: mkdir -p ~/.ssh && ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+      - name: Rsync
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -151,96 +83,24 @@ jobs:
         run: |
           ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}'"
           rsync -az --delete \
-            -e "ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=yes" \
-            --exclude '.git/' \
-            --exclude '.venv/' \
-            --exclude 'venv/' \
-            --exclude '__pycache__/' \
-            --exclude '.pytest_cache/' \
-            --exclude 'data/' \
-            --exclude '.env' \
-            --exclude '*.db' \
-            --exclude '*.db-*' \
-            --exclude '.idea/' \
+            -e "ssh -p $DEPLOY_PORT" \
+            --exclude '.git/' --exclude 'node_modules/' --exclude 'backend/vendor/' \
+            --exclude 'legacy/' --exclude '.venv/' --exclude 'data/' --exclude '.env' \
             ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
-
-      - name: Ensure .env on server
+      - name: Compose up
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/gpa' }}
-          APP_SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}
-          DIGISELLER_PARTNER_ID: ${{ secrets.DIGISELLER_PARTNER_ID }}
-          ADS_CONTACT_EMAIL: ${{ secrets.ADS_CONTACT_EMAIL }}
         run: |
-          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "DEPLOY_PATH='$DEPLOY_PATH' APP_SECRET_KEY='$APP_SECRET_KEY' DIGISELLER_PARTNER_ID='$DIGISELLER_PARTNER_ID' ADS_CONTACT_EMAIL='$ADS_CONTACT_EMAIL' bash -s" <<'REMOTE'
-          set -euo pipefail
-          cd "$DEPLOY_PATH"
-          if [ ! -f .env ]; then
-            echo "Creating .env..."
-            SECRET="${APP_SECRET_KEY:-}"
-            if [ -z "$SECRET" ]; then
-              SECRET=$(openssl rand -hex 32)
-              echo "Generated SECRET_KEY on server"
-            fi
-            EMAIL="${ADS_CONTACT_EMAIL:-ads@example.com}"
-            cat > .env <<EOF
-          APP_ENV=production
-          SECRET_KEY=${SECRET}
-          DATABASE_URL=sqlite:////data/app.db
-          ACCESS_TOKEN_EXPIRE_MINUTES=10080
-          CORS_ORIGINS=*
-          DIGISELLER_PARTNER_ID=${DIGISELLER_PARTNER_ID:-}
-          ADS_ENABLED=true
-          ADS_CONTACT_EMAIL=${EMAIL}
-          ADS_LABEL=Реклама
-          HTTP_TIMEOUT_SECONDS=20
-          PLATI_MAX_PAGES=5
-          PLATI_PAGE_SIZE=100
-          GGSEL_LIMIT=100
-          EOF
-            sed -i 's/^[[:space:]]*//' .env
-            chmod 600 .env
-          else
-            echo ".env exists — keep"
-          fi
-          REMOTE
-
-      - name: Docker compose up
+          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" "cd '${DEPLOY_PATH}' && (test -f backend/.env || cp backend/.env.example backend/.env) && docker compose up -d --build"
+      - name: Health
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/gpa' }}
-          DEPLOY_HTTP_PORT: ${{ secrets.DEPLOY_HTTP_PORT || '8000' }}
         run: |
-          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "DEPLOY_PATH='$DEPLOY_PATH' COMPOSE_HTTP_PORT='${DEPLOY_HTTP_PORT:-8000}' bash -s" <<'REMOTE'
-          set -euo pipefail
-          cd "$DEPLOY_PATH"
-          command -v docker >/dev/null
-          docker compose -f docker-compose.yml -f deploy/docker-compose.override.yml up -d --build --remove-orphans
-          docker compose -f docker-compose.yml -f deploy/docker-compose.override.yml ps
-          docker ps --format 'table {{.Names}}\t{{.Status}}'
-          REMOTE
-
-      - name: Health check
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_HTTP_PORT: ${{ secrets.DEPLOY_HTTP_PORT || '8000' }}
-        run: |
-          url="http://${DEPLOY_HOST}:${DEPLOY_HTTP_PORT}/api/health"
-          echo "Checking $url"
           for i in $(seq 1 40); do
-            if curl -fsS --connect-timeout 5 "$url"; then
-              echo
-              echo "Deploy OK → http://${DEPLOY_HOST}:${DEPLOY_HTTP_PORT}/"
-              exit 0
-            fi
-            echo "attempt $i failed, retry..."
+            curl -fsS "http://${DEPLOY_HOST}/api/health" && exit 0
             sleep 3
           done
-          echo "::error::Health check failed for $url"
           exit 1

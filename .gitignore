@@ -19,3 +19,11 @@ data/
 gpa_deploy
 gpa_deploy.pub
 *.pem
+node_modules/
+backend/vendor/
+backend/storage/logs/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+frontend/dist/
+legacy/.venv/
