@@ -1,15 +1,18 @@
 FROM php:8.3-cli-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git unzip libsqlite3-dev libzip-dev curl \
-    && docker-php-ext-install pdo_sqlite zip \
+    git unzip libzip-dev libpq-dev curl \
+    && docker-php-ext-install pdo_pgsql pgsql zip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
 COPY . .
-RUN composer install --no-dev --optimize-autoloader --no-interaction \
+RUN composer dump-autoload --optimize \
     && php artisan package:discover --ansi || true \
     && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
@@ -17,4 +20,9 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction \
 ENV APP_ENV=production
 EXPOSE 8000
 
-CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000
+# Generate key if missing, wait for Postgres, migrate, serve
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

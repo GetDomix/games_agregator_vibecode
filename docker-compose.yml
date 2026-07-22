@@ -1,21 +1,60 @@
+# KeySignal — Laravel API + React + PostgreSQL (no SQLite in prod stack)
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gpa}
+      POSTGRES_USER: ${POSTGRES_USER:-gpa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gpa_secret_change_me}
+    volumes:
+      - gpa_pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gpa} -d ${POSTGRES_DB:-gpa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
       - "${BACKEND_PORT:-8080}:8000"
-    env_file:
-      - ./backend/.env
     environment:
+      APP_NAME: KeySignal
       APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_KEY: ${APP_KEY:-}
       APP_URL: ${APP_URL:-http://localhost:8080}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-gpa}
+      DB_USERNAME: ${POSTGRES_USER:-gpa}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-gpa_secret_change_me}
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost,127.0.0.1}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
       DIGISELLER_PARTNER_ID: ${DIGISELLER_PARTNER_ID:-}
       ADS_ENABLED: ${ADS_ENABLED:-true}
       ADS_CONTACT_EMAIL: ${ADS_CONTACT_EMAIL:-ads@example.com}
-    volumes:
-      - gpa_sqlite:/var/www/html/database
+      FREE_SEARCHES_PER_DAY: ${FREE_SEARCHES_PER_DAY:-15}
+      GUEST_SEARCHES_PER_DAY: ${GUEST_SEARCHES_PER_DAY:-5}
+      HTTP_TIMEOUT_SECONDS: ${HTTP_TIMEOUT_SECONDS:-20}
+      PLATI_MAX_PAGES: ${PLATI_MAX_PAGES:-5}
+      PLATI_PAGE_SIZE: ${PLATI_PAGE_SIZE:-100}
+      GGSEL_LIMIT: ${GGSEL_LIMIT:-100}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -31,4 +70,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  gpa_sqlite:
+  gpa_pgdata:

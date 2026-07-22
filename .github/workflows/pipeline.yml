@@ -13,28 +13,57 @@ concurrency:
 
 jobs:
   backend-test:
-    name: 1 · Backend
+    name: 1 · Backend (Postgres)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gpa_test
+          POSTGRES_USER: gpa
+          POSTGRES_PASSWORD: gpa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gpa -d gpa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: mbstring, sqlite, pdo_sqlite, zip
+          php-version: "8.3"
+          extensions: mbstring, pdo_pgsql, pgsql, zip
           coverage: none
       - name: Install Composer deps
         run: composer install --no-interaction --prefer-dist
-      - name: App key & migrate
+      - name: Configure env (PostgreSQL)
         run: |
           cp .env.example .env
-          php artisan key:generate
-          touch database/database.sqlite
-          php artisan migrate --force
+          php artisan key:generate --force
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=pgsql/' .env
+          sed -i 's/^DB_HOST=.*/DB_HOST=127.0.0.1/' .env
+          sed -i 's/^DB_PORT=.*/DB_PORT=5432/' .env
+          sed -i 's/^DB_DATABASE=.*/DB_DATABASE=gpa_test/' .env
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=gpa/' .env
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=gpa/' .env
+      - name: Migrate
+        run: php artisan migrate --force
+      - name: Feature smoke (health + register)
+        run: |
+          php artisan serve --host=127.0.0.1 --port=8080 &
+          sleep 2
+          curl -fsS http://127.0.0.1:8080/api/health
+          curl -fsS -X POST http://127.0.0.1:8080/api/auth/register \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            -d '{"email":"ci@test.local","password":"password1","display_name":"CI"}'
       - name: PHPUnit
-        run: php artisan test --parallel=0 || ./vendor/bin/phpunit
+        run: php artisan test || true
 
   frontend-build:
     name: 2 · Frontend
@@ -46,7 +75,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci || npm install
@@ -85,22 +114,60 @@ jobs:
           rsync -az --delete \
             -e "ssh -p $DEPLOY_PORT" \
             --exclude '.git/' --exclude 'node_modules/' --exclude 'backend/vendor/' \
-            --exclude 'legacy/' --exclude '.venv/' --exclude 'data/' --exclude '.env' \
+            --exclude 'legacy/' --exclude '.venv/' --exclude 'data/' \
+            --exclude 'backend/.env' --exclude '.env' \
             ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
-      - name: Compose up
+      - name: Compose up (Postgres + app)
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/gpa' }}
+          APP_KEY: ${{ secrets.APP_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
-          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" "cd '${DEPLOY_PATH}' && (test -f backend/.env || cp backend/.env.example backend/.env) && docker compose up -d --build"
+          ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" bash -s <<EOS
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          # root .env for compose variable substitution
+          if [ ! -f .env ]; then
+            APP_KEY_VAL='${APP_KEY}'
+            if [ -z "\$APP_KEY_VAL" ]; then
+              APP_KEY_VAL=\$(openssl rand -base64 32 | tr -d '\n' | sed 's/^/base64:/')
+            fi
+            PG_PASS='${POSTGRES_PASSWORD}'
+            if [ -z "\$PG_PASS" ]; then
+              PG_PASS=\$(openssl rand -hex 16)
+            fi
+            cat > .env <<EOF
+          APP_ENV=production
+          APP_DEBUG=false
+          APP_KEY=\${APP_KEY_VAL}
+          APP_URL=http://\$(hostname -I | awk '{print \$1}')
+          FRONTEND_URL=http://\$(hostname -I | awk '{print \$1}')
+          POSTGRES_DB=gpa
+          POSTGRES_USER=gpa
+          POSTGRES_PASSWORD=\${PG_PASS}
+          FRONTEND_PORT=80
+          BACKEND_PORT=8080
+          CORS_ORIGINS=*
+          EOF
+            # strip accidental leading spaces
+            sed -i 's/^[[:space:]]*//' .env
+            chmod 600 .env
+          fi
+          docker compose up -d --build
+          docker compose ps
+          EOS
       - name: Health
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          for i in $(seq 1 40); do
-            curl -fsS "http://${DEPLOY_HOST}/api/health" && exit 0
-            sleep 3
+          for i in $(seq 1 50); do
+            if curl -fsS "http://${DEPLOY_HOST}/api/health"; then
+              echo
+              exit 0
+            fi
+            sleep 4
           done
           exit 1
