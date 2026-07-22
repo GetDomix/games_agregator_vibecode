@@ -50,6 +50,39 @@
       .map((c) => `<p class="cta-line">💡 ${escapeHtml(c)}</p>`)
       .join("");
 
+    const hits = data.price_hits || [];
+    const hitsPanel = document.getElementById("price-hits-panel");
+    const hitsList = document.getElementById("price-hits-list");
+    if (hitsPanel && hitsList) {
+      if (hits.length) {
+        hitsPanel.hidden = false;
+        hitsList.innerHTML = hits
+          .map(
+            (f) => `
+          <article class="list-card list-card--hit">
+            ${f.header_image ? `<img src="${escapeHtml(f.header_image)}" alt="" />` : `<div class="list-card-ph"></div>`}
+            <div class="list-card-body">
+              <strong>${escapeHtml(f.game_name)} <span class="badge discount">на цели</span></strong>
+              <span class="offer-meta">Steam ${formatRub(f.last_steam_price_rub)} · цель ${formatRub(f.target_price_rub)}</span>
+              <div class="list-card-actions">
+                <button type="button" class="btn ghost btn-sm" data-fav-open="${f.appid}" data-fav-name="${escapeHtml(f.game_name)}">Цены</button>
+              </div>
+            </div>
+          </article>`
+          )
+          .join("");
+        hitsList.querySelectorAll("[data-fav-open]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            window.App?.showHome?.();
+            window.App?.runSearch?.(btn.dataset.favName, Number(btn.dataset.favOpen));
+          });
+        });
+      } else {
+        hitsPanel.hidden = true;
+        hitsList.innerHTML = "";
+      }
+    }
+
     renderHistory(data.recent_history || []);
     renderFavorites(data.favorites_preview || []);
 
@@ -220,6 +253,20 @@
       if (!confirm("Очистить всю историю?")) return;
       await Auth.api("/api/me/history", { method: "DELETE" });
       loadDashboard();
+    });
+    document.getElementById("btn-refresh-watchlist")?.addEventListener("click", async () => {
+      const btn = document.getElementById("btn-refresh-watchlist");
+      if (!Auth.isLoggedIn()) return Auth.openModal("login");
+      try {
+        if (btn) btn.disabled = true;
+        const res = await Auth.api("/api/me/favorites/refresh", { method: "POST" });
+        alert(res.message || "Обновлено");
+        loadDashboard();
+      } catch (e) {
+        alert(e.message || "Не удалось обновить");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     });
     const brand = document.getElementById("brand-home");
     brand?.addEventListener("click", showHome);

@@ -86,19 +86,35 @@
     const chip = document.getElementById("user-chip");
     const nameEl = document.getElementById("user-name");
     const avatar = document.getElementById("user-avatar");
+    const actions = document.getElementById("header-actions");
+    const loggedIn = isLoggedIn();
 
-    if (isLoggedIn()) {
-      btnLogin.hidden = true;
-      btnRegister.hidden = true;
-      btnCabinet.hidden = false;
-      chip.hidden = false;
-      nameEl.textContent = state.user.display_name || state.user.email;
-      avatar.textContent = (state.user.display_name || state.user.email || "?").charAt(0).toUpperCase();
+    if (actions) {
+      actions.dataset.auth = loggedIn ? "user" : "guest";
+    }
+
+    // Use both attribute + class: .btn { display:inline-flex } overrides bare [hidden] in some browsers/CSS
+    function setVisible(el, visible) {
+      if (!el) return;
+      el.hidden = !visible;
+      el.classList.toggle("hidden", !visible);
+      el.setAttribute("aria-hidden", visible ? "false" : "true");
+    }
+
+    if (loggedIn) {
+      setVisible(btnLogin, false);
+      setVisible(btnRegister, false);
+      setVisible(btnCabinet, true);
+      setVisible(chip, true);
+      if (nameEl) nameEl.textContent = state.user.display_name || state.user.email;
+      if (avatar) {
+        avatar.textContent = (state.user.display_name || state.user.email || "?").charAt(0).toUpperCase();
+      }
     } else {
-      btnLogin.hidden = false;
-      btnRegister.hidden = false;
-      btnCabinet.hidden = true;
-      chip.hidden = true;
+      setVisible(btnLogin, true);
+      setVisible(btnRegister, true);
+      setVisible(btnCabinet, false);
+      setVisible(chip, false);
     }
   }
 

@@ -8,6 +8,47 @@ const resultsEl = document.getElementById("results");
 
 let lastResult = null;
 
+/* ── Theme (INK & SIGNAL): light default, persist gpa_theme ─────────────── */
+(function initTheme() {
+  const KEY = "gpa_theme";
+  const root = document.documentElement;
+  const meta = document.getElementById("meta-theme-color");
+
+  function colors(theme) {
+    return theme === "dark" ? "#0b0f17" : "#f6f1e8";
+  }
+
+  function apply(theme) {
+    const t = theme === "dark" ? "dark" : "light";
+    root.setAttribute("data-theme", t);
+    try {
+      localStorage.setItem(KEY, t);
+    } catch {
+      /* ignore */
+    }
+    if (meta) meta.setAttribute("content", colors(t));
+    const btn = document.getElementById("theme-toggle");
+    if (btn) {
+      btn.setAttribute("aria-label", t === "dark" ? "Включить светлую тему" : "Включить тёмную тему");
+      btn.title = t === "dark" ? "Светлая тема" : "Тёмная тема";
+    }
+  }
+
+  let current = "light";
+  try {
+    const stored = localStorage.getItem(KEY);
+    if (stored === "light" || stored === "dark") current = stored;
+  } catch {
+    /* ignore */
+  }
+  apply(current);
+
+  document.getElementById("theme-toggle")?.addEventListener("click", () => {
+    current = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(current);
+  });
+})();
+
 function show(el) {
   el.classList.remove("hidden");
 }
@@ -102,19 +143,61 @@ function renderCandidates(candidates, query) {
   });
 }
 
-function offerCell(offer) {
+function trackPartnerClick(marketplace, url, priceRub) {
+  const body = {
+    marketplace: marketplace || "unknown",
+    url: url || "",
+    price_rub: priceRub ?? null,
+    appid: lastResult?.steam?.appid ?? null,
+    query: lastResult?.query || lastResult?.steam?.name || null,
+  };
+  const headers = { "Content-Type": "application/json", ...(window.Auth?.authHeaders?.() || {}) };
+  // fire-and-forget
+  fetch("/api/track/click", { method: "POST", headers, body: JSON.stringify(body) }).catch(() => {});
+}
+
+function offerCell(offer, marketplace) {
   if (!offer) return "—";
   const sales = offer.sales > 0 ? `${offer.sales.toLocaleString("ru-RU")} продаж` : "продажи скрыты/0";
   const seller = offer.seller_name ? ` · ${escapeHtml(offer.seller_name)}` : "";
+  const mp = marketplace || "unknown";
   return `
-    <a class="offer-link" href="${escapeHtml(offer.url)}" target="_blank" rel="noopener noreferrer">
+    <a class="offer-link" href="${escapeHtml(offer.url)}" target="_blank" rel="noopener noreferrer sponsored"
+       data-track-mp="${escapeHtml(mp)}" data-track-price="${offer.price_rub}" data-track-url="${escapeHtml(offer.url)}">
       ${formatRub(offer.price_rub)}
     </a>
     <span class="offer-meta">${sales}${seller}</span>
   `;
 }
 
-function renderMarketCard(stats, cssClass) {
+/** Deal-strength bars vs Steam (1 weak … 4 strong). */
+function dealSignalLevel(marketMin, steamPrice) {
+  if (marketMin == null || steamPrice == null || steamPrice <= 0) return 0;
+  const ratio = marketMin / steamPrice;
+  if (ratio <= 0.55) return 4;
+  if (ratio <= 0.75) return 3;
+  if (ratio <= 0.92) return 2;
+  if (ratio < 1) return 1;
+  return 0;
+}
+
+function signalBarsHtml(level) {
+  if (!level) return "";
+  const labels = { 1: "слабо", 2: "норм", 3: "выгодно", 4: "сигнал" };
+  return `
+    <span class="deal-meter" title="Сила сделки относительно Steam">
+      <span class="signal" data-level="${level}" aria-hidden="true">
+        <span class="signal-bar"></span>
+        <span class="signal-bar"></span>
+        <span class="signal-bar"></span>
+        <span class="signal-bar"></span>
+      </span>
+      <span class="signal-label">${labels[level] || ""}</span>
+    </span>
+  `;
+}
+
+function renderMarketCard(stats, cssClass, steamPrice = null) {
   if (stats.error) {
     return `
       <article class="market-card ${cssClass}">
@@ -136,6 +219,9 @@ function renderMarketCard(stats, cssClass) {
     `;
   }
 
+  const marketMin = minAcross(stats);
+  const level = dealSignalLevel(marketMin, steamPrice);
+
   const rows = stats.by_kind
     .map(
       (k) => `
@@ -143,8 +229,8 @@ function renderMarketCard(stats, cssClass) {
         <td class="kind-label" data-label="Тип">${escapeHtml(k.label)} <span class="offer-meta">${k.count} шт.</span></td>
         <td class="num min" data-label="Мин">${formatRub(k.min_price)}</td>
         <td class="num" data-label="Средняя">${formatRub(k.avg_price)}</td>
-        <td data-label="Популярный">${offerCell(k.popular)}</td>
-        <td data-label="Самый дешёвый">${offerCell(k.cheapest)}</td>
+        <td data-label="Популярный">${offerCell(k.popular, cssClass)}</td>
+        <td data-label="Самый дешёвый">${offerCell(k.cheapest, cssClass)}</td>
       </tr>
     `
     )
@@ -153,7 +239,7 @@ function renderMarketCard(stats, cssClass) {
   return `
     <article class="market-card ${cssClass}">
       <div class="market-head">
-        <h3>${escapeHtml(stats.label)}</h3>
+        <h3>${escapeHtml(stats.label)}${signalBarsHtml(level)}</h3>
         <span class="market-count">
           просмотрено ${stats.scanned_offers.toLocaleString("ru-RU")}
           ${stats.total_offers ? ` / ~${stats.total_offers.toLocaleString("ru-RU")}` : ""}
@@ -182,6 +268,40 @@ function minAcross(stats) {
   return mins.length ? Math.min(...mins) : null;
 }
 
+function dealBannerHtml(deal) {
+  if (!deal) return "";
+  const pct =
+    deal.savings_percent != null
+      ? `${deal.savings_percent > 0 ? "−" : ""}${Math.abs(deal.savings_percent)}%`
+      : "";
+  const save =
+    deal.savings_rub != null && deal.is_better
+      ? `экономия ${formatRub(deal.savings_rub)}`
+      : "";
+  return `
+    <div class="deal-score-card ${deal.is_better ? "deal-score-card--hot" : ""}">
+      <div class="deal-score-card__score">${deal.score}<span>/100</span></div>
+      <div class="deal-score-card__body">
+        <strong>${escapeHtml(deal.label || "сделка")}</strong>
+        <span class="offer-meta">
+          рынок от ${formatRub(deal.market_min_rub)}
+          ${deal.market_source ? ` · ${escapeHtml(deal.market_source)}` : ""}
+          ${pct ? ` · ${pct} vs Steam` : ""}
+          ${save ? ` · ${save}` : ""}
+        </span>
+      </div>
+    </div>
+  `;
+}
+
+function quotaHintHtml(quota) {
+  if (!quota) return "";
+  const tone = quota.remaining <= 1 ? "quota-pill--low" : "";
+  return `<span class="quota-pill ${tone}" title="${escapeHtml(quota.reset_hint || "")}">
+    поисков сегодня: ${quota.used}/${quota.limit}${quota.is_guest ? " · гость" : ""}
+  </span>`;
+}
+
 function renderResults(data) {
   lastResult = data;
   const steam = data.steam;
@@ -207,15 +327,15 @@ function renderResults(data) {
       ? `<span class="badge discount">в истории</span>`
       : "";
 
-    let priceBlock = `<div class="price-xl">—</div>`;
+    let priceBlock = `<div class="price-xl receipt-strip">—</div>`;
     if (steam.is_free) {
-      priceBlock = `<div class="price-xl">Бесплатно</div>`;
+      priceBlock = `<div class="price-xl receipt-strip">Бесплатно</div>`;
     } else if (steam.price_rub != null) {
       const old =
         steam.price_initial_rub && steam.price_initial_rub > steam.price_rub
           ? `<span class="old">${formatRub(steam.price_initial_rub)}</span>`
           : "";
-      priceBlock = `<div class="price-xl">${formatRub(steam.price_rub)}${old}</div>`;
+      priceBlock = `<div class="price-xl receipt-strip">${formatRub(steam.price_rub)}${old}</div>`;
     }
 
     const favLabel = data.is_favorite ? "★ В избранном" : "☆ В избранное";
@@ -258,15 +378,27 @@ function renderResults(data) {
       ? window.Ads.renderInlineResultsBillboard()
       : "";
 
+  const steamPrice = data.steam && !data.steam.is_free ? data.steam.price_rub : null;
+
   resultsEl.innerHTML = `
+    <div class="results-meta">
+      ${dealBannerHtml(data.deal)}
+      ${quotaHintHtml(data.quota)}
+    </div>
     ${steamHtml}
     ${inlineAd}
     <div class="markets">
-      ${renderMarketCard(data.plati, "plati")}
-      ${renderMarketCard(data.ggsel, "ggsel")}
+      ${renderMarketCard(data.plati, "plati", steamPrice)}
+      ${renderMarketCard(data.ggsel, "ggsel", steamPrice)}
     </div>
   `;
   show(resultsEl);
+
+  resultsEl.querySelectorAll("a.offer-link[data-track-url]").forEach((a) => {
+    a.addEventListener("click", () => {
+      trackPartnerClick(a.dataset.trackMp, a.dataset.trackUrl, Number(a.dataset.trackPrice));
+    });
+  });
 
   document.getElementById("btn-favorite")?.addEventListener("click", onToggleFavorite);
   document.getElementById("btn-copy-mins")?.addEventListener("click", () => {

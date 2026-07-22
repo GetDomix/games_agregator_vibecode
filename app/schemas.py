@@ -78,6 +78,27 @@ class SteamPrice(BaseModel):
     note: str | None = None
 
 
+class DealScore(BaseModel):
+    """How much cheaper market min is vs Steam — retention hook on results."""
+
+    steam_price_rub: float | None = None
+    market_min_rub: float | None = None
+    market_source: str | None = None  # plati | ggsel
+    savings_rub: float | None = None
+    savings_percent: float | None = None
+    score: int = 0  # 0–100, higher = better deal vs Steam
+    label: str = ""  # short RU label for UI badge
+    is_better: bool = False
+
+
+class SearchQuotaInfo(BaseModel):
+    limit: int
+    used: int
+    remaining: int
+    is_guest: bool = True
+    reset_hint: str = "обновится завтра (UTC)"
+
+
 class PriceResponse(BaseModel):
     query: str
     steam: SteamPrice | None = None
@@ -87,6 +108,8 @@ class PriceResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     saved_to_history: bool = False
     is_favorite: bool = False
+    deal: DealScore | None = None
+    quota: SearchQuotaInfo | None = None
 
 
 class SearchResponse(BaseModel):
@@ -138,7 +161,8 @@ class UserPublic(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    # bcrypt only uses the first 72 bytes — cap so length is honest
+    password: str = Field(min_length=8, max_length=72)
     display_name: str | None = Field(default=None, max_length=80)
 
     @field_validator("password")
@@ -146,6 +170,9 @@ class RegisterRequest(BaseModel):
     def password_strength(cls, v: str) -> str:
         if len(v.strip()) < 8:
             raise ValueError("Пароль не короче 8 символов")
+        # bcrypt silently truncates past 72 bytes
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Пароль не длиннее 72 байт")
         return v
 
 
@@ -194,19 +221,50 @@ class HistoryListResponse(BaseModel):
     total: int
 
 
+def _strip_nonblank(v: str, *, field: str = "value") -> str:
+    cleaned = v.strip()
+    if not cleaned:
+        raise ValueError(f"{field} не может быть пустым")
+    return cleaned
+
+
+def _optional_http_url(v: str | None) -> str | None:
+    if v is None:
+        return None
+    cleaned = v.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > 500:
+        raise ValueError("URL слишком длинный (макс. 500)")
+    lower = cleaned.lower()
+    if not (lower.startswith("http://") or lower.startswith("https://")):
+        raise ValueError("URL должен начинаться с http:// или https://")
+    return cleaned
+
+
 class FavoriteCreate(BaseModel):
-    appid: int
+    appid: int = Field(ge=1)
     game_name: str = Field(min_length=1, max_length=200)
-    header_image: str | None = None
+    header_image: str | None = Field(default=None, max_length=500)
     target_price_rub: float | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=500)
-    last_steam_price_rub: float | None = None
+    last_steam_price_rub: float | None = Field(default=None, ge=0)
+
+    @field_validator("game_name")
+    @classmethod
+    def game_name_not_blank(cls, v: str) -> str:
+        return _strip_nonblank(v, field="game_name")[:200]
+
+    @field_validator("header_image")
+    @classmethod
+    def header_image_http(cls, v: str | None) -> str | None:
+        return _optional_http_url(v)
 
 
 class FavoriteUpdate(BaseModel):
     target_price_rub: float | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=500)
-    last_steam_price_rub: float | None = None
+    last_steam_price_rub: float | None = Field(default=None, ge=0)
 
 
 class FavoriteItem(BaseModel):
@@ -227,6 +285,24 @@ class FavoriteItem(BaseModel):
 class FavoritesListResponse(BaseModel):
     items: list[FavoriteItem]
     total: int
+    price_hits: list[FavoriteItem] = Field(default_factory=list)
+
+
+class WatchlistRefreshItem(BaseModel):
+    appid: int
+    game_name: str
+    ok: bool
+    last_steam_price_rub: float | None = None
+    target_price_rub: float | None = None
+    price_below_target: bool = False
+    market_min_rub: float | None = None
+    error: str | None = None
+
+
+class WatchlistRefreshResponse(BaseModel):
+    refreshed: list[WatchlistRefreshItem]
+    skipped: int = 0
+    message: str = ""
 
 
 class PopularItem(BaseModel):
@@ -235,19 +311,57 @@ class PopularItem(BaseModel):
     game_name: str | None = None
     header_image: str | None = None
     count: int = 0
+    steam_price_rub: float | None = None
+    market_min_rub: float | None = None
+    savings_percent: float | None = None
+
+
+class HotDealItem(BaseModel):
+    query: str
+    appid: int | None = None
+    game_name: str | None = None
+    header_image: str | None = None
+    steam_price_rub: float | None = None
+    market_min_rub: float | None = None
+    savings_percent: float | None = None
+    savings_rub: float | None = None
+
+
+class HotDealsResponse(BaseModel):
+    items: list[HotDealItem]
+    source: str = "community"  # community | seed
 
 
 class DashboardResponse(BaseModel):
     user: UserPublic
     recent_history: list[HistoryItem]
     favorites_preview: list[FavoriteItem]
+    price_hits: list[FavoriteItem] = Field(default_factory=list)
     favorites_count: int
     searches_total: int
     searches_this_week: int
     alerts_count: int
     ctas: list[str] = Field(default_factory=list)
+    quota: SearchQuotaInfo | None = None
 
 
 class TrendsResponse(BaseModel):
     items: list[PopularItem]
     source: str = "community"  # community | seed
+
+
+class PartnerClickRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=1000)
+    marketplace: str = Field(default="unknown", max_length=40)
+    appid: int | None = None
+    query: str | None = Field(default=None, max_length=200)
+    price_rub: float | None = Field(default=None, ge=0)
+
+
+class PartnerClickResponse(BaseModel):
+    ok: bool = True
+    id: int | None = None
+
+
+class QuotaStatusResponse(BaseModel):
+    quota: SearchQuotaInfo

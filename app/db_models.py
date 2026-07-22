@@ -85,3 +85,38 @@ class PriceSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="snapshots")
+
+
+class PartnerClick(Base):
+    """Affiliate / marketplace outbound click for monetization analytics."""
+
+    __tablename__ = "partner_clicks"
+    __table_args__ = (Index("ix_partner_clicks_created", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    marketplace: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
+    url: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
+    appid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    query: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    price_rub: Mapped[float | None] = mapped_column(Float, nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class DailySearchQuota(Base):
+    """Server-side daily search counter for soft premium (auth by user, guest by IP)."""
+
+    __tablename__ = "daily_search_quota"
+    __table_args__ = (
+        UniqueConstraint("quota_key", "day", name="uq_quota_key_day"),
+        Index("ix_quota_day", "day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    quota_key: Mapped[str] = mapped_column(String(120), nullable=False)  # user:123 | ip:1.2.3.4
+    day: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD UTC
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

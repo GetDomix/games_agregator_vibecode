@@ -1,12 +1,24 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#070b14" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#f6f1e8" id="meta-theme-color" />
+  <meta name="color-scheme" content="light dark" />
   <title>Game Price Aggregator — цены Steam · Plati · GGsel</title>
   <meta name="description" content="Сравни цены на игры: Steam RU, Plati.Market и GGsel. История поисков, избранное, цели по цене." />
+  <script>
+    /* FOUC: apply persisted theme before paint */
+    (function () {
+      try {
+        var t = localStorage.getItem("gpa_theme");
+        if (t !== "light" && t !== "dark") t = "light";
+        document.documentElement.setAttribute("data-theme", t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute("content", t === "dark" ? "#0b0f17" : "#f6f1e8");
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,15 +35,19 @@
     <div class="header-inner">
       <div class="brand" id="brand-home" role="button" tabindex="0" title="На главную" aria-label="На главную">
         <span class="brand-mark" aria-hidden="true">
-          <span class="brand-mark__glyph">₽</span>
+          <span class="brand-mark__glyph">IS</span>
         </span>
         <div class="brand-text">
           <h1>Game Price Aggregator</h1>
-          <p class="subtitle">Steam RU · Plati · GGsel — находи дешевле</p>
+          <p class="subtitle">Ink &amp; Signal · Steam · Plati · GGsel</p>
         </div>
       </div>
 
       <div class="header-actions" id="header-actions">
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Переключить тему" title="Тема">
+          <span class="theme-toggle__icon theme-toggle__moon" aria-hidden="true">☾</span>
+          <span class="theme-toggle__icon theme-toggle__sun" aria-hidden="true">☀</span>
+        </button>
         <button type="button" class="btn ghost" id="btn-cabinet" hidden>
           <span class="btn-icon" aria-hidden="true">◈</span>
           <span class="btn-label">Кабинет</span>
@@ -54,7 +70,7 @@
     <div id="view-home">
       <section class="search-card">
         <div class="search-card__intro">
-          <p class="eyebrow">Сравнение цен · регион RU / ₽</p>
+          <p class="eyebrow">Сигнал цен · регион RU / ₽</p>
           <h2 class="search-card__title">Найди лучшую цену на игру</h2>
         </div>
         <form id="search-form" autocomplete="off">
@@ -141,9 +157,16 @@
           </div>
           <div id="history-list" class="list-cards"><p class="empty">Пока пусто</p></div>
         </section>
+        <section class="panel" id="price-hits-panel" hidden>
+          <div class="panel-head">
+            <h2>🔥 На цели</h2>
+          </div>
+          <div id="price-hits-list" class="list-cards"></div>
+        </section>
         <section class="panel">
           <div class="panel-head">
             <h2>Избранное</h2>
+            <button type="button" class="btn ghost btn-sm" id="btn-refresh-watchlist" title="Обновить цены Steam (лимит)">Обновить</button>
           </div>
           <div id="favorites-list" class="list-cards"><p class="empty">Добавляй ☆ на карточке игры</p></div>
         </section>

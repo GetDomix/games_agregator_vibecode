@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     ads_contact_email: str = "ads@example.com"
     ads_label: str = "Реклама"
 
+    # Soft premium search quotas (per UTC day)
+    free_searches_per_day: int = 15
+    guest_searches_per_day: int = 5
+    # Watchlist bulk refresh
+    watchlist_refresh_max: int = 5
+    rate_limit_watchlist_refresh_per_hour: int = 3
+
     # Auth / DB
     secret_key: str = "dev-change-me-in-production-please-use-long-random"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days

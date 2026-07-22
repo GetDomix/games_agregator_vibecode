@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db_models import Favorite, PriceSnapshot, SearchHistory, User, utcnow
@@ -12,10 +12,29 @@ from app.schemas import FavoriteItem, PriceResponse
 
 logger = logging.getLogger(__name__)
 
+# Soft caps against spam / unbounded growth per user
+HISTORY_SOFT_CAP = 500
+SNAPSHOT_SOFT_CAP = 500
+
 
 def _min_from_market(stats) -> float | None:
     mins = [k.min_price for k in (stats.by_kind or []) if k.min_price is not None]
     return min(mins) if mins else None
+
+
+def _prune_oldest(db: Session, model, user_id: int, cap: int) -> None:
+    """Delete oldest rows when user exceeds soft cap (keeps newest `cap`)."""
+    count = db.scalar(
+        select(func.count()).select_from(model).where(model.user_id == user_id)
+    ) or 0
+    excess = int(count) - cap
+    if excess <= 0:
+        return
+    old_ids = db.scalars(
+        select(model.id).where(model.user_id == user_id).order_by(model.created_at.asc()).limit(excess)
+    ).all()
+    if old_ids:
+        db.execute(delete(model).where(model.id.in_(old_ids)))
 
 
 def save_search_history(db: Session, user: User, result: PriceResponse) -> bool:
@@ -25,10 +44,10 @@ def save_search_history(db: Session, user: User, result: PriceResponse) -> bool:
         steam = result.steam
         row = SearchHistory(
             user_id=user.id,
-            query=result.query,
+            query=result.query[:200],
             appid=steam.appid if steam else None,
-            game_name=steam.name if steam else result.query,
-            header_image=steam.header_image if steam else None,
+            game_name=(steam.name if steam else result.query)[:200] if (steam or result.query) else None,
+            header_image=(steam.header_image[:500] if steam and steam.header_image else None),
             steam_price_rub=steam.price_rub if steam else None,
             plati_min_rub=plati_min,
             ggsel_min_rub=ggsel_min,
@@ -41,7 +60,7 @@ def save_search_history(db: Session, user: User, result: PriceResponse) -> bool:
             appid=steam.appid if steam else None,
             steam_price_rub=steam.price_rub if steam else None,
             market_min_rub=min(market_candidates) if market_candidates else None,
-            source_query=result.query,
+            source_query=result.query[:200],
         )
         db.add(snap)
 
@@ -53,6 +72,11 @@ def save_search_history(db: Session, user: User, result: PriceResponse) -> bool:
             if fav is not None and steam.price_rub is not None:
                 fav.last_steam_price_rub = steam.price_rub
                 fav.updated_at = utcnow()
+
+        # flush so new rows count toward prune
+        db.flush()
+        _prune_oldest(db, SearchHistory, user.id, HISTORY_SOFT_CAP)
+        _prune_oldest(db, PriceSnapshot, user.id, SNAPSHOT_SOFT_CAP)
 
         db.commit()
         return True

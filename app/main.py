@@ -14,7 +14,7 @@ from starlette.responses import Response
 
 from app.config import get_settings
 from app.db import check_db, init_db
-from app.routers import ads, auth, dashboard, favorites, history, prices
+from app.routers import ads, auth, dashboard, favorites, history, prices, tracking
 from app.schemas import HealthResponse
 from app.services.http_client import create_client
 
@@ -75,6 +75,7 @@ def create_app() -> FastAPI:
     application.include_router(dashboard.router)
     application.include_router(prices.router)
     application.include_router(ads.router)
+    application.include_router(tracking.router)
 
     @application.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:

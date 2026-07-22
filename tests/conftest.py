@@ -12,6 +12,12 @@ os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["ADS_ENABLED"] = "true"
 os.environ["RATE_LIMIT_LOGIN_PER_MINUTE"] = "1000"
 os.environ["RATE_LIMIT_PRICES_PER_MINUTE"] = "1000"
+os.environ["FREE_SEARCHES_PER_DAY"] = "10000"
+os.environ["GUEST_SEARCHES_PER_DAY"] = "10000"
+os.environ["RATE_LIMIT_WATCHLIST_REFRESH_PER_HOUR"] = "1000"
+os.environ["FREE_SEARCHES_PER_DAY"] = "1000"
+os.environ["GUEST_SEARCHES_PER_DAY"] = "1000"
+os.environ["RATE_LIMIT_WATCHLIST_REFRESH_PER_HOUR"] = "100"
 
 from app.config import get_settings
 

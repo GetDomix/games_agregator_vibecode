@@ -32,6 +32,22 @@ DEFAULT_SLOTS: list[dict] = [
         "subtitle": "Показывается после карточки Steam, до таблиц маркетплейсов.",
     },
     {
+        "id": "sidebar_skyscraper",
+        "placement": "sidebar",
+        "format": "skyscraper",
+        "size_hint": "160×600 / 300×600",
+        "title": "Сайдбар · desktop",
+        "subtitle": "Вертикальный слот справа на широких экранах. Прямые продажи и affiliate.",
+    },
+    {
+        "id": "sticky_mobile_banner",
+        "placement": "sticky_mobile",
+        "format": "sticky_banner",
+        "size_hint": "320×50 / 320×100",
+        "title": "Sticky-баннер · mobile",
+        "subtitle": "Закреплённый низ экрана на телефонах. Высокий viewability, аккуратный dismiss.",
+    },
+    {
         "id": "footer_leaderboard",
         "placement": "footer",
         "format": "leaderboard",
