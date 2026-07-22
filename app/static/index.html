@@ -2,7 +2,9 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#070b14" />
+  <meta name="color-scheme" content="dark" />
   <title>Game Price Aggregator — цены Steam · Plati · GGsel</title>
   <meta name="description" content="Сравни цены на игры: Steam RU, Plati.Market и GGsel. История поисков, избранное, цели по цене." />
   <link rel="stylesheet" href="/static/styles.css" />
@@ -11,24 +13,36 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="bg-scene" aria-hidden="true">
+    <div class="bg-glow bg-glow--a"></div>
+    <div class="bg-glow bg-glow--b"></div>
+    <div class="bg-grid"></div>
+  </div>
 
   <header class="header">
-    <div class="brand" id="brand-home" role="button" tabindex="0" title="На главную">
-      <span class="brand-mark">₽</span>
-      <div>
-        <h1>Game Price Aggregator</h1>
-        <p class="subtitle">Steam RU · Plati · GGsel — находи дешевле, возвращайся чаще</p>
+    <div class="header-inner">
+      <div class="brand" id="brand-home" role="button" tabindex="0" title="На главную" aria-label="На главную">
+        <span class="brand-mark" aria-hidden="true">
+          <span class="brand-mark__glyph">₽</span>
+        </span>
+        <div class="brand-text">
+          <h1>Game Price Aggregator</h1>
+          <p class="subtitle">Steam RU · Plati · GGsel — находи дешевле</p>
+        </div>
       </div>
-    </div>
-    <div class="header-actions" id="header-actions">
-      <button type="button" class="btn ghost" id="btn-cabinet" hidden>Кабинет</button>
-      <button type="button" class="btn ghost" id="btn-login">Войти</button>
-      <button type="button" class="btn primary" id="btn-register">Регистрация</button>
-      <div class="user-chip" id="user-chip" hidden>
-        <span class="user-avatar" id="user-avatar">?</span>
-        <span id="user-name"></span>
-        <button type="button" class="btn ghost btn-sm" id="btn-logout">Выйти</button>
+
+      <div class="header-actions" id="header-actions">
+        <button type="button" class="btn ghost" id="btn-cabinet" hidden>
+          <span class="btn-icon" aria-hidden="true">◈</span>
+          <span class="btn-label">Кабинет</span>
+        </button>
+        <button type="button" class="btn ghost" id="btn-login">Войти</button>
+        <button type="button" class="btn primary" id="btn-register">Регистрация</button>
+        <div class="user-chip" id="user-chip" hidden>
+          <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
+          <span class="user-name" id="user-name"></span>
+          <button type="button" class="btn ghost btn-sm" id="btn-logout">Выйти</button>
+        </div>
       </div>
     </div>
   </header>
@@ -39,26 +53,44 @@
     <!-- Home / search view -->
     <div id="view-home">
       <section class="search-card">
+        <div class="search-card__intro">
+          <p class="eyebrow">Сравнение цен · регион RU / ₽</p>
+          <h2 class="search-card__title">Найди лучшую цену на игру</h2>
+        </div>
         <form id="search-form" autocomplete="off">
           <label class="sr-only" for="query">Название игры</label>
           <div class="search-row">
-            <input
-              id="query"
-              name="query"
-              type="search"
-              placeholder="Введите игру: Hades, Cyberpunk 2077, Elden Ring…"
-              required
-              minlength="1"
-              maxlength="120"
-            />
-            <button type="submit" id="search-btn">Найти цены</button>
+            <div class="search-field">
+              <span class="search-field__icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              </span>
+              <input
+                id="query"
+                name="query"
+                type="search"
+                enterkeyhint="search"
+                placeholder="Hades, Cyberpunk 2077, Elden Ring…"
+                required
+                minlength="1"
+                maxlength="120"
+              />
+            </div>
+            <button type="submit" id="search-btn" class="btn primary search-submit">
+              <span class="search-submit__label">Найти цены</span>
+              <span class="search-submit__short" aria-hidden="true">Найти</span>
+            </button>
           </div>
         </form>
-        <p class="hint">Регион MVP: <strong>RU / ₽</strong>. Гость может искать; аккаунт сохраняет историю и избранное.</p>
+        <div class="source-pills" aria-label="Источники цен">
+          <span class="source-pill source-pill--steam">Steam</span>
+          <span class="source-pill source-pill--plati">Plati</span>
+          <span class="source-pill source-pill--ggsel">GGsel</span>
+        </div>
+        <p class="hint">Гость может искать свободно. Аккаунт сохраняет историю, избранное и цели по цене.</p>
       </section>
 
-      <div id="guest-banner" class="convert-banner hidden">
-        <div>
+      <div id="guest-banner" class="convert-banner hidden" role="region" aria-label="Предложение зарегистрироваться">
+        <div class="convert-banner__copy">
           <strong>Сохрани историю и цели по цене</strong>
           <p>Ты уже сравнивал игры. Зарегистрируйся за 20 секунд — история, избранное и алерты «ниже цели».</p>
         </div>
@@ -67,11 +99,15 @@
 
       <section class="retention-grid" id="retention">
         <article class="panel" id="continue-panel" hidden>
-          <h2>Продолжить</h2>
+          <div class="panel-head">
+            <h2>Продолжить</h2>
+          </div>
           <div id="continue-body" class="chip-list"></div>
         </article>
         <article class="panel" id="popular-panel">
-          <h2>Популярно сейчас</h2>
+          <div class="panel-head">
+            <h2>Популярно сейчас</h2>
+          </div>
           <div id="popular-body" class="chip-list">
             <p class="empty">Загрузка…</p>
           </div>
@@ -89,13 +125,14 @@
     <!-- Cabinet view -->
     <div id="view-cabinet" class="hidden">
       <section class="panel cabinet-hero">
-        <div>
-          <h2>Личный кабинет</h2>
+        <div class="cabinet-hero__text">
+          <p class="eyebrow">Личный кабинет</p>
+          <h2>Твои цены и цели</h2>
           <p class="empty" id="cabinet-subtitle">История, избранное, цели по цене</p>
         </div>
         <div class="stat-row" id="cabinet-stats"></div>
       </section>
-      <section class="panel" id="cabinet-ctas"></section>
+      <section class="panel panel--ctas" id="cabinet-ctas"></section>
       <div class="cabinet-grid">
         <section class="panel">
           <div class="panel-head">
@@ -116,32 +153,40 @@
 
   <footer class="footer">
     <aside class="ad-slot ad-slot--leaderboard ad-slot--footer" data-ad-placement="footer" aria-label="Рекламный слот footer" hidden></aside>
-    <p>MVP · Steam / Plati / GGsel · цены ориентировочные. HTTPS обязателен в проде (JWT в браузере).</p>
-    <p class="footer-ads-note" id="ads-note" hidden></p>
+    <div class="footer-inner">
+      <p>MVP · Steam / Plati / GGsel · цены ориентировочные. HTTPS обязателен в проде (JWT в браузере).</p>
+      <p class="footer-ads-note" id="ads-note" hidden></p>
+    </div>
   </footer>
 
   <!-- Auth modal -->
   <div class="modal-backdrop hidden" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <div class="modal">
-      <button type="button" class="modal-close" id="auth-close" aria-label="Закрыть">×</button>
-      <div class="tabs">
-        <button type="button" class="tab active" data-tab="login">Вход</button>
-        <button type="button" class="tab" data-tab="register">Регистрация</button>
+      <div class="modal-grab" aria-hidden="true"></div>
+      <button type="button" class="modal-close" id="auth-close" aria-label="Закрыть">
+        <span aria-hidden="true">×</span>
+      </button>
+      <div class="modal-header">
+        <h2 id="auth-title">Авторизация</h2>
+        <p class="muted modal-lead">Войди, чтобы сохранять историю и избранное</p>
       </div>
-      <h2 id="auth-title" class="sr-only">Авторизация</h2>
+      <div class="tabs" role="tablist" aria-label="Тип входа">
+        <button type="button" class="tab active" data-tab="login" role="tab" aria-selected="true">Вход</button>
+        <button type="button" class="tab" data-tab="register" role="tab" aria-selected="false">Регистрация</button>
+      </div>
       <form id="form-login" class="auth-form">
-        <label>Email<input type="email" name="email" required autocomplete="email" /></label>
-        <label>Пароль<input type="password" name="password" required minlength="8" autocomplete="current-password" /></label>
+        <label>Email<input type="email" name="email" required autocomplete="email" inputmode="email" placeholder="you@email.com" /></label>
+        <label>Пароль<input type="password" name="password" required minlength="8" autocomplete="current-password" placeholder="••••••••" /></label>
         <button type="submit" class="btn primary block">Войти</button>
       </form>
       <form id="form-register" class="auth-form hidden">
-        <label>Имя <span class="muted">(необязательно)</span><input type="text" name="display_name" maxlength="80" autocomplete="nickname" /></label>
-        <label>Email<input type="email" name="email" required autocomplete="email" /></label>
-        <label>Пароль (≥ 8)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
+        <label>Имя <span class="muted">(необязательно)</span><input type="text" name="display_name" maxlength="80" autocomplete="nickname" placeholder="Как к тебе обращаться" /></label>
+        <label>Email<input type="email" name="email" required autocomplete="email" inputmode="email" placeholder="you@email.com" /></label>
+        <label>Пароль (≥ 8)<input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="Минимум 8 символов" /></label>
         <p class="hint">Подтверждение email в MVP не требуется. Не используй пароль от банка.</p>
         <button type="submit" class="btn primary block">Создать аккаунт</button>
       </form>
-      <p class="auth-error hidden" id="auth-error"></p>
+      <p class="auth-error hidden" id="auth-error" role="alert"></p>
     </div>
   </div>
 

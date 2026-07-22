@@ -163,6 +163,14 @@ class TokenResponse(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=80)
 
+    @field_validator("display_name")
+    @classmethod
+    def display_name_not_blank(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Имя не может быть пустым")
+        return cleaned[:80]
+
 
 # ── History / favorites / dashboard ─────────────────────────────────────────
 

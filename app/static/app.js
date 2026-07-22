@@ -76,7 +76,7 @@ function renderCandidates(candidates, query) {
       const img = c.tiny_image || c.header_image || "";
       return `
         <button type="button" class="candidate" data-appid="${c.appid}" data-name="${escapeHtml(c.name)}">
-          ${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" />` : `<div style="width:96px"></div>`}
+          ${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" />` : `<span class="candidate-ph" aria-hidden="true"></span>`}
           <div class="meta">
             <span class="name">${escapeHtml(c.name)}</span>
             <span class="price">AppID ${c.appid} · ${price}</span>
@@ -140,11 +140,11 @@ function renderMarketCard(stats, cssClass) {
     .map(
       (k) => `
       <tr>
-        <td class="kind-label">${escapeHtml(k.label)} <span class="offer-meta">${k.count} шт.</span></td>
-        <td class="num min">${formatRub(k.min_price)}</td>
-        <td class="num">${formatRub(k.avg_price)}</td>
-        <td>${offerCell(k.popular)}</td>
-        <td>${offerCell(k.cheapest)}</td>
+        <td class="kind-label" data-label="Тип">${escapeHtml(k.label)} <span class="offer-meta">${k.count} шт.</span></td>
+        <td class="num min" data-label="Мин">${formatRub(k.min_price)}</td>
+        <td class="num" data-label="Средняя">${formatRub(k.avg_price)}</td>
+        <td data-label="Популярный">${offerCell(k.popular)}</td>
+        <td data-label="Самый дешёвый">${offerCell(k.cheapest)}</td>
       </tr>
     `
     )
@@ -159,18 +159,20 @@ function renderMarketCard(stats, cssClass) {
           ${stats.total_offers ? ` / ~${stats.total_offers.toLocaleString("ru-RU")}` : ""}
         </span>
       </div>
-      <table class="kind-table">
-        <thead>
-          <tr>
-            <th>Тип</th>
-            <th>Мин</th>
-            <th>Средняя</th>
-            <th>Популярный</th>
-            <th>Самый дешёвый</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="kind-table">
+          <thead>
+            <tr>
+              <th>Тип</th>
+              <th>Мин</th>
+              <th>Средняя</th>
+              <th>Популярный</th>
+              <th>Самый дешёвый</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </article>
   `;
 }
@@ -221,15 +223,15 @@ function renderResults(data) {
 
     steamHtml = `
       <article class="steam-card">
-        <div>
+        <div class="steam-media">
           ${
             steam.header_image
-              ? `<img src="${escapeHtml(steam.header_image)}" alt="${escapeHtml(steam.name)}" />`
+              ? `<img src="${escapeHtml(steam.header_image)}" alt="${escapeHtml(steam.name)}" loading="lazy" />`
               : ""
           }
         </div>
         <div class="steam-body">
-          <div>${avail}${discount}${hist}</div>
+          <div class="steam-badges">${avail}${discount}${hist}</div>
           <h2>${escapeHtml(steam.name)}</h2>
           ${priceBlock}
           ${steam.note ? `<p class="empty">${escapeHtml(steam.note)}</p>` : ""}
@@ -237,7 +239,7 @@ function renderResults(data) {
             <a class="btn-link" href="${escapeHtml(steam.store_url)}" target="_blank" rel="noopener noreferrer">
               Открыть в Steam
             </a>
-            <button type="button" class="${favClass}" id="btn-favorite">${favLabel}</button>
+            <button type="button" class="${favClass}" id="btn-favorite" aria-pressed="${data.is_favorite ? "true" : "false"}">${favLabel}</button>
             <button type="button" class="btn ghost" id="btn-copy-mins">Копировать минимумы</button>
             <span class="offer-meta">AppID ${steam.appid}</span>
           </div>

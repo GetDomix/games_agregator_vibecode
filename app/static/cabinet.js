@@ -221,7 +221,14 @@
       await Auth.api("/api/me/history", { method: "DELETE" });
       loadDashboard();
     });
-    document.getElementById("brand-home")?.addEventListener("click", showHome);
+    const brand = document.getElementById("brand-home");
+    brand?.addEventListener("click", showHome);
+    brand?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        showHome();
+      }
+    });
     document.addEventListener("auth:changed", () => {
       if (Auth.isLoggedIn()) {
         loadDashboard().catch(() => {});

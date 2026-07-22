@@ -94,7 +94,7 @@ def update_me(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> UserPublic:
-    user.display_name = body.display_name.strip()[:80]
+    user.display_name = body.display_name  # already stripped/validated by schema
     db.commit()
     db.refresh(user)
     return UserPublic.model_validate(user)

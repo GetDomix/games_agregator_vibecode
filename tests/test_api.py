@@ -111,3 +111,23 @@ def test_prices_endpoint(client: TestClient):
 def test_prices_empty_query_rejected(client: TestClient):
     resp = client.get("/api/prices", params={"q": ""})
     assert resp.status_code == 422
+
+
+def test_prices_value_error_maps_to_400(client: TestClient):
+    with patch(
+        "app.routers.prices.aggregate_prices",
+        new=AsyncMock(side_effect=ValueError("Пустой поисковый запрос")),
+    ):
+        resp = client.get("/api/prices", params={"q": "Hades"})
+    assert resp.status_code == 400
+    assert "Пустой" in resp.json()["detail"]
+
+
+def test_prices_unexpected_error_maps_to_502(client: TestClient):
+    with patch(
+        "app.routers.prices.aggregate_prices",
+        new=AsyncMock(side_effect=RuntimeError("upstream boom")),
+    ):
+        resp = client.get("/api/prices", params={"q": "Hades"})
+    assert resp.status_code == 502
+    assert "агрегации" in resp.json()["detail"].lower() or "boom" in resp.json()["detail"]

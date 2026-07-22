@@ -85,3 +85,22 @@ def test_dashboard_and_trends(client: TestClient, auth_headers: dict):
     trends = client.get("/api/trends/popular")
     assert trends.status_code == 200
     assert trends.json()["items"]
+
+
+def test_delete_missing_history_item_404(client: TestClient, auth_headers: dict):
+    assert client.delete("/api/me/history/999999", headers=auth_headers).status_code == 404
+
+
+def test_history_limit_bounds(client: TestClient, auth_headers: dict):
+    assert client.get("/api/me/history", headers=auth_headers, params={"limit": 0}).status_code == 422
+    assert client.get("/api/me/history", headers=auth_headers, params={"limit": 201}).status_code == 422
+    ok = client.get("/api/me/history", headers=auth_headers, params={"limit": 1})
+    assert ok.status_code == 200
+
+
+def test_trends_seed_when_no_community_history(client: TestClient):
+    resp = client.get("/api/trends/popular", params={"limit": 3})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "seed"
+    assert len(body["items"]) == 3

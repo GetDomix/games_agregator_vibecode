@@ -38,3 +38,33 @@ def test_favorites_crud(client: TestClient, auth_headers: dict):
 
 def test_favorites_require_auth(client: TestClient):
     assert client.get("/api/me/favorites").status_code == 401
+    assert client.post(
+        "/api/me/favorites",
+        json={"appid": 1, "game_name": "X"},
+    ).status_code == 401
+    assert client.delete("/api/me/favorites/1").status_code == 401
+    assert client.patch(
+        "/api/me/favorites/1",
+        json={"notes": "n"},
+    ).status_code == 401
+
+
+def test_favorite_not_found_ops(client: TestClient, auth_headers: dict):
+    assert client.delete("/api/me/favorites/424242", headers=auth_headers).status_code == 404
+    assert (
+        client.patch(
+            "/api/me/favorites/424242",
+            headers=auth_headers,
+            json={"target_price_rub": 10},
+        ).status_code
+        == 404
+    )
+
+
+def test_favorite_notes_max_length(client: TestClient, auth_headers: dict):
+    resp = client.post(
+        "/api/me/favorites",
+        headers=auth_headers,
+        json={"appid": 99, "game_name": "G", "notes": "n" * 501},
+    )
+    assert resp.status_code == 422

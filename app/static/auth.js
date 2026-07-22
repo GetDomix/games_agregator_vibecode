@@ -105,17 +105,26 @@
   function openModal(tab = "login") {
     const modal = document.getElementById("auth-modal");
     modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
     switchTab(tab);
     document.getElementById("auth-error").classList.add("hidden");
+    // Focus first field of the active form
+    requestAnimationFrame(() => {
+      const form = document.getElementById(tab === "register" ? "form-register" : "form-login");
+      form?.querySelector("input")?.focus();
+    });
   }
 
   function closeModal() {
     document.getElementById("auth-modal").classList.add("hidden");
+    document.body.style.overflow = "";
   }
 
   function switchTab(tab) {
     document.querySelectorAll(".tab").forEach((t) => {
-      t.classList.toggle("active", t.dataset.tab === tab);
+      const active = t.dataset.tab === tab;
+      t.classList.toggle("active", active);
+      t.setAttribute("aria-selected", active ? "true" : "false");
     });
     document.getElementById("form-login").classList.toggle("hidden", tab !== "login");
     document.getElementById("form-register").classList.toggle("hidden", tab !== "register");
@@ -150,6 +159,11 @@
     document.getElementById("auth-close")?.addEventListener("click", closeModal);
     document.getElementById("auth-modal")?.addEventListener("click", (e) => {
       if (e.target.id === "auth-modal") closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const modal = document.getElementById("auth-modal");
+      if (modal && !modal.classList.contains("hidden")) closeModal();
     });
     document.querySelectorAll(".tab").forEach((t) => {
       t.addEventListener("click", () => switchTab(t.dataset.tab));
