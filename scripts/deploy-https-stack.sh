@@ -44,6 +44,10 @@ else
   fi
 fi
 
+# Never let empty shell secrets override /opt/gpa/.env
+if [ -z "${APP_KEY:-}" ]; then unset APP_KEY || true; fi
+if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD || true; fi
+
 docker compose up -d --build --remove-orphans
 
 echo "waiting for health..."

@@ -204,17 +204,18 @@ export default function App() {
         <div className="header-inner">
           <button type="button" className="brand" onClick={() => setView('home')}>
             <span className="brand-mark">₽</span>
-            <div>
+            <div className="brand-text">
               <h1>KeySignal</h1>
-              <p>Цены на игры · Steam · Plati · GGsel</p>
+              <p className="brand-tagline">Цены на игры · Steam · Plati · GGsel</p>
             </div>
           </button>
           <div className="header-actions" data-auth={loggedIn ? 'user' : 'guest'}>
-            <button type="button" className="btn ghost sm" onClick={toggle} aria-label="Тема">
+            <button type="button" className="btn ghost sm icon-btn" onClick={toggle} aria-label="Тема">
               {theme === 'dark' ? '☀' : '☾'}
             </button>
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
-              Как пользоваться
+              <span className="btn-label-full">Как пользоваться</span>
+              <span className="btn-label-short">Гайд</span>
             </button>
             {loggedIn ? (
               <>
@@ -223,14 +224,17 @@ export default function App() {
                 </button>
                 <div className="chip-user">
                   <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
-                  <span className="muted" style={{ paddingRight: 4 }}>{user?.display_name || user?.email}</span>
+                  <span className="chip-user-name muted">{user?.display_name || user?.email}</span>
                   <button type="button" className="btn ghost sm" onClick={logout}>Выйти</button>
                 </div>
               </>
             ) : (
               <>
                 <button type="button" className="btn ghost" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>Войти</button>
-                <button type="button" className="btn primary" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>Регистрация</button>
+                <button type="button" className="btn primary" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>
+                  <span className="btn-label-full">Регистрация</span>
+                  <span className="btn-label-short">Рег.</span>
+                </button>
               </>
             )}
           </div>
@@ -611,9 +615,12 @@ export default function App() {
           KeySignal помогает сравнивать цены. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
-        <p className="muted" style={{ marginTop: '0.5rem' }}>
-          Стабильный HTTPS:{' '}
-          <a href="https://gpa.185.100.157.180.sslip.io">https://gpa.185.100.157.180.sslip.io</a>
+        <p className="footer-links muted">
+          HTTPS:{' '}
+          <a href="https://gpa.185.100.157.180.sslip.io">gpa…sslip.io</a>
+          {' · '}
+          если Wi‑Fi не пускает — откройте через мобильный интернет или Cloudflare Tunnel
+          (URL в <code>docker logs gpa-tunnel-1</code>).
         </p>
       </footer>
 

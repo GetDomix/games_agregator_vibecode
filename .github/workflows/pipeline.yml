@@ -152,10 +152,11 @@ jobs:
           # Legacy Python container name from previous compose service
           docker rm -f gpa-web-1 2>/dev/null || true
 
-          # Drop orphans and free 80/443 before recreate (Caddy needs both)
-          docker compose down --remove-orphans 2>/dev/null || true
+          # Free 80/443 only if something outside this compose stack holds them
+          docker rm -f gpa-web-1 2>/dev/null || true
           for p in 80 443; do
-            if ss -tlnp 2>/dev/null | grep -qE ":${p} "; then
+            if ss -tlnp 2>/dev/null | grep -qE ":${p} " \
+              && ! docker compose ps --status running 2>/dev/null | grep -q caddy; then
               echo "port ${p} still in use — forcing free"
               fuser -k "${p}/tcp" 2>/dev/null || true
             fi
@@ -214,6 +215,10 @@ jobs:
             fi
             echo "reusing existing compose .env"
           fi
+
+          # Empty shell vars from CI secrets must not override /opt/gpa/.env
+          if [ -z "${APP_KEY:-}" ]; then unset APP_KEY || true; fi
+          if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD || true; fi
 
           docker compose up -d --build --remove-orphans
           docker compose ps
