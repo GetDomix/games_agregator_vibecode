@@ -107,6 +107,8 @@ export default function App() {
     ctas: string[]
   } | null>(null)
   const [ads, setAds] = useState<AdsConfig | null>(null)
+  const [marketTab, setMarketTab] = useState<'plati' | 'ggsel'>('plati')
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   const loggedIn = Boolean(token && user)
 
@@ -272,13 +274,15 @@ export default function App() {
               <p className="brand-tagline">Цены на игры · Steam · Plati · GGsel</p>
             </div>
           </button>
-          <div className="header-actions" data-auth={loggedIn ? 'user' : 'guest'}>
+          <button type="button" className="btn ghost sm icon-btn m-only" onClick={toggle} aria-label="Тема">
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+          <div className="header-actions desk-only" data-auth={loggedIn ? 'user' : 'guest'}>
             <button type="button" className="btn ghost sm icon-btn" onClick={toggle} aria-label="Тема">
               {theme === 'dark' ? '☀' : '☾'}
             </button>
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
-              <span className="btn-label-full">Как пользоваться</span>
-              <span className="btn-label-short">Гайд</span>
+              Как пользоваться
             </button>
             <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
               Pro
@@ -298,8 +302,7 @@ export default function App() {
               <>
                 <button type="button" className="btn ghost" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>Войти</button>
                 <button type="button" className="btn primary" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>
-                  <span className="btn-label-full">Регистрация</span>
-                  <span className="btn-label-short">Рег.</span>
+                  Регистрация
                 </button>
               </>
             )}
@@ -307,17 +310,17 @@ export default function App() {
         </div>
       </header>
 
-      <main className="shell">
+      <main className="shell has-tabbar">
         {adByPlacement('header') && (
           <AdSlot slot={adByPlacement('header')!} label={ads?.label} />
         )}
 
         {view === 'home' && (
           <>
-            <section className="hero">
-              <p className="eyebrow">Сравнение цен · регион RU · ₽</p>
-              <h2>Один поиск — три площадки</h2>
-              <p className="lead">
+            <section className="hero hero-search">
+              <p className="eyebrow desk-only">Сравнение цен · регион RU · ₽</p>
+              <h2 className="search-title">Найти цену</h2>
+              <p className="lead desk-only">
                 KeySignal — сервис для тех, кто покупает игры на PC и хочет понять, где сейчас дешевле:
                 официальный Steam или предложения на маркетплейсах Plati.Market и GGsel.
                 Мы не продаём ключи сами — собираем цены и ссылки, чтобы вы быстрее приняли решение.
@@ -334,51 +337,51 @@ export default function App() {
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Например: Hades, Elden Ring, Cyberpunk 2077"
+                    placeholder="Hades, Elden Ring, Cyberpunk…"
                     maxLength={120}
                     required
+                    enterKeyHint="search"
                   />
                 </div>
                 <button className="btn primary" type="submit" disabled={loading}>
-                  {loading ? 'Ищем…' : 'Сравнить цены'}
+                  {loading ? 'Ищем…' : 'Сравнить'}
                 </button>
               </form>
-              <div className="pills">
+              <div className="pills desk-only">
                 <span className="pill steam">Steam RU</span>
                 <span className="pill plati">Plati.Market</span>
                 <span className="pill ggsel">GGsel</span>
               </div>
-              <p className="muted" style={{ marginTop: '0.85rem' }}>
-                Нужна пошаговая инструкция?{' '}
-                <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
-                  Открыть раздел «Как пользоваться»
-                </button>
-              </p>
             </section>
 
             {adByPlacement('mid') && (
               <AdSlot slot={adByPlacement('mid')!} label={ads?.label} />
             )}
 
-            <section className="section panel">
-              <h3>Зачем это нужно</h3>
-              <p className="lead" style={{ marginBottom: '1rem' }}>
-                Цены на одну и ту же игру на разных площадках отличаются: регион, скидки, тип товара
-                (ключ, гифт, аккаунт, аренда). KeySignal сводит это в одном экране и показывает,
-                насколько рынок дешевле Steam.
-              </p>
-              <div className="steps">
-                <div className="step">
-                  <h4>Экономия времени</h4>
-                  <p>Не нужно открывать три вкладки и вручную сопоставлять кривые названия товаров.</p>
-                </div>
-                <div className="step">
-                  <h4>Понятная выгода</h4>
-                  <p>Оценка сделки относительно Steam, минимум и средняя цена, ссылки на офферы.</p>
-                </div>
-                <div className="step">
-                  <h4>Следи за ценой</h4>
-                  <p>В аккаунте — история, избранное и целевая цена. Обновите список, когда снова будете готовы купить.</p>
+            <section className="section panel about-panel">
+              <button type="button" className="about-toggle" onClick={() => setAboutOpen((v) => !v)} aria-expanded={aboutOpen}>
+                <h3 style={{ margin: 0 }}>Зачем это нужно</h3>
+                <span className="muted">{aboutOpen ? 'свернуть' : 'подробнее'}</span>
+              </button>
+              <div className={`about-body ${aboutOpen ? 'open' : ''}`}>
+                <p className="lead" style={{ marginBottom: '1rem' }}>
+                  Цены на одну и ту же игру на разных площадках отличаются: регион, скидки, тип товара
+                  (ключ, гифт, аккаунт, аренда). KeySignal сводит это в одном экране и показывает,
+                  насколько рынок дешевле Steam.
+                </p>
+                <div className="steps">
+                  <div className="step">
+                    <h4>Экономия времени</h4>
+                    <p>Не нужно открывать три вкладки и вручную сопоставлять кривые названия товаров.</p>
+                  </div>
+                  <div className="step">
+                    <h4>Понятная выгода</h4>
+                    <p>Оценка сделки относительно Steam, минимум и средняя цена, ссылки на офферы.</p>
+                  </div>
+                  <div className="step">
+                    <h4>Следи за ценой</h4>
+                    <p>В аккаунте — история, избранное и целевая цена.</p>
+                  </div>
                 </div>
               </div>
             </section>
@@ -507,9 +510,34 @@ export default function App() {
                   <AdSlot slot={adByPlacement('inline_results')!} label={ads?.label} />
                 )}
 
-                <div className="grid-2">
+                <div className="market-tabs m-only" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`market-tab ${marketTab === 'plati' ? 'active' : ''}`}
+                    onClick={() => setMarketTab('plati')}
+                  >
+                    Plati
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`market-tab ${marketTab === 'ggsel' ? 'active' : ''}`}
+                    onClick={() => setMarketTab('ggsel')}
+                  >
+                    GGsel
+                  </button>
+                </div>
+                <div className="grid-2 desk-only">
                   <MarketCard market={result.plati} steamPrice={steamPrice} onTrack={trackClick} />
                   <MarketCard market={result.ggsel} steamPrice={steamPrice} onTrack={trackClick} />
+                </div>
+                <div className="m-only">
+                  <MarketCard
+                    market={marketTab === 'plati' ? result.plati : result.ggsel}
+                    steamPrice={steamPrice}
+                    onTrack={trackClick}
+                  />
                 </div>
               </section>
             )}
@@ -835,13 +863,42 @@ export default function App() {
         )}
       </main>
 
-      <footer className="shell footer">
+      <footer className="shell footer has-tabbar">
         <p>
           KeySignal помогает сравнивать цены. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
         {ads?.note && <p className="muted" style={{ marginTop: '0.65rem' }}>{ads.note}</p>}
       </footer>
+
+      <nav className="m-tabbar m-only" aria-label="Основное меню">
+        <button type="button" className={view === 'home' ? 'active' : ''} onClick={() => setView('home')}>
+          <span className="m-tab-ico" aria-hidden>⌕</span>
+          Поиск
+        </button>
+        <button type="button" className={view === 'guide' ? 'active' : ''} onClick={() => setView('guide')}>
+          <span className="m-tab-ico" aria-hidden>?</span>
+          Гайд
+        </button>
+        <button type="button" className={view === 'plans' ? 'active' : ''} onClick={() => setView('plans')}>
+          <span className="m-tab-ico" aria-hidden>★</span>
+          Pro
+        </button>
+        <button
+          type="button"
+          className={view === 'cabinet' || authOpen ? 'active' : ''}
+          onClick={() => {
+            if (loggedIn) setView('cabinet')
+            else {
+              setAuthTab('login')
+              setAuthOpen(true)
+            }
+          }}
+        >
+          <span className="m-tab-ico" aria-hidden>◎</span>
+          {loggedIn ? 'Кабинет' : 'Вход'}
+        </button>
+      </nav>
 
       <AnimatePresence>
         {authOpen && (

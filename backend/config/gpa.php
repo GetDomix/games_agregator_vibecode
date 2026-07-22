@@ -15,8 +15,11 @@ return [
     'pro_searches_per_day' => env('PRO_SEARCHES_PER_DAY') !== null && env('PRO_SEARCHES_PER_DAY') !== ''
         ? (int) env('PRO_SEARCHES_PER_DAY')
         : null,
-    'pro_price_rub_month' => (int) env('PRO_PRICE_RUB_MONTH', 199),
-    'pro_price_rub_year' => (int) env('PRO_PRICE_RUB_YEAR', 1490),
+    // MVP-friendly prices (subscription must feel cheap vs daily free limit)
+    'pro_price_rub_month' => (int) env('PRO_PRICE_RUB_MONTH', 99),
+    'pro_price_rub_year' => (int) env('PRO_PRICE_RUB_YEAR', 790),
+    'search_cache_ttl' => (int) env('SEARCH_CACHE_TTL', 900),
+    'http_max_retries' => (int) env('HTTP_MAX_RETRIES', 2),
     // Comma-separated: CODE:days, e.g. KEYSIGNAL-PRO:30,VIP2026:365
     'promo_codes' => env('PROMO_CODES', 'KEYSIGNAL-PRO:30,KEYSIGNAL-YEAR:365'),
     'billing_contact_email' => env('BILLING_CONTACT_EMAIL', env('ADS_CONTACT_EMAIL', 'ads@example.com')),

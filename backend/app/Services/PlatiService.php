@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
-
 class PlatiService
 {
     public function search(string $query): array
@@ -19,18 +17,17 @@ class PlatiService
             $payload = null;
             foreach (['https://plati.market/api/search.ashx', 'https://plati.io/api/search.ashx'] as $base) {
                 try {
-                    $resp = Http::timeout((float) config('gpa.http_timeout', 20))
-                        ->withHeaders(['User-Agent' => 'GPA/1.0'])
-                        ->get($base, [
-                            'query' => $query,
-                            'pagesize' => $pageSize,
-                            'pagenum' => $page,
-                            'response' => 'json',
-                        ]);
+                    $resp = HttpClientFactory::make()->get($base, [
+                        'query' => $query,
+                        'pagesize' => $pageSize,
+                        'pagenum' => $page,
+                        'response' => 'json',
+                    ]);
                     if ($resp->successful()) {
                         $payload = $resp->json();
                         break;
                     }
+                    $error = 'Plati HTTP '.$resp->status();
                 } catch (\Throwable $e) {
                     $error = $e->getMessage();
                 }

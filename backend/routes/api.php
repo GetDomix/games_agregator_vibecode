@@ -13,17 +13,24 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
 
-Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/register', [AuthController::class, 'register'])
+    ->middleware('throttle:8,1');
+Route::post('/auth/login', [AuthController::class, 'login'])
+    ->middleware('throttle:20,1');
 
-Route::get('/search', [PriceController::class, 'search']);
-Route::get('/prices', [PriceController::class, 'prices']);
+Route::get('/search', [PriceController::class, 'search'])
+    ->middleware('throttle:30,1');
+Route::get('/prices', [PriceController::class, 'prices'])
+    ->middleware('throttle:20,1');
 Route::get('/quota', [PriceController::class, 'quota']);
 Route::get('/ads/config', [AdsController::class, 'config']);
 Route::get('/plans', [BillingController::class, 'plans']);
-Route::post('/billing/request', [BillingController::class, 'requestCheckout']);
-Route::get('/trends/popular', [DashboardController::class, 'popular']);
-Route::post('/track/click', [TrackingController::class, 'click']);
+Route::post('/billing/request', [BillingController::class, 'requestCheckout'])
+    ->middleware('throttle:10,1');
+Route::get('/trends/popular', [DashboardController::class, 'popular'])
+    ->middleware('throttle:60,1');
+Route::post('/track/click', [TrackingController::class, 'click'])
+    ->middleware('throttle:60,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);

@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
-
 class SteamService
 {
     public function search(string $query, int $limit = 8): array
@@ -19,13 +17,11 @@ class SteamService
     private function storeSearch(string $query, string $cc, string $lang, bool $availableInRu, int $limit): array
     {
         try {
-            $resp = Http::timeout((float) config('gpa.http_timeout', 20))
-                ->withHeaders(['User-Agent' => 'GPA/1.0'])
-                ->get('https://store.steampowered.com/api/storesearch/', [
-                    'term' => $query,
-                    'l' => $lang,
-                    'cc' => strtoupper($cc),
-                ]);
+            $resp = HttpClientFactory::make()->get('https://store.steampowered.com/api/storesearch/', [
+                'term' => $query,
+                'l' => $lang,
+                'cc' => strtoupper($cc),
+            ]);
             if (! $resp->successful()) {
                 return [];
             }
@@ -134,9 +130,7 @@ class SteamService
     private function fetchDetails(int $appid, string $cc, string $lang): ?array
     {
         try {
-            $resp = Http::timeout((float) config('gpa.http_timeout', 20))
-                ->withHeaders(['User-Agent' => 'GPA/1.0'])
-                ->get('https://store.steampowered.com/api/appdetails', [
+            $resp = HttpClientFactory::make()->get('https://store.steampowered.com/api/appdetails', [
                     'appids' => $appid,
                     'cc' => $cc,
                     'l' => $lang,

@@ -11,15 +11,15 @@ class BillingController extends Controller
 {
     public function plans(): JsonResponse
     {
-        $month = (int) config('gpa.pro_price_rub_month', 199);
-        $year = (int) config('gpa.pro_price_rub_year', 1490);
+        $month = (int) config('gpa.pro_price_rub_month', 99);
+        $year = (int) config('gpa.pro_price_rub_year', 790);
         $email = (string) config('gpa.billing_contact_email', 'ads@example.com');
         $freeLimit = (int) config('gpa.free_searches_per_day', 15);
         $guestLimit = (int) config('gpa.guest_searches_per_day', 5);
 
         return response()->json([
             'currency' => 'RUB',
-            'note' => 'Лимиты защищают сервер: каждый поиск ходит в Steam, Plati и GGsel. Pro снимает дневной кап. Оплата картой — в следующем релизе; сейчас — промокод или заявка.',
+            'note' => 'Лимиты берегут Steam/Plati/GGsel от спама. Pro снимает дневной кап по символической цене MVP (не «премиум-подписка AAA»). Оплата картой — позже; сейчас промокод или заявка.',
             'billing_contact_email' => $email,
             'plans' => [
                 [

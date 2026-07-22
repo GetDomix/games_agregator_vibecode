@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
-
 class GgselService
 {
     public function search(string $query): array
@@ -12,13 +10,11 @@ class GgselService
         $partnerId = (string) config('gpa.digiseller_partner_id', '');
 
         try {
-            $resp = Http::timeout((float) config('gpa.http_timeout', 20))
+            $resp = HttpClientFactory::make()
                 ->withHeaders([
-                    'User-Agent' => 'GPA/1.0',
                     'Content-Type' => 'application/json',
                     'Origin' => 'https://ggsel.net',
                     'Referer' => 'https://ggsel.net/',
-                    'Accept' => 'application/json',
                 ])
                 ->post('https://api.ggsel.com/elastic/goods/query', [
                     'search_term' => $query,
