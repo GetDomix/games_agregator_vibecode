@@ -35,8 +35,9 @@ class AdsController extends Controller
             'enabled' => $enabled,
             'contact_email' => $email,
             'label' => $label,
-            'note' => 'Рекламные места на сайте. По вопросам размещения: '.$email,
+            'note' => 'Реклама показывается гостям и Free; у Pro отключена. Размещение: '.$email,
             'slots' => $slots,
+            'hidden_for_pro' => true,
         ]);
     }
 }

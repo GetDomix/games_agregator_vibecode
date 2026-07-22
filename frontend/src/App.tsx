@@ -134,12 +134,19 @@ export default function App() {
   const [ads, setAds] = useState<AdsConfig | null>(null)
   const [marketTab, setMarketTab] = useState<'plati' | 'ggsel'>('plati')
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [suggests, setSuggests] = useState<{ appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]>([])
+  const [suggestOpen, setSuggestOpen] = useState(false)
 
   const loggedIn = Boolean(token && user)
+  const isPro = Boolean(
+    user && (user.plan === 'pro' || user.plan === 'unlimited' || user.plan_label === 'Pro'),
+  )
+  // Ads for everyone except active Pro
+  const showAds = Boolean(ads?.enabled && !isPro)
 
   const adByPlacement = useCallback(
-    (placement: string) => (ads?.enabled ? ads.slots.find((s) => s.placement === placement) : undefined),
-    [ads],
+    (placement: string) => (showAds ? ads?.slots.find((s) => s.placement === placement) : undefined),
+    [ads, showAds],
   )
 
   const refreshMe = useCallback(async () => {
@@ -191,6 +198,31 @@ export default function App() {
     const t = window.setTimeout(() => setToast(''), 2400)
     return () => window.clearTimeout(t)
   }, [toast])
+
+  // Autocomplete: «cyb» → Cyberpunk 2077 (Steam storesearch)
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) {
+      setSuggests([])
+      return
+    }
+    let cancelled = false
+    const t = window.setTimeout(() => {
+      api<{ candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[] }>(
+        `/api/search?q=${encodeURIComponent(q)}`,
+      )
+        .then((d) => {
+          if (!cancelled) setSuggests((d.candidates || []).slice(0, 8))
+        })
+        .catch(() => {
+          if (!cancelled) setSuggests([])
+        })
+    }, 260)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [query])
 
   // Deep link ?q=&appid=
   useEffect(() => {
@@ -403,33 +435,95 @@ export default function App() {
                 className="search-row"
                 onSubmit={(e) => {
                   e.preventDefault()
+                  setSuggestOpen(false)
                   runSearch(query)
                 }}
               >
-                <div className="search-field">
+                <div className="search-field search-field--suggest">
                   <span aria-hidden>⌕</span>
                   <input
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value)
+                      setSuggestOpen(true)
+                    }}
+                    onFocus={() => setSuggestOpen(true)}
+                    onBlur={() => {
+                      // delay so click on suggestion works
+                      window.setTimeout(() => setSuggestOpen(false), 180)
+                    }}
                     placeholder="Hades, Elden Ring, Cyberpunk…"
                     maxLength={120}
                     required
                     enterKeyHint="search"
+                    autoComplete="off"
+                    aria-autocomplete="list"
+                    aria-expanded={suggestOpen && suggests.length > 0}
                   />
+                  {suggestOpen && suggests.length > 0 && (
+                    <ul className="suggest-list" role="listbox">
+                      {suggests.map((s) => (
+                        <li key={s.appid}>
+                          <button
+                            type="button"
+                            className="suggest-item"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setQuery(s.name)
+                              setSuggestOpen(false)
+                              runSearch(s.name, s.appid)
+                            }}
+                          >
+                            {s.tiny_image ? <img src={s.tiny_image} alt="" /> : <span className="ph" />}
+                            <span className="suggest-name">{s.name}</span>
+                            <span className="suggest-price muted">{rub(s.price_rub)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <button className="btn primary" type="submit" disabled={loading}>
                   {loading ? 'Ищем…' : 'Сравнить'}
                 </button>
               </form>
-              {recents.length > 0 && (
-                <div className="recent-row" aria-label="Недавние поиски">
-                  {recents.slice(0, 6).map((r) => (
-                    <button key={r.q + String(r.at)} type="button" className="recent-chip" onClick={() => runSearch(r.q, r.appid)}>
-                      {r.q}
+
+              <div className="history-under-search">
+                <div className="history-under-head">
+                  <span className="history-label">Недавние</span>
+                  {recents.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={() => {
+                        localStorage.removeItem(RECENT_KEY)
+                        setRecents([])
+                      }}
+                    >
+                      Очистить
                     </button>
-                  ))}
+                  )}
                 </div>
-              )}
+                {recents.length > 0 ? (
+                  <div className="recent-row" aria-label="Недавние поиски">
+                    {recents.slice(0, 8).map((r) => (
+                      <button
+                        key={r.q + String(r.at)}
+                        type="button"
+                        className="recent-chip"
+                        onClick={() => runSearch(r.q, r.appid)}
+                      >
+                        {r.q}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted history-empty">
+                    Пока пусто — после первого поиска здесь появятся быстрые чипы. Или начни с «Сейчас ищут» ниже.
+                  </p>
+                )}
+              </div>
+
               <div className="pills desk-only">
                 <span className="pill steam">Steam RU</span>
                 <span className="pill plati">Plati.Market</span>
@@ -1041,7 +1135,8 @@ export default function App() {
           {BRAND.name} — {BRAND.tagline}. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
-        {ads?.note && <p className="muted" style={{ marginTop: '0.65rem' }}>{ads.note}</p>}
+        {showAds && ads?.note && <p className="muted footer-note">{ads.note}</p>}
+        {isPro && <p className="muted footer-note">Pro: реклама отключена ✨</p>}
       </footer>
 
       <AnimatePresence>
