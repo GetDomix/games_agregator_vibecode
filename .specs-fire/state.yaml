@@ -88,7 +88,7 @@ intents:
         completed_at: 2026-07-25T17:47:06.937Z
       - id: telegram-bot-shared-interface
         title: Полноценный интерфейс Telegram-бота
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
@@ -96,6 +96,8 @@ intents:
           - cross-source-alert-settings
           - telegram-identity-merge
           - alert-evaluation-delivery
+        run_id: run-agregator-games-vibecoding-008
+        completed_at: 2026-07-25T18:32:50.497Z
       - id: free-search-monetization-cleanup
         title: Бесплатный поиск и удаление Pro
         status: pending
@@ -177,3 +179,11 @@ runs:
           mode: confirm
       started: 2026-07-25T17:28:40.996Z
       completed: 2026-07-25T17:47:06.937Z
+    - id: run-agregator-games-vibecoding-008
+      scope: single
+      work_items:
+        - id: telegram-bot-shared-interface
+          intent: unified-price-watchlist-mvp
+          mode: confirm
+      started: 2026-07-25T18:12:59.298Z
+      completed: 2026-07-25T18:32:50.497Z

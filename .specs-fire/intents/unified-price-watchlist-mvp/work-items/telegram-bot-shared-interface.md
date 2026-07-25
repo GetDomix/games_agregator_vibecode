@@ -4,9 +4,15 @@ title: Полноценный интерфейс Telegram-бота
 intent: unified-price-watchlist-mvp
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [stored-price-search, cross-source-alert-settings, telegram-identity-merge, alert-evaluation-delivery]
+status: completed
+depends_on:
+  - stored-price-search
+  - cross-source-alert-settings
+  - telegram-identity-merge
+  - alert-evaluation-delivery
 created: 2026-07-25T13:47:35Z
+run_id: run-agregator-games-vibecoding-008
+completed_at: 2026-07-25T18:32:50.497Z
 ---
 
 # Work Item: Полноценный интерфейс Telegram-бота

@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\PriceController;
 use App\Http\Controllers\Api\TelegramController;
 use App\Http\Controllers\Api\TrackingController;
+use App\Http\Controllers\Api\TelegramBotController;
+use App\Http\Middleware\EnsureRadarServiceToken;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', HealthController::class);
@@ -78,3 +80,14 @@ Route::post('/internal/telegram/bind', [TelegramController::class, 'bind'])
     ->middleware('throttle:60,1');
 Route::post('/internal/radar/run', [TelegramController::class, 'runScan'])
     ->middleware('throttle:10,1');
+
+Route::prefix('/internal/telegram')->middleware([EnsureRadarServiceToken::class, 'throttle:60,1'])->group(function () {
+    Route::post('/session', [TelegramBotController::class, 'session']);
+    Route::get('/search', [TelegramBotController::class, 'search']);
+    Route::get('/games/{appid}', [TelegramBotController::class, 'card'])->whereNumber('appid');
+    Route::get('/favorites', [TelegramBotController::class, 'favorites']);
+    Route::put('/favorites', [TelegramBotController::class, 'saveFavorite']);
+    Route::delete('/favorites/{appid}', [TelegramBotController::class, 'removeFavorite'])->whereNumber('appid');
+    Route::get('/alerts', [TelegramBotController::class, 'alerts']);
+    Route::post('/favorites/{appid}/alert/rearm', [TelegramBotController::class, 'rearm'])->whereNumber('appid');
+});

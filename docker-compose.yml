@@ -118,7 +118,6 @@ services:
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-igroscan_radar_bot}
       API_BASE_URL: http://backend:8000
       RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
-      RADAR_TRIGGER_HOURS: ${RADAR_INTERVAL_HOURS:-6}
     depends_on:
       - backend
     restart: unless-stopped
