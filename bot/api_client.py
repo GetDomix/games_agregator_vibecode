@@ -29,8 +29,8 @@ class LaravelClient:
             raise LaravelApiError(str(data.get("detail") or data.get("message") or "Не удалось выполнить запрос."))
         return data
 
-    async def bind_telegram(self, code: str, chat_id: int | str, username: str | None) -> dict:
-        return await self._request("POST", "/api/internal/telegram/bind", json={"code": code, "chat_id": str(chat_id), "telegram_username": username})
+    async def bind_telegram(self, code: str, telegram_user_id: int | str, chat_id: int | str, username: str | None) -> dict:
+        return await self._request("POST", "/api/internal/telegram/bind", json={"code": code, "telegram_user_id": str(telegram_user_id), "chat_id": str(chat_id), "telegram_username": username})
 
     async def session(self, telegram_user_id: int, chat_id: int, username: str | None, display_name: str | None) -> dict:
         return await self._request("POST", "/api/internal/telegram/session", json={"telegram_user_id": str(telegram_user_id), "chat_id": str(chat_id), "username": username, "display_name": display_name})

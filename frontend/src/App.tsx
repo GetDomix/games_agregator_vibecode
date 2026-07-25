@@ -145,6 +145,7 @@ export default function App() {
   const [tgStatus, setTgStatus] = useState<{
     linked: boolean
     identity_linked?: boolean
+    oidc_available?: boolean
     telegram_username?: string | null
     radar_enabled?: boolean
     bot_username?: string | null
@@ -225,6 +226,8 @@ export default function App() {
     try {
       const s = await api<{
         linked: boolean
+        identity_linked?: boolean
+        oidc_available?: boolean
         telegram_username?: string | null
         radar_enabled?: boolean
         bot_username?: string | null
@@ -1055,7 +1058,7 @@ export default function App() {
                   <p className={tgStatus?.identity_linked ? 'radar-status ok' : 'radar-status warn'}>
                     {tgStatus?.identity_linked ? '✅ Telegram-аккаунт подтверждён' : '⚪ Telegram-аккаунт ещё не подтверждён'}
                   </p>
-                  {!tgStatus?.identity_linked && (
+                  {!tgStatus?.identity_linked && tgStatus?.oidc_available && (
                     <button
                       type="button"
                       className="btn ghost"
@@ -1080,6 +1083,9 @@ export default function App() {
                     >
                       Подтвердить Telegram
                     </button>
+                  )}
+                  {!tgStatus?.identity_linked && !tgStatus?.oidc_available && (
+                    <p className="muted">Официальный вход Telegram временно настраивается. Бот доступен только в личном чате.</p>
                   )}
                   {tgStatus?.linked ? (
                     <>
@@ -1128,6 +1134,8 @@ export default function App() {
                               setLinkDeep(null)
                               setTgStatus({
                                 linked: false,
+                                identity_linked: false,
+                                oidc_available: tgStatus.oidc_available,
                                 radar_enabled: true,
                                 bot_username: tgStatus.bot_username || 'igroscan_bot',
                               })

@@ -13,21 +13,19 @@ class TelegramBotUserService
     public function resolve(string $telegramUserId, string $chatId, ?string $username, ?string $displayName): User
     {
         return DB::transaction(function () use ($telegramUserId, $chatId, $username, $displayName): User {
+            if ($telegramUserId !== $chatId) {
+                throw new HttpResponseException(response()->json([
+                    'detail' => 'Аккаунт Игроскана доступен только в личном чате с ботом.',
+                ], 422));
+            }
+
             $identity = ExternalIdentity::query()
                 ->with('user')
                 ->where('provider', 'telegram')
                 ->where('provider_subject', $telegramUserId)
                 ->lockForUpdate()
                 ->first();
-            $chatUser = User::query()->where('telegram_chat_id', $chatId)->lockForUpdate()->first();
-
-            if ($identity && $chatUser && $identity->user_id !== $chatUser->id) {
-                throw new HttpResponseException(response()->json([
-                    'detail' => 'Telegram identity уже связана с другим аккаунтом. Открой сайт и заверши официальную привязку.',
-                ], 409));
-            }
-
-            $user = $identity?->user ?? $chatUser;
+            $user = $identity?->user;
             if (! $user) {
                 $name = trim((string) $displayName) ?: 'Telegram user';
                 $user = User::query()->create([

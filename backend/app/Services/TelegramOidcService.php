@@ -15,12 +15,19 @@ use Jose\Component\Signature\Serializer\CompactSerializer;
 
 class TelegramOidcService
 {
+    public function isConfigured(): bool
+    {
+        return (string) config('gpa.telegram_oidc_client_id') !== ''
+            && (string) config('gpa.telegram_oidc_client_secret') !== ''
+            && (string) config('gpa.telegram_oidc_redirect_uri') !== '';
+    }
+
     public function begin(?int $userId): string
     {
         $client = (string) config('gpa.telegram_oidc_client_id');
         $redirect = (string) config('gpa.telegram_oidc_redirect_uri');
 
-        if ($client === '' || $redirect === '') {
+        if (! $this->isConfigured()) {
             throw new \RuntimeException('Telegram Login ещё не настроен');
         }
 
@@ -63,7 +70,7 @@ class TelegramOidcService
         $secret = (string) config('gpa.telegram_oidc_client_secret');
         $redirect = (string) config('gpa.telegram_oidc_redirect_uri');
 
-        if ($client === '' || $secret === '' || $redirect === '') {
+        if (! $this->isConfigured()) {
             throw new \RuntimeException('Telegram Login ещё не настроен');
         }
 

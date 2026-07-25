@@ -98,6 +98,27 @@ intents:
           - alert-evaluation-delivery
         run_id: run-agregator-games-vibecoding-008
         completed_at: 2026-07-25T18:32:50.497Z
+      - id: telegram-access-security-hardening
+        title: Безопасная Telegram-привязка и доступ бота
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - telegram-identity-merge
+          - telegram-bot-shared-interface
+        run_id: run-agregator-games-vibecoding-009
+        completed_at: 2026-07-25T19:02:51.996Z
+      - id: price-refresh-production-recovery
+        title: Production scheduler и заполнение цен
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - central-price-refresh
+          - stored-price-search
+          - telegram-bot-shared-interface
+        run_id: run-agregator-games-vibecoding-010
+        completed_at: 2026-07-25T19:08:51.468Z
       - id: free-search-monetization-cleanup
         title: Бесплатный поиск и удаление Pro
         status: pending
@@ -187,3 +208,19 @@ runs:
           mode: confirm
       started: 2026-07-25T18:12:59.298Z
       completed: 2026-07-25T18:32:50.497Z
+    - id: run-agregator-games-vibecoding-009
+      scope: single
+      work_items:
+        - id: telegram-access-security-hardening
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T18:53:22.484Z
+      completed: 2026-07-25T19:02:51.996Z
+    - id: run-agregator-games-vibecoding-010
+      scope: single
+      work_items:
+        - id: price-refresh-production-recovery
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T19:06:32.364Z
+      completed: 2026-07-25T19:08:51.468Z

@@ -84,6 +84,50 @@ services:
       - backend
     restart: unless-stopped
 
+  scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: php artisan schedule:work
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-gpa}
+      DB_USERNAME: ${POSTGRES_USER:-gpa}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-gpa_secret_change_me}
+      QUEUE_CONNECTION: database
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  queue-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: php artisan queue:work database --queue=prices,default --sleep=1 --tries=3 --max-time=3600
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      LOG_CHANNEL: stderr
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-gpa}
+      DB_USERNAME: ${POSTGRES_USER:-gpa}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-gpa_secret_change_me}
+      QUEUE_CONNECTION: database
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   caddy:
     image: caddy:2-alpine
     ports:

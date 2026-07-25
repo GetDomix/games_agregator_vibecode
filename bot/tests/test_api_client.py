@@ -1,3 +1,4 @@
+import json
 import unittest
 
 import httpx
@@ -20,3 +21,13 @@ class LaravelClientTest(unittest.IsolatedAsyncioTestCase):
         client = LaravelClient("https://api.test", "secret", httpx.MockTransport(lambda _: httpx.Response(422, json={"detail": "Некорректная цель"})))
         with self.assertRaisesRegex(LaravelApiError, "Некорректная цель"):
             await client.alerts(12, "wrong")
+
+    async def test_bind_sends_private_user_identity(self):
+        async def handler(request: httpx.Request):
+            payload = json.loads(request.content)
+            self.assertEqual(payload["telegram_user_id"], "12")
+            self.assertEqual(payload["chat_id"], "12")
+            return httpx.Response(200, json={"ok": True})
+
+        client = LaravelClient("https://api.test", "secret", httpx.MockTransport(handler))
+        self.assertEqual(await client.bind_telegram("SAFE", 12, 12, "player"), {"ok": True})

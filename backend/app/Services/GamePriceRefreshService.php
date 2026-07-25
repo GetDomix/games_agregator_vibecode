@@ -87,9 +87,12 @@ class GamePriceRefreshService
             ])->save();
 
             if (! $wasReleased && $game->isReleased()) {
-                GameSourceState::query()->where('game_id', $game->id)
-                    ->whereIn('source', [GameSourceState::SOURCE_PLATI, GameSourceState::SOURCE_GGSEL])
-                    ->update(['next_refresh_at' => now(), 'status' => GameSourceState::STATUS_PENDING]);
+                foreach ([GameSourceState::SOURCE_PLATI, GameSourceState::SOURCE_GGSEL] as $marketplace) {
+                    GameSourceState::query()->updateOrCreate(
+                        ['game_id' => $game->id, 'source' => $marketplace],
+                        ['next_refresh_at' => now(), 'status' => GameSourceState::STATUS_PENDING]
+                    );
+                }
             }
         });
 

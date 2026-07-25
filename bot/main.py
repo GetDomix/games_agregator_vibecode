@@ -83,7 +83,7 @@ def make_handlers(api: LaravelClient):
                 await message.answer("Код выглядит странно. Скопируй его с сайта целиком.")
                 return
             try:
-                data = await api.bind_telegram(code, message.chat.id, message.from_user.username)
+                data = await api.bind_telegram(code, message.from_user.id, message.chat.id, message.from_user.username)
                 await api.session(message.from_user.id, message.chat.id, message.from_user.username, message.from_user.full_name)
                 await message.answer(f"✅ Привязка готова, <b>{data.get('display_name') or 'игрок'}</b>. Данные сайта и бота теперь общие.", parse_mode="HTML")
             except LaravelApiError as exc:

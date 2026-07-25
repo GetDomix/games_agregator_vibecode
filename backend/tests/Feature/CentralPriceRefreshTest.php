@@ -79,6 +79,7 @@ class CentralPriceRefreshTest extends TestCase
 
         $this->assertSame('released', $game->fresh()->release_status);
         $this->assertTrue($market->fresh()->next_refresh_at->isBefore(now()->addMinute()));
+        $this->assertDatabaseHas('game_source_states', ['game_id' => $game->id, 'source' => 'plati', 'status' => 'pending']);
     }
 
     public function test_favorite_request_is_queued_and_prices_api_is_read_only(): void

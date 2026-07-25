@@ -13,12 +13,17 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class TelegramController extends Controller
 {
     public function oidcBegin(Request $request, TelegramOidcService $oidc): JsonResponse
     {
+        if (! $oidc->isConfigured()) {
+            return response()->json(['detail' => 'Telegram Login временно не настроен. Попробуй позже.'], 503);
+        }
+
         return response()->json(['authorization_url' => $oidc->begin($request->user()?->id)]);
     }
 
@@ -101,6 +106,7 @@ class TelegramController extends Controller
             'telegram_linked_at' => $u->telegram_linked_at?->toIso8601String(),
             'radar_enabled' => (bool) $u->radar_enabled,
             'bot_username' => config('gpa.telegram_bot_username') ?: null,
+            'oidc_available' => app(TelegramOidcService::class)->isConfigured(),
         ]);
     }
 
@@ -121,12 +127,18 @@ class TelegramController extends Controller
     public function unlink(Request $request): JsonResponse
     {
         $u = $request->user();
-        $u->telegram_chat_id = null;
-        $u->telegram_username = null;
-        $u->telegram_linked_at = null;
-        $u->save();
+        DB::transaction(function () use ($u): void {
+            ExternalIdentity::query()->where('user_id', $u->id)->where('provider', 'telegram')->delete();
+            TelegramLinkCode::query()->where('user_id', $u->id)->whereNull('used_at')->delete();
+            $u->forceFill([
+                'telegram_chat_id' => null,
+                'telegram_username' => null,
+                'telegram_linked_at' => null,
+                'radar_enabled' => false,
+            ])->save();
+        });
 
-        return response()->json(['linked' => false]);
+        return response()->json(['linked' => false, 'identity_linked' => false]);
     }
 
     /**
@@ -138,9 +150,14 @@ class TelegramController extends Controller
         $this->assertServiceToken($request);
         $data = $request->validate([
             'code' => ['required', 'string', 'max:32'],
+            'telegram_user_id' => ['required', 'string', 'max:32'],
             'chat_id' => ['required', 'string', 'max:32'],
             'telegram_username' => ['nullable', 'string', 'max:64'],
         ]);
+
+        if ($data['telegram_user_id'] !== $data['chat_id']) {
+            return response()->json(['detail' => 'Привязка доступна только из личного чата с ботом'], 422);
+        }
 
         $code = strtoupper(trim($data['code']));
         $row = TelegramLinkCode::query()
@@ -163,11 +180,23 @@ class TelegramController extends Controller
             return response()->json(['detail' => 'Этот Telegram уже привязан к другому аккаунту'], 409);
         }
 
+        $identity = ExternalIdentity::query()
+            ->where('provider', 'telegram')
+            ->where('provider_subject', $data['telegram_user_id'])
+            ->first();
+        if ($identity && $identity->user_id !== $user->id) {
+            return response()->json(['detail' => 'Этот Telegram уже привязан к другому аккаунту'], 409);
+        }
+
         $user->telegram_chat_id = (string) $data['chat_id'];
         $user->telegram_username = $data['telegram_username'] ?? null;
         $user->telegram_linked_at = now();
         $user->radar_enabled = true;
         $user->save();
+        ExternalIdentity::query()->updateOrCreate(
+            ['provider' => 'telegram', 'provider_subject' => $data['telegram_user_id']],
+            ['user_id' => $user->id, 'profile' => ['username' => $data['telegram_username'] ?? null]]
+        );
 
         $row->used_at = now();
         $row->save();

@@ -29,7 +29,7 @@ class TelegramBotInterfaceTest extends TestCase
     {
         Queue::fake();
         $this->postJson('/api/internal/telegram/session', [
-            'telegram_user_id' => '101', 'chat_id' => '201', 'username' => 'igroscan', 'display_name' => 'Игрок',
+            'telegram_user_id' => '101', 'chat_id' => '101', 'username' => 'igroscan', 'display_name' => 'Игрок',
         ], $this->headers)->assertOk()->assertJsonPath('user.telegram_linked', true);
 
         $user = ExternalIdentity::query()->where('provider_subject', '101')->firstOrFail()->user;
@@ -74,7 +74,7 @@ class TelegramBotInterfaceTest extends TestCase
 
     private function botUser(): User
     {
-        $user = User::factory()->create(['telegram_chat_id' => '201']);
+        $user = User::factory()->create(['telegram_chat_id' => '101']);
         ExternalIdentity::query()->create(['user_id' => $user->id, 'provider' => 'telegram', 'provider_subject' => '101']);
 
         return $user;

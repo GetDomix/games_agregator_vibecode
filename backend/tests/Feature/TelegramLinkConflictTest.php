@@ -24,6 +24,7 @@ class TelegramLinkConflictTest extends TestCase
 
         $this->postJson('/api/internal/telegram/bind', [
             'code' => 'SAFE-LINK',
+            'telegram_user_id' => '777',
             'chat_id' => '777',
         ], ['X-Radar-Token' => 'test-service-token'])
             ->assertConflict()
