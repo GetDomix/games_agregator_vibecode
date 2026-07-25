@@ -14,6 +14,7 @@ class TelegramOidcBeginTest extends TestCase
     public function test_authenticated_begin_creates_short_lived_pkce_transaction(): void
     {
         config()->set('gpa.telegram_oidc_client_id', '123456');
+        config()->set('gpa.telegram_oidc_client_secret', 'test-secret');
         config()->set('gpa.telegram_oidc_redirect_uri', 'https://igroskan.test/api/auth/telegram/callback');
         $user = User::factory()->create();
 
