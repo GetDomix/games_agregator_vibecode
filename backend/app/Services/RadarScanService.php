@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CurrentGamePrice;
 use App\Models\Favorite;
 use App\Models\RadarEvent;
 use App\Models\User;
@@ -10,7 +11,6 @@ use Illuminate\Support\Facades\Log;
 class RadarScanService
 {
     public function __construct(
-        private readonly SteamService $steam,
         private readonly TelegramNotifyService $telegram,
     ) {}
 
@@ -24,10 +24,8 @@ class RadarScanService
         $stats = ['scanned' => 0, 'events' => 0, 'notified' => 0, 'errors' => 0];
         $dropPct = max(1, (int) config('gpa.radar_drop_percent', 5));
         $minDropRub = max(1, (float) config('gpa.radar_min_drop_rub', 30));
-        $sleepMs = max(0, (int) config('gpa.radar_steam_delay_ms', 400));
-
         $favs = Favorite::query()
-            ->with('user')
+            ->with(['user', 'game.currentPrices'])
             ->where('radar_enabled', true)
             ->whereHas('user', function ($q) {
                 $q->where('radar_enabled', true)
@@ -45,25 +43,20 @@ class RadarScanService
 
             $stats['scanned']++;
             try {
-                $details = $this->steam->details((int) $fav->appid, $fav->game_name);
-                $newPrice = isset($details['price_rub']) && is_numeric($details['price_rub'])
-                    ? (float) $details['price_rub']
-                    : null;
+                $price = $fav->game?->currentPrices->first(fn (CurrentGamePrice $price) => $price->source === 'steam' && $price->offer_kind === 'official');
+                $newPrice = $price?->min_price_rub !== null ? (float) $price->min_price_rub : null;
                 $oldPrice = $fav->last_steam_price_rub !== null ? (float) $fav->last_steam_price_rub : null;
 
                 $fav->last_steam_price_rub = $newPrice;
-                if (! empty($details['header_image'])) {
-                    $fav->header_image = $details['header_image'];
+                if ($fav->game?->header_image) {
+                    $fav->header_image = $fav->game->header_image;
                 }
-                if (! empty($details['name'])) {
-                    $fav->game_name = mb_substr((string) $details['name'], 0, 200);
+                if ($fav->game?->name) {
+                    $fav->game_name = mb_substr($fav->game->name, 0, 200);
                 }
                 $fav->save();
 
                 if ($newPrice === null) {
-                    if ($sleepMs) {
-                        usleep($sleepMs * 1000);
-                    }
                     continue;
                 }
 
@@ -91,9 +84,6 @@ class RadarScanService
                 }
 
                 if ($kind === null) {
-                    if ($sleepMs) {
-                        usleep($sleepMs * 1000);
-                    }
                     continue;
                 }
 
@@ -126,9 +116,6 @@ class RadarScanService
                 Log::warning('radar scan item failed', ['fav' => $fav->id, 'e' => $e->getMessage()]);
             }
 
-            if ($sleepMs) {
-                usleep($sleepMs * 1000);
-            }
         }
 
         return $stats;

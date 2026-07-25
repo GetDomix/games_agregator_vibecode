@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Favorite;
-use App\Services\AggregatorService;
-use App\Services\DealScoreService;
+use App\Services\FavoriteAlertSettingsService;
+use App\Services\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -17,7 +17,7 @@ class FavoriteController extends Controller
         $items = Favorite::query()
             ->where('user_id', $request->user()->id)
             ->orderByDesc('updated_at')
-            ->get()
+            ->with(['alert.scopes', 'game.sourceStates'])->get()
             ->map->toApiArray()
             ->values();
         $hits = $items->filter(fn ($i) => $i['price_below_target'])->values();
@@ -29,7 +29,7 @@ class FavoriteController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, GameRefreshRequestService $refresh, FavoriteAlertSettingsService $alerts): JsonResponse
     {
         $data = $request->validate([
             'appid' => ['required', 'integer', 'min:1'],
@@ -37,7 +37,8 @@ class FavoriteController extends Controller
             'header_image' => ['nullable', 'string', 'max:500', 'regex:/^https?:\/\//i'],
             'notes' => ['nullable', 'string', 'max:500'],
             'target_price_rub' => ['nullable', 'numeric', 'min:0'],
-            'last_steam_price_rub' => ['nullable', 'numeric', 'min:0'],
+            'last_steam_price_rub' => ['prohibited'],
+            'alert' => ['nullable', 'array'], 'alert.target_value' => ['nullable', 'numeric', 'min:0'], 'alert.condition_type' => ['nullable', 'in:target_price'], 'alert.scopes' => ['nullable', 'array', 'min:1'], 'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'], 'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
         ]);
         $name = trim($data['game_name']);
         if ($name === '') {
@@ -56,14 +57,20 @@ class FavoriteController extends Controller
             'header_image' => $data['header_image'] ?? $fav->header_image,
             'notes' => $data['notes'] ?? $fav->notes,
             'target_price_rub' => array_key_exists('target_price_rub', $data) ? $data['target_price_rub'] : $fav->target_price_rub,
-            'last_steam_price_rub' => array_key_exists('last_steam_price_rub', $data) ? $data['last_steam_price_rub'] : $fav->last_steam_price_rub,
         ]);
         $fav->save();
+        $refresh->linkFavorite($fav);
+        try {
+            $alerts->save($fav, $data['alert'] ?? ['target_value' => $fav->target_price_rub]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['detail' => $e->getMessage()], 422);
+        }
+        $fav->load(['alert.scopes', 'game.sourceStates']);
 
         return response()->json($fav->toApiArray(), $fav->wasRecentlyCreated ? 201 : 200);
     }
 
-    public function update(Request $request, int $appid): JsonResponse
+    public function update(Request $request, int $appid, FavoriteAlertSettingsService $alerts): JsonResponse
     {
         $fav = Favorite::query()
             ->where('user_id', $request->user()->id)
@@ -74,12 +81,28 @@ class FavoriteController extends Controller
         }
         $data = $request->validate([
             'target_price_rub' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'last_steam_price_rub' => ['prohibited'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:500'],
-            'last_steam_price_rub' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'alert' => ['sometimes', 'array'], 'alert.target_value' => ['nullable', 'numeric', 'min:0'], 'alert.condition_type' => ['nullable', 'in:target_price'], 'alert.scopes' => ['nullable', 'array', 'min:1'], 'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'], 'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
         ]);
-        $fav->fill($data)->save();
+        $fav->fill(collect($data)->except('alert')->all())->save();
+        try {
+            if (isset($data['alert'])) {
+                $alerts->save($fav, $data['alert']);
+            }
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['detail' => $e->getMessage()], 422);
+        } $fav->load(['alert.scopes', 'game.sourceStates']);
 
         return response()->json($fav->toApiArray());
+    }
+
+    public function rearm(Request $request, int $appid, FavoriteAlertSettingsService $alerts): JsonResponse
+    {
+        $fav = Favorite::query()->where('user_id', $request->user()->id)->where('appid', $appid)->firstOrFail();
+        $alerts->rearm($fav);
+
+        return response()->json($fav->fresh()->load(['alert.scopes', 'game.sourceStates'])->toApiArray());
     }
 
     public function destroy(Request $request, int $appid): Response
@@ -96,7 +119,7 @@ class FavoriteController extends Controller
         return response()->noContent();
     }
 
-    public function refresh(Request $request, AggregatorService $aggregator): JsonResponse
+    public function refresh(Request $request, GameRefreshRequestService $refresh): JsonResponse
     {
         $limit = min((int) $request->query('limit', 5), (int) config('gpa.watchlist_refresh_max', 5));
         $rows = Favorite::query()
@@ -115,49 +138,23 @@ class FavoriteController extends Controller
 
         $refreshed = [];
         foreach ($rows as $fav) {
-            try {
-                $result = $aggregator->aggregate($fav->game_name, (int) $fav->appid);
-                $steamPrice = $result['steam']['price_rub'] ?? null;
-                if ($steamPrice !== null) {
-                    $fav->last_steam_price_rub = $steamPrice;
-                }
-                if (! empty($result['steam']['header_image'])) {
-                    $fav->header_image = $result['steam']['header_image'];
-                }
-                if (! empty($result['steam']['name'])) {
-                    $fav->game_name = mb_substr($result['steam']['name'], 0, 200);
-                }
-                $fav->save();
-                $deal = DealScoreService::compute(
-                    $steamPrice ?? $fav->last_steam_price_rub,
-                    $result['plati'],
-                    $result['ggsel']
-                );
-                $item = $fav->toApiArray();
-                $refreshed[] = [
-                    'appid' => $fav->appid,
-                    'game_name' => $fav->game_name,
-                    'ok' => true,
-                    'last_steam_price_rub' => $item['last_steam_price_rub'],
-                    'target_price_rub' => $item['target_price_rub'],
-                    'price_below_target' => $item['price_below_target'],
-                    'market_min_rub' => $deal['market_min_rub'],
-                ];
-            } catch (\Throwable $e) {
-                $refreshed[] = [
-                    'appid' => $fav->appid,
-                    'game_name' => $fav->game_name,
-                    'ok' => false,
-                    'last_steam_price_rub' => $fav->last_steam_price_rub,
-                    'target_price_rub' => $fav->target_price_rub,
-                    'price_below_target' => false,
-                    'error' => mb_substr($e->getMessage(), 0, 200),
-                ];
-            }
+            $game = $refresh->linkFavorite($fav);
+            $item = $fav->fresh()->toApiArray();
+            $refreshed[] = [
+                'appid' => $fav->appid,
+                'game_name' => $fav->game_name,
+                'ok' => true,
+                'queued' => true,
+                'last_steam_price_rub' => $item['last_steam_price_rub'],
+                'target_price_rub' => $item['target_price_rub'],
+                'price_below_target' => $item['price_below_target'],
+                'market_min_rub' => null,
+                'game_id' => $game->id,
+            ];
         }
         $hits = count(array_filter($refreshed, fn ($r) => ! empty($r['price_below_target'])));
         $ok = count(array_filter($refreshed, fn ($r) => ! empty($r['ok'])));
-        $msg = "Обновлено {$ok} из ".count($refreshed).'.';
+        $msg = "Поставлено в очередь {$ok} из ".count($refreshed).'.';
         if ($hits) {
             $msg .= " {$hits} на цели или ниже.";
         }

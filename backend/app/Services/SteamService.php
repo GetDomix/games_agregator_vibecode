@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use Carbon\CarbonImmutable;
+
 class SteamService
 {
     public function search(string $query, int $limit = 8): array
@@ -127,14 +129,74 @@ class SteamService
         ];
     }
 
+    /**
+     * Refresh-only variant: a Steam transport/API failure is an exception,
+     * while a valid unavailable app remains an empty normalized result.
+     */
+    public function refreshDetails(int $appid, ?string $fallbackName = null): array
+    {
+        $storeUrl = "https://store.steampowered.com/app/{$appid}/";
+        $ru = $this->fetchDetailsForRefresh($appid, 'ru', 'russian');
+        $data = $ru['data'];
+        $availableInRu = $data !== null;
+
+        if ($data === null) {
+            $us = $this->fetchDetailsForRefresh($appid, 'us', 'english');
+            $data = $us['data'];
+            if ($data === null && ($ru['error'] || $us['error'])) {
+                throw new \RuntimeException($ru['error'] ?: $us['error']);
+            }
+        }
+
+        if ($data === null) {
+            return [
+                'appid' => $appid,
+                'name' => $fallbackName ?: "App {$appid}",
+                'header_image' => null,
+                'store_url' => $storeUrl,
+                'price_rub' => null,
+                'release_status' => 'unknown',
+                'release_date' => null,
+            ];
+        }
+
+        $price = $data['price_overview'] ?? null;
+        $isFree = (bool) ($data['is_free'] ?? false);
+        $priceRub = null;
+        if ($availableInRu && is_array($price) && isset($price['final'])) {
+            $priceRub = round($price['final'] / 100, 2);
+        } elseif ($availableInRu && $isFree) {
+            $priceRub = 0.0;
+        }
+        $release = $data['release_date'] ?? [];
+        $releaseDate = null;
+        if (! empty($release['date'])) {
+            try {
+                $releaseDate = CarbonImmutable::parse((string) $release['date'])->toDateString();
+            } catch (\Throwable) {
+                // Steam localizes this value; coming_soon is the reliable signal.
+            }
+        }
+
+        return [
+            'appid' => $appid,
+            'name' => $data['name'] ?? $fallbackName ?? "App {$appid}",
+            'header_image' => $data['header_image'] ?? $data['capsule_image'] ?? null,
+            'store_url' => $storeUrl,
+            'price_rub' => $priceRub,
+            'release_status' => ! empty($release['coming_soon']) ? 'announced' : 'released',
+            'release_date' => $releaseDate,
+        ];
+    }
+
     private function fetchDetails(int $appid, string $cc, string $lang): ?array
     {
         try {
             $resp = HttpClientFactory::make()->get('https://store.steampowered.com/api/appdetails', [
-                    'appids' => $appid,
-                    'cc' => $cc,
-                    'l' => $lang,
-                ]);
+                'appids' => $appid,
+                'cc' => $cc,
+                'l' => $lang,
+            ]);
             if (! $resp->successful()) {
                 return null;
             }
@@ -146,6 +208,28 @@ class SteamService
             return $block['data'] ?? null;
         } catch (\Throwable) {
             return null;
+        }
+    }
+
+    private function fetchDetailsForRefresh(int $appid, string $cc, string $lang): array
+    {
+        try {
+            $response = HttpClientFactory::make()->get('https://store.steampowered.com/api/appdetails', [
+                'appids' => $appid,
+                'cc' => $cc,
+                'l' => $lang,
+            ]);
+            if (! $response->successful()) {
+                return ['data' => null, 'error' => 'Steam HTTP '.$response->status()];
+            }
+            $block = $response->json((string) $appid) ?? [];
+            if (! ($block['success'] ?? false)) {
+                return ['data' => null, 'error' => null];
+            }
+
+            return ['data' => $block['data'] ?? null, 'error' => null];
+        } catch (\Throwable $e) {
+            return ['data' => null, 'error' => 'Steam unavailable: '.mb_substr($e->getMessage(), 0, 180)];
         }
     }
 

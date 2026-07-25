@@ -20,9 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
     })
     ->withSchedule(function (Schedule $schedule): void {
-        // Price Radar: re-check Steam favorites for Telegram users
-        $hours = max(1, (int) env('RADAR_INTERVAL_HOURS', 6));
-        $schedule->command('radar:scan')->cron("0 */{$hours} * * *")->withoutOverlapping();
+        $schedule->command('prices:dispatch-due')->everyMinute()->withoutOverlapping()->onOneServer();
+        $schedule->command('prices:prune-history')->daily()->withoutOverlapping()->onOneServer();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

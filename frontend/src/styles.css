@@ -916,6 +916,20 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
 }
 
 .hidden { display: none !important; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 1rem; background: color-mix(in srgb, #08101d 58%, transparent); }
+.alert-modal { width: min(620px, 100%); max-height: min(760px, 92vh); overflow: auto; padding: 1.2rem; }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.modal-head h3 { margin: 0; }
+.modal-head p { margin: .25rem 0 0; }
+.field-label { display: grid; gap: .35rem; margin-top: 1rem; font-weight: 700; }
+.field-label input { width: 100%; border: 1px solid var(--border); border-radius: 10px; background: var(--paper); color: var(--ink); padding: .7rem .8rem; font: inherit; }
+.scope-group { margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--border); }
+.scope-row { display: flex; flex-wrap: wrap; gap: .55rem 1rem; margin-top: .65rem; }
+.scope-check { display: inline-flex; align-items: center; gap: .4rem; color: var(--ink-soft); font-size: .9rem; margin-top: .55rem; }
+.watchlist-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.watchlist-columns h4 { margin: 0 0 .65rem; }
+.alert-card { min-height: 0; }
+@media (max-width: 720px) { .watchlist-columns { grid-template-columns: 1fr; } }
 .stats { display: flex; flex-wrap: wrap; gap: 0.55rem; }
 .stat {
   min-width: 72px; text-align: center; padding: 0.5rem 0.7rem; border-radius: 12px;

@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AdsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\GamePriceController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\PriceController;
@@ -19,11 +21,16 @@ Route::post('/auth/register', [AuthController::class, 'register'])
     ->middleware('throttle:8,1');
 Route::post('/auth/login', [AuthController::class, 'login'])
     ->middleware('throttle:20,1');
+Route::post('/auth/telegram/begin', [TelegramController::class, 'oidcBegin'])->middleware('throttle:10,1');
+Route::get('/auth/telegram/callback', [TelegramController::class, 'oidcCallback'])->middleware('throttle:10,1');
 
 Route::get('/search', [PriceController::class, 'search'])
     ->middleware('throttle:30,1');
 Route::get('/prices', [PriceController::class, 'prices'])
     ->middleware('throttle:20,1');
+Route::get('/games/{appid}/prices', [GamePriceController::class, 'show'])
+    ->whereNumber('appid')
+    ->middleware('throttle:60,1');
 Route::get('/quota', [PriceController::class, 'quota']);
 Route::get('/ads/config', [AdsController::class, 'config']);
 Route::get('/plans', [BillingController::class, 'plans']);
@@ -49,6 +56,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/me/favorites', [FavoriteController::class, 'store']);
     Route::post('/me/favorites/refresh', [FavoriteController::class, 'refresh']);
     Route::patch('/me/favorites/{appid}', [FavoriteController::class, 'update']);
+    Route::post('/me/favorites/{appid}/alert/rearm', [FavoriteController::class, 'rearm']);
+    Route::get('/me/alerts', [AlertController::class, 'index']);
+    Route::get('/me/alerts/events', [AlertController::class, 'events']);
     Route::delete('/me/favorites/{appid}', [FavoriteController::class, 'destroy']);
 
     Route::get('/admin/overview', [AdminController::class, 'overview']);
@@ -56,6 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/admin/users/{id}/admin', [AdminController::class, 'setUserAdmin']);
 
     Route::post('/telegram/link-code', [TelegramController::class, 'createLinkCode']);
+    Route::post('/telegram/oidc/begin', [TelegramController::class, 'oidcBegin'])
+        ->middleware('throttle:10,1');
     Route::get('/telegram/status', [TelegramController::class, 'status']);
     Route::post('/telegram/radar', [TelegramController::class, 'updateRadar']);
     Route::delete('/telegram/link', [TelegramController::class, 'unlink']);

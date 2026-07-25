@@ -31,15 +31,3 @@ class LaravelClient:
                 detail = data.get("detail") or data.get("message") or r.text
                 raise RuntimeError(str(detail))
             return data
-
-    async def run_radar_scan(self) -> dict:
-        async with httpx.AsyncClient(timeout=600.0) as client:
-            r = await client.post(
-                f"{self.base_url}/api/internal/radar/run",
-                headers=self._headers(),
-            )
-            data = r.json() if r.content else {}
-            if r.status_code >= 400:
-                detail = data.get("detail") or data.get("message") or r.text
-                raise RuntimeError(str(detail))
-            return data

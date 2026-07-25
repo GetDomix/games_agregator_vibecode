@@ -27,3 +27,7 @@ backend/storage/framework/sessions/*
 backend/storage/framework/views/*
 frontend/dist/
 legacy/.venv/
+
+bot/.env
+.radar_svc_token.tmp
+

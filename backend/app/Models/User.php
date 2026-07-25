@@ -52,6 +52,9 @@ class User extends Authenticatable
         if ($this->is_admin) {
             return true;
         }
+        if ($this->email === null || $this->email === '') {
+            return false;
+        }
         $list = (string) config('gpa.admin_emails', '');
         if ($list === '') {
             return false;
@@ -69,6 +72,11 @@ class User extends Authenticatable
     public function searchHistories(): HasMany
     {
         return $this->hasMany(SearchHistory::class);
+    }
+
+    public function externalIdentities(): HasMany
+    {
+        return $this->hasMany(ExternalIdentity::class);
     }
 
     /** Active paid plan (pro/unlimited) and not expired. */

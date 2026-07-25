@@ -5,17 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DailySearchQuota;
 use App\Models\Favorite;
+use App\Models\Game;
 use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
 use App\Models\User;
 use App\Services\AggregatorService;
+use App\Services\GameRefreshRequestService;
+use App\Services\StoredPriceSearchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class PriceController extends Controller
 {
-    public function __construct(private readonly AggregatorService $aggregator) {}
+    public function __construct(private readonly AggregatorService $aggregator, private readonly StoredPriceSearchService $stored) {}
 
     public function search(Request $request): JsonResponse
     {
@@ -23,9 +26,14 @@ class PriceController extends Controller
         if ($q === '') {
             return response()->json(['detail' => 'Пустой поисковый запрос'], 400);
         }
-        $candidates = $this->aggregator->searchCandidates($q);
+        $candidates = $this->stored->candidates($q);
+        $discovery = false;
+        if ($candidates === []) {
+            $candidates = $this->aggregator->searchCandidates($q);
+            $discovery = true;
+        }
 
-        return response()->json(['query' => $q, 'candidates' => $candidates, 'meta' => []]);
+        return response()->json(['query' => $q, 'candidates' => $candidates, 'meta' => ['discovery_used' => $discovery]]);
     }
 
     public function quota(Request $request): JsonResponse
@@ -35,7 +43,7 @@ class PriceController extends Controller
         return response()->json(['quota' => $info]);
     }
 
-    public function prices(Request $request): JsonResponse
+    public function prices(Request $request, GameRefreshRequestService $refresh): JsonResponse
     {
         $q = trim((string) $request->query('q', ''));
         if ($q === '') {
@@ -55,15 +63,20 @@ class PriceController extends Controller
             return response()->json(['detail' => $e->getMessage()], 429);
         }
 
-        try {
-            $result = $this->aggregator->aggregate($q, $appid);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['detail' => 'Ошибка агрегации: '.$e->getMessage()], 400);
-        } catch (\Throwable $e) {
-            report($e);
-
-            return response()->json(['detail' => 'Ошибка агрегации: '.$e->getMessage()], 502);
+        $game = $appid ? Game::query()->where('steam_appid', $appid)->first() : null;
+        if (! $game && $appid) {
+            $game = $refresh->requestUnknown($appid, $q);
         }
+        if (! $game) {
+            $candidate = $this->stored->candidates($q, 1)[0] ?? null;
+            if ($candidate) {
+                $game = Game::query()->where('steam_appid', $candidate['appid'])->first();
+            }
+        }
+        if (! $game) {
+            return response()->json(['query' => $q, 'steam' => null, 'candidates' => [], 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => ['Игра не найдена в локальном каталоге. Выберите её из подсказок Steam.'], 'refreshing' => false, 'quota' => $quota]);
+        }
+        $result = $this->stored->result($game, $q);
 
         $result['quota'] = $quota;
         if ($user) {

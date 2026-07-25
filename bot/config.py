@@ -12,7 +12,6 @@ class Settings:
     bot_username: str
     api_base_url: str
     radar_service_token: str
-    radar_trigger_hours: int
 
 
 def get_settings() -> Settings:
@@ -24,5 +23,4 @@ def get_settings() -> Settings:
         bot_username=(os.getenv("TELEGRAM_BOT_USERNAME") or "igroscan_radar_bot").lstrip("@"),
         api_base_url=(os.getenv("API_BASE_URL") or "http://127.0.0.1:8080").rstrip("/"),
         radar_service_token=(os.getenv("RADAR_SERVICE_TOKEN") or "").strip(),
-        radar_trigger_hours=int(os.getenv("RADAR_TRIGGER_HOURS") or "6"),
     )

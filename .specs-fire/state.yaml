@@ -1,0 +1,179 @@
+project:
+  name: Игроскан
+  description: Агрегатор цен на игры Steam RU, Plati.Market и GGsel.
+  created: 2026-07-25T08:05:13Z
+  fire_version: 0.1.8
+workspace:
+  type: brownfield
+  structure: monorepo
+  autonomy_bias: balanced
+  run_scope_preference: single
+  run_scope_history: []
+  scanned_at: 2026-07-25T08:05:13Z
+  parts:
+    - frontend
+    - backend
+    - bot
+intents:
+  - id: unified-price-watchlist-mvp
+    title: Единое избранное и ценовые алерты MVP
+    status: in_progress
+    work_items:
+      - id: canonical-game-price-model
+        title: Единая модель игр и цен
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on: []
+        run_id: run-agregator-games-vibecoding-001
+        completed_at: 2026-07-25T14:48:07.703Z
+      - id: central-price-refresh
+        title: Централизованное обновление цен
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - canonical-game-price-model
+        run_id: run-agregator-games-vibecoding-002
+        completed_at: 2026-07-25T15:43:16.221Z
+      - id: stored-price-search
+        title: Поиск из серверного хранилища
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - canonical-game-price-model
+        run_id: run-agregator-games-vibecoding-003
+        completed_at: 2026-07-25T16:03:55.462Z
+      - id: cross-source-alert-settings
+        title: Избранное и настройка алертов
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - canonical-game-price-model
+        run_id: run-agregator-games-vibecoding-004
+        completed_at: 2026-07-25T16:19:16.694Z
+      - id: telegram-identity-merge
+        title: Telegram-идентификация и объединение аккаунтов
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - cross-source-alert-settings
+        run_id: run-agregator-games-vibecoding-005
+        completed_at: 2026-07-25T17:15:23.893Z
+      - id: alert-evaluation-delivery
+        title: Срабатывание и доставка алертов
+        status: completed
+        complexity: high
+        mode: validate
+        depends_on:
+          - central-price-refresh
+          - cross-source-alert-settings
+          - telegram-identity-merge
+        run_id: run-agregator-games-vibecoding-006
+        completed_at: 2026-07-25T17:27:34.901Z
+      - id: website-watchlist-ui
+        title: Интерфейс сайта для избранного и алертов
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - stored-price-search
+          - cross-source-alert-settings
+          - telegram-identity-merge
+          - alert-evaluation-delivery
+        run_id: run-agregator-games-vibecoding-007
+        completed_at: 2026-07-25T17:47:06.937Z
+      - id: telegram-bot-shared-interface
+        title: Полноценный интерфейс Telegram-бота
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - stored-price-search
+          - cross-source-alert-settings
+          - telegram-identity-merge
+          - alert-evaluation-delivery
+      - id: free-search-monetization-cleanup
+        title: Бесплатный поиск и удаление Pro
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - stored-price-search
+      - id: release-readiness-operations
+        title: Сквозные тесты и production scheduler
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - canonical-game-price-model
+          - central-price-refresh
+          - stored-price-search
+          - cross-source-alert-settings
+          - telegram-identity-merge
+          - alert-evaluation-delivery
+          - website-watchlist-ui
+          - telegram-bot-shared-interface
+          - free-search-monetization-cleanup
+runs:
+  active: []
+  completed:
+    - id: run-agregator-games-vibecoding-001
+      scope: single
+      work_items:
+        - id: canonical-game-price-model
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T14:05:19.295Z
+      completed: 2026-07-25T14:48:07.703Z
+    - id: run-agregator-games-vibecoding-002
+      scope: single
+      work_items:
+        - id: central-price-refresh
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T15:25:49.266Z
+      completed: 2026-07-25T15:43:16.221Z
+    - id: run-agregator-games-vibecoding-003
+      scope: single
+      work_items:
+        - id: stored-price-search
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T15:52:22.633Z
+      completed: 2026-07-25T16:03:55.462Z
+    - id: run-agregator-games-vibecoding-004
+      scope: single
+      work_items:
+        - id: cross-source-alert-settings
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T16:07:19.895Z
+      completed: 2026-07-25T16:19:16.694Z
+    - id: run-agregator-games-vibecoding-005
+      scope: single
+      work_items:
+        - id: telegram-identity-merge
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T16:20:45.546Z
+      completed: 2026-07-25T17:15:23.893Z
+    - id: run-agregator-games-vibecoding-006
+      scope: single
+      work_items:
+        - id: alert-evaluation-delivery
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T17:19:32.946Z
+      completed: 2026-07-25T17:27:34.901Z
+    - id: run-agregator-games-vibecoding-007
+      scope: single
+      work_items:
+        - id: website-watchlist-ui
+          intent: unified-price-watchlist-mvp
+          mode: confirm
+      started: 2026-07-25T17:28:40.996Z
+      completed: 2026-07-25T17:47:06.937Z

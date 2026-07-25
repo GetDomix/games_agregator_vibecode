@@ -3,15 +3,60 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ExternalIdentity;
 use App\Models\TelegramLinkCode;
 use App\Models\User;
+use App\Services\DueGameRefreshDispatcher;
+use App\Services\TelegramAccountMergeService;
+use App\Services\TelegramOidcService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
 class TelegramController extends Controller
 {
+    public function oidcBegin(Request $request, TelegramOidcService $oidc): JsonResponse
+    {
+        return response()->json(['authorization_url' => $oidc->begin($request->user()?->id)]);
+    }
+
+    public function oidcCallback(
+        Request $request,
+        TelegramOidcService $oidc,
+        TelegramAccountMergeService $merge
+    ): Response
+    {
+        $data = $request->validate([
+            'state' => ['required', 'string'],
+            'code' => ['required', 'string'],
+        ]);
+
+        try {
+            $result = $oidc->callback($data['state'], $data['code'], $merge);
+            $token = $result['user']->createToken('telegram-oidc')->plainTextToken;
+
+            return $this->oidcPopupResponse([
+                'type' => 'igroscan:telegram-oidc',
+                'ok' => true,
+                'access_token' => $token,
+                'user' => $result['user']->toPublicArray(),
+                'created' => $result['created'],
+                'merged' => $result['merged'],
+                'report' => $result['report'],
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->oidcPopupResponse([
+                'type' => 'igroscan:telegram-oidc',
+                'ok' => false,
+                'detail' => 'Не удалось подтвердить вход Telegram',
+            ], 422);
+        }
+    }
+
     /** Authenticated user creates a one-time link code for the bot. */
     public function createLinkCode(Request $request): JsonResponse
     {
@@ -48,6 +93,10 @@ class TelegramController extends Controller
 
         return response()->json([
             'linked' => (bool) $u->telegram_chat_id,
+            'identity_linked' => ExternalIdentity::query()
+                ->where('user_id', $u->id)
+                ->where('provider', 'telegram')
+                ->exists(),
             'telegram_username' => $u->telegram_username,
             'telegram_linked_at' => $u->telegram_linked_at?->toIso8601String(),
             'radar_enabled' => (bool) $u->radar_enabled,
@@ -104,14 +153,16 @@ class TelegramController extends Controller
             return response()->json(['detail' => 'Код недействителен или просрочен'], 404);
         }
 
-        // free chat_id if linked to another account
-        User::query()->where('telegram_chat_id', $data['chat_id'])->update([
-            'telegram_chat_id' => null,
-            'telegram_username' => null,
-            'telegram_linked_at' => null,
-        ]);
-
         $user = $row->user;
+        $otherUser = User::query()
+            ->where('telegram_chat_id', $data['chat_id'])
+            ->whereKeyNot($user->id)
+            ->exists();
+
+        if ($otherUser) {
+            return response()->json(['detail' => 'Этот Telegram уже привязан к другому аккаунту'], 409);
+        }
+
         $user->telegram_chat_id = (string) $data['chat_id'];
         $user->telegram_username = $data['telegram_username'] ?? null;
         $user->telegram_linked_at = now();
@@ -129,13 +180,13 @@ class TelegramController extends Controller
         ]);
     }
 
-    /** Internal trigger for radar scan (optional; also artisan radar:scan). */
+    /** Compatibility trigger: dispatches canonical due work, never calls stores. */
     public function runScan(Request $request): JsonResponse
     {
         $this->assertServiceToken($request);
-        $stats = app(\App\Services\RadarScanService::class)->run();
+        $count = app(DueGameRefreshDispatcher::class)->dispatch();
 
-        return response()->json(['ok' => true, 'stats' => $stats]);
+        return response()->json(['ok' => true, 'queued' => $count]);
     }
 
     private function assertServiceToken(Request $request): void
@@ -145,5 +196,16 @@ class TelegramController extends Controller
         if ($expected === '' || ! hash_equals($expected, $got)) {
             throw new HttpResponseException(response()->json(['detail' => 'Unauthorized'], 401));
         }
+    }
+
+    /** Return the OIDC result to the website popup without putting a token in a URL. */
+    private function oidcPopupResponse(array $payload, int $status = 200): Response
+    {
+        $json = json_encode($payload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+        $html = '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Игроскан</title>'
+            .'<script>const payload='.$json.';if(window.opener){window.opener.postMessage(payload,window.location.origin);window.close();}</script>'
+            .'<p>Telegram подтверждён. Это окно можно закрыть.</p></html>';
+
+        return response($html, $status)->header('Content-Type', 'text/html; charset=UTF-8');
     }
 }

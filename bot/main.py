@@ -3,7 +3,7 @@
 
 - /start CODE  — привязка аккаунта с сайта
 - /help, /status
-- Периодический вызов Laravel radar scan (опционально)
+- Laravel владеет расписанием обновления цен
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import re
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from api_client import LaravelClient
 from config import get_settings
@@ -92,14 +91,6 @@ def make_handlers(api: LaravelClient):
     return cmd_start, cmd_help, cmd_status
 
 
-async def radar_job(api: LaravelClient) -> None:
-    try:
-        data = await api.run_radar_scan()
-        log.info("radar scan ok: %s", data.get("stats") or data)
-    except Exception as e:
-        log.error("radar scan failed: %s", e)
-
-
 async def main() -> None:
     settings = get_settings()
     bot = Bot(token=settings.bot_token)
@@ -110,15 +101,6 @@ async def main() -> None:
     dp.message.register(cmd_start, CommandStart())
     dp.message.register(cmd_help, Command("help"))
     dp.message.register(cmd_status, Command("status"))
-
-    scheduler = AsyncIOScheduler()
-    if settings.radar_trigger_hours > 0 and settings.radar_service_token:
-        hours = max(1, settings.radar_trigger_hours)
-        scheduler.add_job(radar_job, "interval", hours=hours, args=[api], id="radar")
-        scheduler.start()
-        log.info("APScheduler radar every %sh", hours)
-    else:
-        log.info("In-bot radar cron disabled (use php artisan schedule:work)")
 
     log.info("Bot @%s starting…", settings.bot_username)
     await dp.start_polling(bot)

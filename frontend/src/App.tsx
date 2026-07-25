@@ -4,6 +4,9 @@ import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from './api'
 import type { User } from './api'
 import { BRAND, BrandMark } from './brand'
+import { AlertSettingsModal } from './components/AlertSettingsModal'
+import { WatchlistAlerts } from './components/WatchlistAlerts'
+import type { AlertItem, AlertScope, FavoriteItem } from './watchlist'
 import './styles.css'
 
 type RecentItem = { q: string; appid?: number | null; at: number }
@@ -57,7 +60,8 @@ type PlansResponse = {
   promo_hint?: string
   checkout_message?: string
 }
-type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]; plati: Market; ggsel: Market; warnings: string[]; saved_to_history?: boolean; is_favorite?: boolean; deal?: Deal | null; quota?: Quota | null }
+type Freshness = { source: string; status: string; last_success_at?: string | null; next_refresh_at?: string | null }
+type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]; plati: Market; ggsel: Market; warnings: string[]; saved_to_history?: boolean; is_favorite?: boolean; deal?: Deal | null; quota?: Quota | null; refreshing?: boolean; freshness?: Freshness[] }
 type PopularItem = { query: string; game_name?: string | null; appid?: number | null; header_image?: string | null; count?: number }
 type Fav = { id: number; appid: number; game_name: string; header_image?: string | null; target_price_rub?: number | null; last_steam_price_rub?: number | null; price_below_target?: boolean }
 type Hist = { id: number; query: string; appid?: number | null; game_name?: string | null; header_image?: string | null; steam_price_rub?: number | null; plati_min_rub?: number | null; ggsel_min_rub?: number | null; created_at?: string }
@@ -140,16 +144,39 @@ export default function App() {
   const [suggestOpen, setSuggestOpen] = useState(false)
   const [tgStatus, setTgStatus] = useState<{
     linked: boolean
+    identity_linked?: boolean
     telegram_username?: string | null
     radar_enabled?: boolean
     bot_username?: string | null
   } | null>(null)
   const [tgBusy, setTgBusy] = useState(false)
+  const [watchlist, setWatchlist] = useState<FavoriteItem[]>([])
+  const [alertItems, setAlertItems] = useState<AlertItem[]>([])
+  const [alertModal, setAlertModal] = useState<{ favorite: FavoriteItem; create: boolean } | null>(null)
 
   const loggedIn = Boolean(token && user)
   const isPro = Boolean(
     user && (user.plan === 'pro' || user.plan === 'unlimited' || user.plan_label === 'Pro'),
   )
+
+  useEffect(() => {
+    const onTelegramOidc = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      const payload = event.data as { type?: string; ok?: boolean; detail?: string; access_token?: string; user?: User }
+      if (payload.type !== 'igroscan:telegram-oidc') return
+      if (!payload.ok || !payload.access_token || !payload.user) {
+        setToast(payload.detail || 'Не удалось подтвердить Telegram')
+        return
+      }
+      setSession(payload.access_token, payload.user)
+      setToken(payload.access_token)
+      setUser(payload.user)
+      setTgStatus((current) => (current ? { ...current, identity_linked: true } : current))
+      setToast('Telegram подтверждён — аккаунты объединены')
+    }
+    window.addEventListener('message', onTelegramOidc)
+    return () => window.removeEventListener('message', onTelegramOidc)
+  }, [])
   // Ads for everyone except active Pro
   const showAds = Boolean(ads?.enabled && !isPro)
 
@@ -208,10 +235,23 @@ export default function App() {
     }
   }, [])
 
+  const loadWatchlist = useCallback(async () => {
+    if (!getToken()) return
+    const [favorites, alerts] = await Promise.all([
+      api<{ items: FavoriteItem[] }>('/api/me/favorites'),
+      api<{ items: AlertItem[] }>('/api/me/alerts'),
+    ])
+    setWatchlist(favorites.items)
+    setAlertItems(alerts.items)
+  }, [])
+
   useEffect(() => {
-    if (loggedIn && view === 'cabinet') loadDashboard().catch(() => {})
+    if (loggedIn && view === 'cabinet') {
+      loadDashboard().catch(() => {})
+      loadWatchlist().catch(() => {})
+    }
     if (loggedIn && (view === 'cabinet' || view === 'radar')) loadTgStatus()
-  }, [loggedIn, view, loadDashboard, loadTgStatus])
+  }, [loggedIn, view, loadDashboard, loadWatchlist, loadTgStatus])
 
   useEffect(() => {
     if (loggedIn && view === 'admin' && user?.is_admin) {
@@ -347,23 +387,7 @@ export default function App() {
         await api(`/api/me/favorites/${steam.appid}`, { method: 'DELETE' })
         setResult({ ...result, is_favorite: false })
       } else {
-        await api('/api/me/favorites', {
-          method: 'POST',
-          body: JSON.stringify({
-            appid: steam.appid,
-            game_name: steam.name,
-            header_image: steam.header_image,
-            last_steam_price_rub: steam.price_rub,
-          }),
-        })
-        const target = prompt('Целевая цена Steam, ₽ (можно пропустить)')
-        if (target != null && target.trim() !== '' && !Number.isNaN(Number(target))) {
-          await api(`/api/me/favorites/${steam.appid}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ target_price_rub: Number(target) }),
-          })
-        }
-        setResult({ ...result, is_favorite: true })
+        setAlertModal({ favorite: { id: 0, appid: steam.appid, game_name: steam.name, header_image: steam.header_image }, create: true })
       }
       loadDashboard().catch(() => {})
     } catch (e) {
@@ -639,7 +663,7 @@ export default function App() {
               </section>
             )}
 
-            {loading && <div className="status">Собираем цены Steam, Plati и GGsel…</div>}
+            {loading && <div className="status">Ищем сохранённые цены…</div>}
             {error && <div className="status error">{error}</div>}
 
             {result && (
@@ -651,6 +675,7 @@ export default function App() {
                     ))}
                   </div>
                 )}
+                {result.refreshing && <div className="status" style={{ marginBottom: 12 }}>Игра поставлена на фоновое обновление. Цены появятся после следующего цикла.</div>}
 
                 <div className="results-meta">
                   {result.deal && (
@@ -1012,8 +1037,8 @@ export default function App() {
                     <span className="radar-step-n">2</span>
                     <h3>Привяжи Telegram</h3>
                     <p className="muted">
-                      Нажми кнопку ниже — откроется бот <strong>@igroscan_bot</strong> с кодом. Или скопируй код и отправь{' '}
-                      <code>/start КОД</code>.
+                      Сначала подтверди Telegram через официальный вход, затем открой бота <strong>@igroscan_bot</strong>,
+                      чтобы получать уведомления в чат.
                     </p>
                   </article>
                   <article className="panel radar-step">
@@ -1027,6 +1052,35 @@ export default function App() {
 
                 <div className="panel section radar-panel">
                   <h3 style={{ marginTop: 0 }}>Статус</h3>
+                  <p className={tgStatus?.identity_linked ? 'radar-status ok' : 'radar-status warn'}>
+                    {tgStatus?.identity_linked ? '✅ Telegram-аккаунт подтверждён' : '⚪ Telegram-аккаунт ещё не подтверждён'}
+                  </p>
+                  {!tgStatus?.identity_linked && (
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      disabled={tgBusy}
+                      onClick={async () => {
+                        const popup = window.open('about:blank', 'igroscan-telegram-oidc', 'width=520,height=720')
+                        if (!popup) {
+                          setToast('Браузер заблокировал окно Telegram')
+                          return
+                        }
+                        setTgBusy(true)
+                        try {
+                          const result = await api<{ authorization_url: string }>('/api/telegram/oidc/begin', { method: 'POST' })
+                          popup.location.href = result.authorization_url
+                        } catch (e) {
+                          popup.close()
+                          setToast(e instanceof Error ? e.message : 'Ошибка')
+                        } finally {
+                          setTgBusy(false)
+                        }
+                      }}
+                    >
+                      Подтвердить Telegram
+                    </button>
+                  )}
                   {tgStatus?.linked ? (
                     <>
                       <p className="radar-status ok">
@@ -1321,11 +1375,24 @@ export default function App() {
                 {tgStatus?.linked
                   ? `Привязан${tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''} · уведомления ${tgStatus.radar_enabled ? 'вкл' : 'выкл'}`
                   : 'Не привязан — не получишь алерты о скидках Steam.'}
+                {tgStatus?.identity_linked ? ' · Telegram-аккаунт подтверждён' : ' · Telegram-аккаунт ещё не подтверждён'}
               </p>
               <button type="button" className="btn primary" onClick={() => setView('radar')}>
                 Открыть радар
               </button>
             </div>
+
+            <WatchlistAlerts
+              favorites={watchlist}
+              alerts={alertItems}
+              onEdit={(favorite) => setAlertModal({ favorite, create: false })}
+              onSearch={runSearch}
+              onRearm={async (alert) => {
+                await api(`/api/me/favorites/${alert.favorite.appid}/alert/rearm`, { method: 'POST' })
+                await loadWatchlist()
+                setToast('Алерт снова активен')
+              }}
+            />
 
             {dashboard?.price_hits && dashboard.price_hits.length > 0 && (
               <div className="panel section">
@@ -1396,14 +1463,17 @@ export default function App() {
                   </button>
                 </div>
                 <div className="list-cards" style={{ marginTop: 12 }}>
-                  {(dashboard?.favorites_preview || []).map((f) => (
+                  {watchlist.map((f) => (
                     <article key={f.appid} className="list-card">
                       {f.header_image ? <img src={f.header_image} alt="" /> : <div className="ph" />}
                       <div>
-                        <strong>{f.game_name} {f.price_below_target ? <span className="badge hot">на цели</span> : null}</strong>
-                        <span className="offer-meta">Steam {rub(f.last_steam_price_rub)} · цель {rub(f.target_price_rub)}</span>
+                        <strong>{f.game_name} {f.alert?.status === 'triggered' ? <span className="badge hot">сработал</span> : null}</strong>
+                        <span className="offer-meta">цель {rub(f.alert?.target_value)} · {f.alert?.scopes?.map((scope) => `${scope.source}/${scope.offer_kind}`).join(' · ')}</span>
+                        {f.release_status === 'announced' ? <span className="offer-meta">⏳ Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
+                        {f.freshness?.map((source) => <span className="offer-meta" key={source.source}>{source.source}: {source.status}{source.last_error ? ` · ${source.last_error}` : ''}</span>)}
                         <div className="actions">
                           <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>Цены</button>
+                          <button type="button" className="btn ghost sm" onClick={() => setAlertModal({ favorite: f, create: false })}>Настроить</button>
                           <button
                             type="button"
                             className="btn ghost sm"
@@ -1418,7 +1488,7 @@ export default function App() {
                       </div>
                     </article>
                   ))}
-                  {!dashboard?.favorites_preview?.length && <p className="muted">Добавляй ☆ на карточке Steam.</p>}
+                  {!watchlist.length && <p className="muted">Добавляй ☆ на карточке Steam.</p>}
                 </div>
               </div>
             </div>
@@ -1428,6 +1498,29 @@ export default function App() {
           <AdSlot slot={adByPlacement('footer')!} label={ads?.label} />
         )}
       </main>
+
+      {alertModal && (
+        <AlertSettingsModal
+          favorite={alertModal.favorite}
+          onClose={() => setAlertModal(null)}
+          onSave={async ({ target_value, scopes }: { target_value: number | null; scopes: AlertScope[] }) => {
+            const favorite = alertModal.favorite
+            if (alertModal.create) {
+              await api('/api/me/favorites', {
+                method: 'POST',
+                body: JSON.stringify({ appid: favorite.appid, game_name: favorite.game_name, header_image: favorite.header_image, alert: { target_value, scopes } }),
+              })
+              if (result) setResult({ ...result, is_favorite: true })
+            } else {
+              await api(`/api/me/favorites/${favorite.appid}`, { method: 'PATCH', body: JSON.stringify({ alert: { target_value, scopes } }) })
+            }
+            setAlertModal(null)
+            await loadWatchlist()
+            loadDashboard().catch(() => {})
+            setToast('Настройки алерта сохранены')
+          }}
+        />
+      )}
 
       <footer className="shell footer has-tabbar">
         <p>

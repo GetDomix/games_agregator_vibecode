@@ -36,7 +36,8 @@ cp .env.example .env
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_BOT_USERNAME=igroscan_radar_bot
 RADAR_SERVICE_TOKEN=длинный_секрет
-RADAR_INTERVAL_HOURS=6
+PRICE_REFRESH_INTERVAL_HOURS=3
+ANNOUNCED_STEAM_REFRESH_HOURS=24
 ```
 
 ## Запуск
@@ -48,8 +49,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Скан цен: `php artisan radar:scan` или `php artisan schedule:work` (cron каждый N часов).  
-Бот также может дергать `POST /api/internal/radar/run` раз в `RADAR_TRIGGER_HOURS`.
+Расписание цен и проверку алертов запускает Laravel: `php artisan schedule:work`. Бот только связывает Telegram-аккаунт и принимает уведомления; он не вызывает магазины и не запускает общий скан.
 
 ## Флоу пользователя
 
