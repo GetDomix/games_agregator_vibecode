@@ -38,11 +38,13 @@ intents:
         completed_at: 2026-07-26T12:55:20.461Z
       - id: telegram-menu-navigation
         title: Главное меню и навигация бота без команд
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
           - telegram-price-card
+        run_id: run-agregator-games-vibecoding-015
+        completed_at: 2026-07-26T16:02:24.357Z
       - id: telegram-watchlist-alerts
         title: Избранное и алерты как разделы Telegram-бота
         status: pending
@@ -312,3 +314,11 @@ runs:
           mode: confirm
       started: 2026-07-26T12:50:41.265Z
       completed: 2026-07-26T12:55:20.461Z
+    - id: run-agregator-games-vibecoding-015
+      scope: single
+      work_items:
+        - id: telegram-menu-navigation
+          intent: telegram-bot-experience
+          mode: confirm
+      started: 2026-07-26T15:31:54.254Z
+      completed: 2026-07-26T16:02:24.357Z

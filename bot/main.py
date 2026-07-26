@@ -17,9 +17,10 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from api_client import LaravelApiError, LaravelClient
 from card_renderer import render_card
 from config import get_settings
-from ui import (SCOPE_LABELS, alerts_keyboard, candidates_keyboard, card_keyboard,
+from ui import (MENU_ALERTS, MENU_FAVORITES, MENU_HELP, MENU_HOME, MENU_SEARCH,
+                SCOPE_LABELS, alerts_keyboard, candidates_keyboard, card_keyboard,
                 favorites_keyboard, format_alerts, format_card_details, format_favorites,
-                scopes_keyboard)
+                main_menu_keyboard, scopes_keyboard)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("igroscan-bot")
@@ -54,6 +55,14 @@ async def session(api: LaravelClient, update: Message | CallbackQuery) -> bool:
 
 def actor(update: Message | CallbackQuery) -> int:
     return update.from_user.id
+
+
+async def show_main_menu(message: Message) -> None:
+    await message.answer(
+        "👋 <b>Игроскан</b>\n\nВыбери действие кнопкой или напиши название игры — я покажу сохранённую карточку цен.",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 async def show_card(api: LaravelClient, message: Message, telegram_user_id: int, appid: int, query: str | None = None) -> None:
@@ -94,10 +103,10 @@ def make_handlers(api: LaravelClient):
                 return
         elif not await session(api, message):
             return
-        await message.answer("👋 <b>Игроскан</b>\n\nНапиши название игры — я покажу карточку цен Steam, Plati и GGsel.\n\nКоманды: /search, /favorites, /alerts, /help", parse_mode="HTML")
+        await show_main_menu(message)
 
     async def cmd_help(message: Message) -> None:
-        await message.answer("<b>Игроскан в Telegram</b>\n\n/search — найти игру\n/favorites — общее избранное\n/alerts — активные и сработавшие alert-ы\n\nПосле поиска выбери игру: бот пришлёт фото-карточку и даст настроить площадки, виды предложений и целевую цену.", parse_mode="HTML")
+        await message.answer("<b>Как пользоваться</b>\n\nВыбери «Найти игру» и напиши название. На карточке можно добавить игру в общее избранное, выбрать виды предложений и задать цену.\n\n«Избранное» и «Алерты» показывают те же данные, что и сайт.", parse_mode="HTML", reply_markup=main_menu_keyboard())
 
     async def cmd_search(message: Message, state: FSMContext) -> None:
         if not await session(api, message):
@@ -257,6 +266,22 @@ def make_handlers(api: LaravelClient):
     async def cmd_alerts(message: Message) -> None:
         await alerts(message)
 
+    async def menu_search(message: Message, state: FSMContext) -> None:
+        await cmd_search(message, state)
+
+    async def menu_favorites(message: Message) -> None:
+        await favorites(message)
+
+    async def menu_alerts(message: Message) -> None:
+        await alerts(message)
+
+    async def menu_help(message: Message) -> None:
+        await cmd_help(message)
+
+    async def menu_home(message: Message) -> None:
+        if await session(api, message):
+            await show_main_menu(message)
+
     return locals()
 
 
@@ -269,6 +294,11 @@ async def main() -> None:
     dp.message.register(handlers["cmd_search"], Command("search"))
     dp.message.register(handlers["cmd_favorites"], Command("favorites"))
     dp.message.register(handlers["cmd_alerts"], Command("alerts"))
+    dp.message.register(handlers["menu_search"], F.text == MENU_SEARCH)
+    dp.message.register(handlers["menu_favorites"], F.text == MENU_FAVORITES)
+    dp.message.register(handlers["menu_alerts"], F.text == MENU_ALERTS)
+    dp.message.register(handlers["menu_help"], F.text == MENU_HELP)
+    dp.message.register(handlers["menu_home"], F.text == MENU_HOME)
     dp.callback_query.register(handlers["pick"], F.data.startswith("pick:"))
     dp.callback_query.register(handlers["refresh_card"], F.data.startswith("card:"))
     dp.callback_query.register(handlers["begin_watch"], F.data.startswith("watch:"))

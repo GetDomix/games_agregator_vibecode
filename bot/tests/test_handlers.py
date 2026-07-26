@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 
 from api_client import LaravelApiError
 from main import WatchSetup, make_handlers, session, show_card
+from ui import MENU_FAVORITES, MENU_HOME, MENU_SEARCH
 
 
 def make_message(*, text: str = "", chat_type: ChatType = ChatType.PRIVATE) -> Message:
@@ -40,6 +41,47 @@ def make_state(**data):
 
 
 class HandlerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_start_shows_main_menu_instead_of_command_list(self):
+        api = MagicMock()
+        api.session = AsyncMock(return_value={})
+        message = make_message()
+
+        await make_handlers(api)["cmd_start"](message, SimpleNamespace(args=None))
+
+        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].keyboard[0][0].text, MENU_SEARCH)
+        self.assertNotIn("/search", message.answer.await_args.args[0])
+
+    async def test_menu_search_reuses_the_normal_search_flow(self):
+        api = MagicMock()
+        api.session = AsyncMock(return_value={})
+        message = make_message(text=MENU_SEARCH)
+        state = make_state()
+
+        await make_handlers(api)["menu_search"](message, state)
+
+        state.clear.assert_awaited_once_with()
+        self.assertIn("Напиши название игры", message.answer.await_args.args[0])
+
+    async def test_menu_favorites_opens_shared_favorites(self):
+        api = MagicMock()
+        api.session = AsyncMock(return_value={})
+        api.favorites = AsyncMock(return_value={"items": []})
+        message = make_message(text=MENU_FAVORITES)
+
+        await make_handlers(api)["menu_favorites"](message)
+
+        api.favorites.assert_awaited_once_with(12)
+        self.assertIn("В избранном пока пусто", message.answer.await_args.args[0])
+
+    async def test_menu_home_keeps_reply_menu_available(self):
+        api = MagicMock()
+        api.session = AsyncMock(return_value={})
+        message = make_message(text=MENU_HOME)
+
+        await make_handlers(api)["menu_home"](message)
+
+        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].keyboard[0][0].text, MENU_SEARCH)
+
     async def test_show_card_sends_one_photo_with_caption_and_actions(self):
         api = MagicMock()
         api.card = AsyncMock(return_value={

@@ -3,7 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Iterable
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup,
+                           KeyboardButton, ReplyKeyboardMarkup)
 
 
 SCOPE_LABELS = {
@@ -17,6 +18,24 @@ SCOPE_LABELS = {
     ("ggsel", "account"): "GGsel: аккаунт",
     ("ggsel", "rent"): "GGsel: аренда",
 }
+
+MENU_SEARCH = "🔎 Найти игру"
+MENU_FAVORITES = "📚 Избранное"
+MENU_ALERTS = "🔔 Алерты"
+MENU_HELP = "❔ Помощь"
+MENU_HOME = "🏠 Главное меню"
+
+
+def main_menu_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=MENU_SEARCH)],
+            [KeyboardButton(text=MENU_FAVORITES), KeyboardButton(text=MENU_ALERTS)],
+            [KeyboardButton(text=MENU_HELP), KeyboardButton(text=MENU_HOME)],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Напиши название игры или выбери действие",
+    )
 
 
 def price(value: object | None) -> str:

@@ -4,9 +4,12 @@ title: Главное меню и навигация бота без коман�
 intent: telegram-bot-experience
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [telegram-price-card]
+status: completed
+depends_on:
+  - telegram-price-card
 created: 2026-07-26T12:05:13.397Z
+run_id: run-agregator-games-vibecoding-015
+completed_at: 2026-07-26T16:02:24.357Z
 ---
 
 # Work Item: Главное меню и навигация бота без команд
