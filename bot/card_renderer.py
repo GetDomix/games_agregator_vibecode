@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from io import BytesIO
-from math import ceil
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from ui import price
 
-WIDTH, HEIGHT = 1280, 720
-COVER_HEIGHT = 330
+WIDTH, HEIGHT = 1672, 942
+COVER_HEIGHT = 438
 ASSETS = Path(__file__).with_name("assets")
 PALETTE = {
     "paper": "#101722",
@@ -47,8 +46,8 @@ def _fit(text: str, font: ImageFont.ImageFont, max_width: int) -> str:
 
 
 def _cover(image_bytes: bytes | None) -> Image.Image:
-    """Keep the whole cover visible and add a restrained illustrated texture."""
-    canvas = Image.new("RGB", (WIDTH, COVER_HEIGHT), "#202c3b")
+    """Use the game's real wide illustration as the visual header."""
+    canvas = Image.new("RGB", (WIDTH, COVER_HEIGHT), "#111722")
     if not image_bytes:
         return canvas
     try:
@@ -56,24 +55,7 @@ def _cover(image_bytes: bytes | None) -> Image.Image:
     except Exception:
         return canvas
 
-    background = ImageOps.fit(image, canvas.size, method=Image.Resampling.LANCZOS)
-    background = ImageEnhance.Color(background).enhance(0.65).filter(ImageFilter.GaussianBlur(20))
-    canvas.paste(background)
-
-    illustrated = ImageOps.posterize(image, 5)
-    illustrated = ImageEnhance.Contrast(illustrated).enhance(1.15)
-    styled = Image.blend(image, illustrated, 0.28)
-    fitted = ImageOps.contain(styled, canvas.size, method=Image.Resampling.LANCZOS)
-    offset = ((WIDTH - fitted.width) // 2, (COVER_HEIGHT - fitted.height) // 2)
-    canvas.paste(fitted, offset)
-
-    texture = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    texture_draw = ImageDraw.Draw(texture)
-    for x in range(18, WIDTH, 28):
-        for y in range(16, COVER_HEIGHT, 28):
-            texture_draw.ellipse((x, y, x + 2, y + 2), fill=(244, 239, 231, 28))
-    texture_draw.rectangle((0, 0, WIDTH - 1, COVER_HEIGHT - 1), outline=(244, 239, 231, 70), width=2)
-    return Image.alpha_composite(canvas.convert("RGBA"), texture).convert("RGB")
+    return ImageOps.fit(image, canvas.size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
 
 
 def _groups(card: dict, source: str) -> list[dict]:
@@ -86,19 +68,6 @@ def _groups(card: dict, source: str) -> list[dict]:
 def _kind_label(group: dict) -> str:
     labels = {"official": "Официально", "key": "Ключ", "gift": "Гифт", "account": "Аккаунт", "rent": "Аренда"}
     return str(group.get("label") or labels.get(group.get("kind"), group.get("kind") or "Предложение"))
-
-
-def _source_status(card: dict, source: str, groups: list[dict]) -> str:
-    if groups and any(group.get("min_price") is not None for group in groups):
-        return ""
-    market = card.get(source) or {}
-    if market.get("error"):
-        return "временно недоступен"
-    if card.get("refreshing"):
-        return "обновляется"
-    if source != "steam" and ((card.get("steam") or {}).get("note")):
-        return "ждём релиз"
-    return "нет цен"
 
 
 def _price_tone(value: object | None, steam_price: object | None) -> str:
@@ -128,7 +97,22 @@ def _logo(source: str, size: int) -> Image.Image:
     return ImageOps.contain(logo, (size, size), method=Image.Resampling.LANCZOS)
 
 
-def _draw_market(
+def _draw_store_identity(
+    result: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    source: str,
+    label: str,
+    box: tuple[int, int, int, int],
+    meta_font: ImageFont.ImageFont,
+) -> None:
+    x1, y1, x2, y2 = box
+    logo = _logo(source, 74)
+    logo_x = x1 + (x2 - x1 - logo.width) // 2
+    result.paste(logo, (logo_x, y1 + 12), logo)
+    draw.text(((x1 + x2) // 2, y2 - 13), label, font=meta_font, fill=PALETTE["ink"], anchor="ms")
+
+
+def _draw_offer_row(
     result: Image.Image,
     draw: ImageDraw.ImageDraw,
     card: dict,
@@ -140,69 +124,53 @@ def _draw_market(
     meta_font: ImageFont.ImageFont,
 ) -> None:
     x1, y1, x2, y2 = box
-    groups = _groups(card, source)
-    status = _source_status(card, source, groups)
-    draw.rounded_rectangle(box, radius=14, fill=PALETTE["panel"], outline=PALETTE["panel_border"], width=2)
-    logo = _logo(source, 48)
-    result.paste(logo, (x1 + 18, y1 + 8), logo)
-    draw.text((x1 + 42, y2 - 12), _fit(label, _font(9, True), 62), font=_font(9, True), fill=PALETTE["muted"], anchor="ms")
-    if status:
-        draw.text((x1 + 88, y1 + 18), status.upper(), font=kind_font, fill=PALETTE["muted"])
-        return
-
+    draw.rounded_rectangle(box, radius=14, fill=PALETTE["panel_deep"], outline=PALETTE["panel_border"], width=2)
+    identity_right = x1 + 170
+    _draw_store_identity(result, draw, source, label, (x1, y1, identity_right, y2), meta_font)
+    draw.line((identity_right, y1 + 6, identity_right, y2 - 6), fill=PALETTE["panel_border"], width=2)
+    groups_by_kind = {str(group.get("kind")): group for group in _groups(card, source)}
     steam_price = (card.get("steam") or {}).get("price_rub")
-    if source == "steam":
-        draw.text((x1 + 88, y1 + 8), "ОФИЦИАЛЬНАЯ ЦЕНА", font=meta_font, fill=PALETTE["muted"])
-        draw.text((x1 + 88, y1 + 24), price(steam_price), font=price_font, fill=PALETTE["ink"])
-        return
-
-    kinds_x = x1 + 88
-    kind_width = x2 - kinds_x - 20
-    columns = 3 if len(groups) > 4 else 2
-    chip_width = kind_width if columns == 1 else (kind_width - 10) // 2
-    rows = ceil(len(groups) / columns)
-    chip_gap = 4
-    chip_height = max(30, (y2 - y1 - 14 - chip_gap * max(rows - 1, 0)) // max(rows, 1))
-    for index, group in enumerate(groups):
-        row, column = divmod(index, columns)
-        chip_x = kinds_x + column * (chip_width + 10)
-        chip_y = y1 + 7 + row * (chip_height + chip_gap)
-        label_text = _fit(_kind_label(group).upper(), meta_font, chip_width - 12)
-        count = group.get("count") or group.get("offer_count")
-        suffix = f" · {count}" if count and source != "steam" else ""
-        draw.rounded_rectangle((chip_x, chip_y, chip_x + chip_width, chip_y + chip_height), radius=8, fill=PALETTE["panel_deep"])
-        amount = group.get("min_price")
-        draw.text((chip_x + 10, chip_y + 4), label_text, font=meta_font, fill=PALETTE["muted"])
-        draw.text((chip_x + 10, chip_y + 17), _fit(price(amount), price_font, chip_width - 14), font=price_font, fill=_price_tone(amount, steam_price))
-        if suffix:
-            draw.text((chip_x + chip_width - 9, chip_y + chip_height - 5), suffix.strip(" ·"), font=meta_font, fill=PALETTE["muted"], anchor="rs")
+    offer_left = identity_right
+    offer_width = (x2 - offer_left) // 4
+    for index, kind in enumerate(("key", "gift", "account", "rent")):
+        cell_left = offer_left + index * offer_width
+        cell_right = x2 if index == 3 else cell_left + offer_width
+        if index:
+            draw.line((cell_left, y1 + 6, cell_left, y2 - 6), fill=PALETTE["panel_border"], width=2)
+        group = groups_by_kind.get(kind)
+        amount = group.get("min_price") if group else None
+        count = (group.get("count") or group.get("offer_count")) if group else None
+        draw.text((cell_left + 38, y1 + 24), _kind_label({"kind": kind}).upper(), font=kind_font, fill=PALETTE["muted"])
+        draw.text((cell_left + 38, y1 + 57), price(amount) if amount is not None else "—", font=price_font, fill=_price_tone(amount, steam_price))
+        if count:
+            tone = _price_tone(amount, steam_price)
+            arrow = "↑" if tone == PALETTE["bad"] else "↓"
+            draw.text((cell_right - 38, y1 + 70), f"{arrow} {count}", font=kind_font, fill=tone, anchor="rs")
 
 
 def render_card(card: dict, cover_bytes: bytes | None = None) -> bytes:
     result = Image.new("RGB", (WIDTH, HEIGHT), PALETTE["paper"])
     result.paste(_cover(cover_bytes), (0, 0))
     draw = ImageDraw.Draw(result)
-    draw.rounded_rectangle((0, COVER_HEIGHT - 24, WIDTH, HEIGHT), radius=28, fill=PALETTE["paper"])
-    draw.rectangle((0, COVER_HEIGHT, WIDTH, HEIGHT), fill=PALETTE["paper"])
-    draw.rectangle((0, COVER_HEIGHT, WIDTH, COVER_HEIGHT + 4), fill=PALETTE["signal"])
+    panel = (42, COVER_HEIGHT, WIDTH - 42, HEIGHT - 30)
+    draw.rounded_rectangle(panel, radius=18, fill=PALETTE["paper"], outline=PALETTE["panel_border"], width=2)
 
-    title_font, price_font = _font(30, True), _font(20, True)
-    kind_font, meta_font = _font(14, True), _font(11, True)
+    title_font, price_font = _font(42, True), _font(42, True)
+    kind_font, meta_font = _font(20, True), _font(17, True)
     steam = card.get("steam") or {}
-    name = _fit(str(steam.get("name") or "Игра"), title_font, WIDTH - 360)
-    draw.text((36, COVER_HEIGHT + 28), name, font=title_font, fill=PALETTE["ink"])
-    status = "ЕЩЁ НЕ ВЫШЛА" if steam.get("note") else "ЦЕНЫ ИЗ СЕРВЕРНОГО ХРАНИЛИЩА"
-    draw.text((38, COVER_HEIGHT + 69), status, font=meta_font, fill=PALETTE["muted"])
-    draw.rounded_rectangle((WIDTH - 204, COVER_HEIGHT + 28, WIDTH - 36, COVER_HEIGHT + 60), radius=16, fill=PALETTE["signal"])
-    draw.text((WIDTH - 184, COVER_HEIGHT + 37), "ИГРОСКАН", font=kind_font, fill="white")
+    name = _fit(str(steam.get("name") or "Игра"), title_font, WIDTH - 180)
+    draw.text((90, COVER_HEIGHT + 26), name, font=title_font, fill=PALETTE["ink"])
 
-    top = COVER_HEIGHT + 94
-    steam_box = (36, top, WIDTH - 36, top + 50)
-    plati_box = (36, top + 56, WIDTH - 36, top + 160)
-    ggsel_box = (36, top + 166, WIDTH - 36, HEIGHT - 18)
-    _draw_market(result, draw, card, "steam", "Steam", steam_box, price_font, kind_font, meta_font)
-    _draw_market(result, draw, card, "plati", "Plati.Market", plati_box, price_font, kind_font, meta_font)
-    _draw_market(result, draw, card, "ggsel", "GGSEL", ggsel_box, price_font, kind_font, meta_font)
+    steam_box = (84, COVER_HEIGHT + 74, WIDTH - 84, COVER_HEIGHT + 194)
+    draw.rounded_rectangle(steam_box, radius=14, fill=PALETTE["panel_deep"], outline=PALETTE["panel_border"], width=2)
+    _draw_store_identity(result, draw, "steam", "Steam", (steam_box[0], steam_box[1], steam_box[0] + 170, steam_box[3]), meta_font)
+    draw.line((steam_box[0] + 170, steam_box[1] + 6, steam_box[0] + 170, steam_box[3] - 6), fill=PALETTE["panel_border"], width=2)
+    steam_price = steam.get("price_rub")
+    draw.text((steam_box[0] + 208, steam_box[1] + 27), "ОФИЦИАЛЬНАЯ ЦЕНА", font=kind_font, fill=PALETTE["muted"])
+    draw.text((steam_box[0] + 208, steam_box[1] + 61), price(steam_price) if steam_price is not None else "—", font=price_font, fill=PALETTE["ink"])
+
+    _draw_offer_row(result, draw, card, "plati", "Plati.Market", (84, COVER_HEIGHT + 202, WIDTH - 84, COVER_HEIGHT + 322), price_font, kind_font, meta_font)
+    _draw_offer_row(result, draw, card, "ggsel", "GGSEL", (84, COVER_HEIGHT + 334, WIDTH - 84, COVER_HEIGHT + 454), price_font, kind_font, meta_font)
 
     stream = BytesIO()
     result.save(stream, format="PNG", optimize=True)

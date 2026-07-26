@@ -6,4 +6,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-co
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY config.py api_client.py card_renderer.py ui.py main.py ./
+COPY assets ./assets
 CMD ["python", "main.py"]
