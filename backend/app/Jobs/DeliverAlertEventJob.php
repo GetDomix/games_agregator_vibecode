@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
@@ -41,11 +42,23 @@ class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
         $delivery = $event->delivery;
 
         if (! $delivery || in_array($delivery->status, [AlertDelivery::STATUS_SENT, AlertDelivery::STATUS_SKIPPED], true)) {
+            Log::info('alert_delivery_replay_skipped', [
+                'event_id' => $event->id,
+                'delivery_id' => $delivery?->id,
+                'status' => $delivery?->status,
+            ]);
+
             return;
         }
 
         if (! $event->user->telegram_chat_id) {
             $delivery->update(['status' => AlertDelivery::STATUS_SKIPPED, 'last_error' => 'Telegram chat is not linked']);
+            Log::warning('alert_delivery_skipped', [
+                'event_id' => $event->id,
+                'delivery_id' => $delivery->id,
+                'attempts' => $delivery->attempts,
+                'reason' => 'telegram_chat_not_linked',
+            ]);
 
             return;
         }
@@ -57,6 +70,11 @@ class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
         }
 
         $delivery->update(['status' => AlertDelivery::STATUS_SENT, 'sent_at' => now(), 'last_error' => null]);
+        Log::info('alert_delivery_sent', [
+            'event_id' => $event->id,
+            'delivery_id' => $delivery->id,
+            'attempts' => $delivery->attempts,
+        ]);
     }
 
     public function failed(\Throwable $exception): void
@@ -65,6 +83,13 @@ class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
             'status' => AlertDelivery::STATUS_FAILED,
             'last_error' => Str::limit($exception->getMessage(), 1000),
             'updated_at' => now(),
+        ]);
+        $delivery = AlertDelivery::query()->where('alert_event_id', $this->eventId)->first();
+        Log::error('alert_delivery_failed', [
+            'event_id' => $this->eventId,
+            'delivery_id' => $delivery?->id,
+            'attempts' => $delivery?->attempts,
+            'error_class' => $exception::class,
         ]);
     }
 

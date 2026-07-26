@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalIdentity;
 use App\Models\TelegramLinkCode;
 use App\Models\User;
-use App\Services\DueGameRefreshDispatcher;
 use App\Services\TelegramAccountMergeService;
 use App\Services\TelegramOidcService;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -31,8 +30,7 @@ class TelegramController extends Controller
         Request $request,
         TelegramOidcService $oidc,
         TelegramAccountMergeService $merge
-    ): Response
-    {
+    ): Response {
         $data = $request->validate([
             'state' => ['required', 'string'],
             'code' => ['required', 'string'],
@@ -207,15 +205,6 @@ class TelegramController extends Controller
             'display_name' => $user->display_name ?: $user->name,
             'email' => $user->email,
         ]);
-    }
-
-    /** Compatibility trigger: dispatches canonical due work, never calls stores. */
-    public function runScan(Request $request): JsonResponse
-    {
-        $this->assertServiceToken($request);
-        $count = app(DueGameRefreshDispatcher::class)->dispatch();
-
-        return response()->json(['ok' => true, 'queued' => $count]);
     }
 
     private function assertServiceToken(Request $request): void

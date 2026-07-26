@@ -144,7 +144,6 @@ class AggregatorService
             'saved_to_history' => false,
             'is_favorite' => false,
             'deal' => $deal,
-            'quota' => null,
         ];
     }
 

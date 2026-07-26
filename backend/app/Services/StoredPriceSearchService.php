@@ -52,7 +52,7 @@ class StoredPriceSearchService
         return [
             'query' => $query, 'steam' => $steam, 'candidates' => [], 'plati' => $plati, 'ggsel' => $ggsel,
             'warnings' => $warnings, 'saved_to_history' => false, 'is_favorite' => false,
-            'deal' => DealScoreService::compute($steamValue, $plati, $ggsel), 'quota' => null,
+            'deal' => DealScoreService::compute($steamValue, $plati, $ggsel),
             'refreshing' => $stateBySource->contains(fn ($state) => $state->status === GameSourceState::STATUS_PENDING),
             'freshness' => $stateBySource->map(fn ($state) => ['source' => $state->source, 'status' => $state->status, 'last_success_at' => $state->last_success_at?->toIso8601String(), 'next_refresh_at' => $state->next_refresh_at?->toIso8601String()])->values(),
         ];

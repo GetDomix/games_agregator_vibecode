@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\DailySearchQuota;
 use App\Models\Favorite;
 use App\Models\Game;
 use App\Models\PriceSnapshot;
@@ -36,13 +35,6 @@ class PriceController extends Controller
         return response()->json(['query' => $q, 'candidates' => $candidates, 'meta' => ['discovery_used' => $discovery]]);
     }
 
-    public function quota(Request $request): JsonResponse
-    {
-        $info = $this->quotaInfo(Auth::guard('sanctum')->user(), $request->ip());
-
-        return response()->json(['quota' => $info]);
-    }
-
     public function prices(Request $request, GameRefreshRequestService $refresh): JsonResponse
     {
         $q = trim((string) $request->query('q', ''));
@@ -57,12 +49,6 @@ class PriceController extends Controller
 
         $user = Auth::guard('sanctum')->user();
 
-        try {
-            $quota = $this->consumeQuota($user, $request->ip());
-        } catch (\RuntimeException $e) {
-            return response()->json(['detail' => $e->getMessage()], 429);
-        }
-
         $game = $appid ? Game::query()->where('steam_appid', $appid)->first() : null;
         if (! $game && $appid) {
             $game = $refresh->requestUnknown($appid, $q);
@@ -74,11 +60,10 @@ class PriceController extends Controller
             }
         }
         if (! $game) {
-            return response()->json(['query' => $q, 'steam' => null, 'candidates' => [], 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => ['Игра не найдена в локальном каталоге. Выберите её из подсказок Steam.'], 'refreshing' => false, 'quota' => $quota]);
+            return response()->json(['query' => $q, 'steam' => null, 'candidates' => [], 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => ['Игра не найдена в локальном каталоге. Выберите её из подсказок Steam.'], 'refreshing' => false]);
         }
         $result = $this->stored->result($game, $q);
 
-        $result['quota'] = $quota;
         if ($user) {
             $result['saved_to_history'] = $this->saveHistory($user, $result);
             $steamAppid = $result['steam']['appid'] ?? $appid;
@@ -88,68 +73,6 @@ class PriceController extends Controller
         }
 
         return response()->json($result);
-    }
-
-    private function quotaInfo(?User $user, ?string $ip): array
-    {
-        $isGuest = $user === null;
-        $isPro = $user?->hasActivePro() ?? false;
-        $limit = $isGuest
-            ? (int) config('gpa.guest_searches_per_day', 5)
-            : $user->dailySearchLimit();
-        $unlimited = ! $isGuest && $limit === null;
-        $key = $isGuest ? 'ip:'.($ip ?: 'unknown') : 'user:'.$user->id;
-        $day = now()->utc()->format('Y-m-d');
-        $row = DailySearchQuota::query()->where('quota_key', $key)->where('day', $day)->first();
-        $used = (int) ($row->count ?? 0);
-
-        return [
-            'limit' => $unlimited ? null : $limit,
-            'used' => $used,
-            'remaining' => $unlimited ? null : max(0, (int) $limit - $used),
-            'is_guest' => $isGuest,
-            'is_pro' => $isPro,
-            'unlimited' => $unlimited,
-            'plan' => $isGuest ? 'guest' : ($isPro ? 'pro' : 'free'),
-            'reset_hint' => $unlimited ? 'без дневного лимита (Pro)' : 'обновится завтра (UTC)',
-            'upgrade_hint' => $unlimited
-                ? null
-                : ($isGuest
-                    ? 'Зарегистрируйся — больше поисков. Pro снимает лимит.'
-                    : 'Pro — без дневного лимита. Промокод KEYSIGNAL-PRO в кабинете.'),
-        ];
-    }
-
-    private function consumeQuota(?User $user, ?string $ip): array
-    {
-        $info = $this->quotaInfo($user, $ip);
-        if (! $info['unlimited'] && ($info['remaining'] ?? 0) <= 0) {
-            throw new \RuntimeException(
-                $info['is_guest']
-                    ? "Лимит гостя: {$info['limit']} поисков/день. Зарегистрируйся — больше поисков, или возьми Pro."
-                    : "Дневной лимит Free: {$info['limit']} поисков. Оформи Pro (кабинет → тарифы) или промокод KEYSIGNAL-PRO."
-            );
-        }
-        $key = $info['is_guest'] ? 'ip:'.($ip ?: 'unknown') : 'user:'.$user->id;
-        $day = now()->utc()->format('Y-m-d');
-        $row = DailySearchQuota::query()->firstOrCreate(
-            ['quota_key' => $key, 'day' => $day],
-            ['count' => 0]
-        );
-        $row->increment('count');
-        $used = (int) $row->fresh()->count;
-
-        return [
-            'limit' => $info['limit'],
-            'used' => $used,
-            'remaining' => $info['unlimited'] ? null : max(0, (int) $info['limit'] - $used),
-            'is_guest' => $info['is_guest'],
-            'is_pro' => $info['is_pro'],
-            'unlimited' => $info['unlimited'],
-            'plan' => $info['plan'],
-            'reset_hint' => $info['reset_hint'],
-            'upgrade_hint' => $info['upgrade_hint'],
-        ];
     }
 
     private function saveHistory(User $user, array $result): bool

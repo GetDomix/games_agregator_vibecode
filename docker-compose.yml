@@ -47,14 +47,14 @@ services:
       SESSION_DRIVER: database
       CACHE_STORE: database
       QUEUE_CONNECTION: database
+      DB_QUEUE_RETRY_AFTER: ${DB_QUEUE_RETRY_AFTER:-120}
+      RUN_MIGRATIONS: "true"
       SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-gpa.185.100.157.180.sslip.io,185.100.157.180,localhost,127.0.0.1}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
       DIGISELLER_PARTNER_ID: ${DIGISELLER_PARTNER_ID:-}
       ADS_ENABLED: ${ADS_ENABLED:-true}
       ADS_CONTACT_EMAIL: ${ADS_CONTACT_EMAIL:-ads@example.com}
-      FREE_SEARCHES_PER_DAY: ${FREE_SEARCHES_PER_DAY:-15}
-      GUEST_SEARCHES_PER_DAY: ${GUEST_SEARCHES_PER_DAY:-5}
       HTTP_TIMEOUT_SECONDS: ${HTTP_TIMEOUT_SECONDS:-20}
       PLATI_MAX_PAGES: ${PLATI_MAX_PAGES:-5}
       PLATI_PAGE_SIZE: ${PLATI_PAGE_SIZE:-100}
@@ -62,13 +62,15 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
-      RADAR_INTERVAL_HOURS: ${RADAR_INTERVAL_HOURS:-6}
-      RADAR_DROP_PERCENT: ${RADAR_DROP_PERCENT:-5}
-      RADAR_MIN_DROP_RUB: ${RADAR_MIN_DROP_RUB:-30}
-      RADAR_STEAM_DELAY_MS: ${RADAR_STEAM_DELAY_MS:-400}
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/health | grep -q '\"status\":\"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
 
   frontend:
@@ -81,7 +83,8 @@ services:
     expose:
       - "80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
   scheduler:
@@ -101,8 +104,9 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-gpa}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-gpa_secret_change_me}
       QUEUE_CONNECTION: database
+      RUN_MIGRATIONS: "false"
     depends_on:
-      db:
+      backend:
         condition: service_healthy
     restart: unless-stopped
 
@@ -123,8 +127,10 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-gpa}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-gpa_secret_change_me}
       QUEUE_CONNECTION: database
+      DB_QUEUE_RETRY_AFTER: ${DB_QUEUE_RETRY_AFTER:-120}
+      RUN_MIGRATIONS: "false"
     depends_on:
-      db:
+      backend:
         condition: service_healthy
     restart: unless-stopped
 
@@ -152,7 +158,7 @@ services:
       - frontend
     restart: unless-stopped
 
-  # Telegram Price Radar (aiogram3) — polls updates + triggers Laravel radar scan
+  # Telegram interface (aiogram3) — polling only; Laravel owns refresh scheduling
   radar-bot:
     build:
       context: ./bot
@@ -163,7 +169,8 @@ services:
       API_BASE_URL: http://backend:8000
       RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

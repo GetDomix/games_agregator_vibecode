@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\DueGameRefreshDispatcher;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class DispatchDueGameRefreshesCommand extends Command
 {
@@ -15,6 +16,7 @@ class DispatchDueGameRefreshesCommand extends Command
     {
         $count = $dispatcher->dispatch();
         $this->info("Dispatched {$count} price refresh jobs.");
+        Log::info('price_refresh_dispatch_completed', ['jobs_dispatched' => $count]);
 
         return self::SUCCESS;
     }

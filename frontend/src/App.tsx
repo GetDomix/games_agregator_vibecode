@@ -31,37 +31,8 @@ type KindStats = { kind: string; label: string; count: number; min_price: number
 type Market = { marketplace: string; label: string; total_offers: number; scanned_offers: number; by_kind: KindStats[]; error?: string | null }
 type Steam = { appid: number; name: string; header_image?: string | null; store_url: string; price_rub?: number | null; price_initial_rub?: number | null; discount_percent?: number; is_free?: boolean; available_in_ru?: boolean; note?: string | null }
 type Deal = { score: number; label: string; is_better: boolean; market_min_rub?: number | null; market_source?: string | null; savings_rub?: number | null; savings_percent?: number | null }
-type Quota = {
-  limit: number | null
-  used: number
-  remaining: number | null
-  is_guest: boolean
-  is_pro?: boolean
-  unlimited?: boolean
-  plan?: string
-  reset_hint?: string
-  upgrade_hint?: string | null
-}
-type PlanCard = {
-  id: string
-  name: string
-  price_rub: number
-  period?: string | null
-  searches_per_day?: number | null
-  unlimited?: boolean
-  features: string[]
-  cta?: string
-}
-type PlansResponse = {
-  currency: string
-  note?: string
-  billing_contact_email?: string
-  plans: PlanCard[]
-  promo_hint?: string
-  checkout_message?: string
-}
 type Freshness = { source: string; status: string; last_success_at?: string | null; next_refresh_at?: string | null }
-type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]; plati: Market; ggsel: Market; warnings: string[]; saved_to_history?: boolean; is_favorite?: boolean; deal?: Deal | null; quota?: Quota | null; refreshing?: boolean; freshness?: Freshness[] }
+type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]; plati: Market; ggsel: Market; warnings: string[]; saved_to_history?: boolean; is_favorite?: boolean; deal?: Deal | null; refreshing?: boolean; freshness?: Freshness[] }
 type PopularItem = { query: string; game_name?: string | null; appid?: number | null; header_image?: string | null; count?: number }
 type Fav = { id: number; appid: number; game_name: string; header_image?: string | null; target_price_rub?: number | null; last_steam_price_rub?: number | null; price_below_target?: boolean }
 type Hist = { id: number; query: string; appid?: number | null; game_name?: string | null; header_image?: string | null; steam_price_rub?: number | null; plati_min_rub?: number | null; ggsel_min_rub?: number | null; created_at?: string }
@@ -106,12 +77,9 @@ export default function App() {
   const { theme, toggle } = useTheme()
   const [user, setUser] = useState<User | null>(getStoredUser())
   const [token, setToken] = useState<string | null>(getToken())
-  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'plans' | 'admin' | 'radar'>('home')
+  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'admin' | 'radar'>('home')
   const [linkCode, setLinkCode] = useState<string | null>(null)
   const [linkDeep, setLinkDeep] = useState<string | null>(null)
-  const [plans, setPlans] = useState<PlansResponse | null>(null)
-  const [promoCode, setPromoCode] = useState('')
-  const [promoMsg, setPromoMsg] = useState('')
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -134,8 +102,7 @@ export default function App() {
   } | null>(null)
   const [adminData, setAdminData] = useState<{
     stats: Record<string, number | Record<string, number>>
-    recent_users: { id: number; email: string; display_name: string; plan: string; is_admin: boolean; created_at?: string }[]
-    promo_codes: string
+    recent_users: { id: number; email: string; display_name: string; is_admin: boolean; created_at?: string }[]
   } | null>(null)
   const [ads, setAds] = useState<AdsConfig | null>(null)
   const [marketTab, setMarketTab] = useState<'plati' | 'ggsel'>('plati')
@@ -156,9 +123,6 @@ export default function App() {
   const [alertModal, setAlertModal] = useState<{ favorite: FavoriteItem; create: boolean } | null>(null)
 
   const loggedIn = Boolean(token && user)
-  const isPro = Boolean(
-    user && (user.plan === 'pro' || user.plan === 'unlimited' || user.plan_label === 'Pro'),
-  )
 
   useEffect(() => {
     const onTelegramOidc = (event: MessageEvent) => {
@@ -178,8 +142,7 @@ export default function App() {
     window.addEventListener('message', onTelegramOidc)
     return () => window.removeEventListener('message', onTelegramOidc)
   }, [])
-  // Ads for everyone except active Pro
-  const showAds = Boolean(ads?.enabled && !isPro)
+  const showAds = Boolean(ads?.enabled)
 
   const adByPlacement = useCallback(
     (placement: string) => (showAds ? ads?.slots.find((s) => s.placement === placement) : undefined),
@@ -207,9 +170,6 @@ export default function App() {
     api<AdsConfig>('/api/ads/config')
       .then((d) => setAds(d))
       .catch(() => setAds(null))
-    api<PlansResponse>('/api/plans')
-      .then((d) => setPlans(d))
-      .catch(() => setPlans(null))
   }, [refreshMe])
 
   const loadDashboard = useCallback(async () => {
@@ -441,9 +401,6 @@ export default function App() {
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
               Как пользоваться
             </button>
-            <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
-              Pro
-            </button>
             <button
               type="button"
               className="btn ghost sm"
@@ -486,10 +443,6 @@ export default function App() {
       </header>
 
       <main className="shell has-tabbar">
-        {adByPlacement('header') && (
-          <AdSlot slot={adByPlacement('header')!} label={ads?.label} />
-        )}
-
         {view === 'home' && (
           <>
             <section className="hero hero-search">
@@ -599,10 +552,6 @@ export default function App() {
               </div>
             </section>
 
-            {adByPlacement('mid') && (
-              <AdSlot slot={adByPlacement('mid')!} label={ads?.label} />
-            )}
-
             <section className="section panel about-panel">
               <button type="button" className="about-toggle" onClick={() => setAboutOpen((v) => !v)} aria-expanded={aboutOpen}>
                 <h3 style={{ margin: 0 }}>Зачем это нужно</h3>
@@ -632,7 +581,7 @@ export default function App() {
             </section>
 
             <section className="section panel radar-home-cta">
-              <h3 style={{ marginTop: 0 }}>📡 Не пропусти скидку в Steam</h3>
+              <h3 style={{ marginTop: 0 }}>📡 Не пропусти выгодную цену</h3>
               <p className="muted">
                 Радар + бот <strong>@igroscan_bot</strong>: избранное, целевая цена, уведомление в Telegram.
               </p>
@@ -698,25 +647,6 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                  {result.quota && (
-                    <div
-                      className={`quota-pill ${
-                        !result.quota.unlimited && result.quota.remaining != null && result.quota.remaining <= 1
-                          ? 'low'
-                          : ''
-                      }`}
-                    >
-                      {result.quota.unlimited
-                        ? `поисков сегодня: ${result.quota.used} · Pro ∞`
-                        : `поисков сегодня: ${result.quota.used}/${result.quota.limit}`}
-                      {result.quota.is_guest ? ' · гость' : result.quota.is_pro ? '' : ' · free'}
-                      {!result.quota.unlimited && (
-                        <button type="button" className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setView('plans')}>
-                          Снять лимит
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {result.candidates?.length > 0 && (
@@ -776,10 +706,6 @@ export default function App() {
                   </article>
                 )}
 
-                {adByPlacement('inline_results') && (
-                  <AdSlot slot={adByPlacement('inline_results')!} label={ads?.label} />
-                )}
-
                 <div className="market-tabs m-only" role="tablist">
                   <button
                     type="button"
@@ -809,6 +735,9 @@ export default function App() {
                     onTrack={trackClick}
                   />
                 </div>
+                {adByPlacement('after_results') && (
+                  <AdSlot slot={adByPlacement('after_results')!} label={ads?.label} />
+                )}
               </section>
             )}
           </>
@@ -858,8 +787,7 @@ export default function App() {
               <li>Цены ориентировочные: у продавца может закончиться товар или смениться стоимость.</li>
               <li>Некоторые игры недоступны в Steam RU — тогда сравниваем только маркетплейсы.</li>
               <li>
-                Лимит поисков (гость / Free) защищает сервер: каждый запрос ходит на Steam, Plati и GGsel.
-                Тариф Pro снимает дневной кап — раздел «Pro» в шапке.
+                Поиск бесплатен. Цены обновляются сервером по расписанию, а технический rate limit защищает API от спама.
               </li>
               <li>Мы не принимаем оплату за игры: покупка всегда на стороне Steam / Plati / GGsel.</li>
             </ul>
@@ -883,130 +811,14 @@ export default function App() {
           </section>
         )}
 
-        {view === 'plans' && (
-          <section className="section">
-            <div className="hero">
-              <p className="eyebrow">Тарифы</p>
-              <h2>Зачем лимит и как его снять</h2>
-              <p className="lead">
-                {plans?.note ||
-                  'Каждый поиск дергает Steam, Plati и GGsel. Лимит на Free/гостя — чтобы сервис не клали боты и не сжигали исходящий трафик. Pro убирает дневной кап.'}
-              </p>
-            </div>
-            <div className="plans-grid section">
-              {(plans?.plans || []).map((p) => (
-                <article key={p.id} className={`panel plan-card ${p.unlimited ? 'plan-card--pro' : ''}`}>
-                  <h3>{p.name}</h3>
-                  <div className="plan-price">
-                    {p.price_rub > 0 ? (
-                      <>
-                        <strong>{p.price_rub.toLocaleString('ru-RU')} ₽</strong>
-                        <span className="muted">/{p.period === 'year' ? 'год' : 'мес'}</span>
-                      </>
-                    ) : (
-                      <strong>0 ₽</strong>
-                    )}
-                  </div>
-                  <p className="muted">
-                    {p.unlimited ? 'Поиски без дневного лимита' : `${p.searches_per_day ?? '—'} поисков / сутки`}
-                  </p>
-                  <ul className="guide-list">
-                    {p.features.map((f) => (
-                      <li key={f}>{f}</li>
-                    ))}
-                  </ul>
-                  {p.unlimited && (
-                    <div className="actions" style={{ marginTop: '0.85rem' }}>
-                      {loggedIn ? (
-                        <button
-                          type="button"
-                          className="btn primary"
-                          onClick={async () => {
-                            try {
-                              const r = await api<{ message: string; mailto?: string }>('/api/billing/request', {
-                                method: 'POST',
-                                body: JSON.stringify({ plan_id: p.id }),
-                              })
-                              setPromoMsg(r.message)
-                              if (r.mailto) window.location.href = r.mailto
-                            } catch (e) {
-                              setPromoMsg(e instanceof Error ? e.message : 'Ошибка')
-                            }
-                          }}
-                        >
-                          {p.cta || 'Оформить'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn primary"
-                          onClick={() => {
-                            setAuthTab('register')
-                            setAuthOpen(true)
-                          }}
-                        >
-                          Сначала аккаунт
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-            <div className="panel section">
-              <h3>Промокод</h3>
-              <p className="muted">Для теста Pro: <code>KEYSIGNAL-PRO</code> (30 дней).</p>
-              {loggedIn ? (
-                <form
-                  className="search-row"
-                  style={{ marginTop: '0.75rem' }}
-                  onSubmit={async (e) => {
-                    e.preventDefault()
-                    setPromoMsg('')
-                    try {
-                      const r = await api<{ message: string; user: User }>('/api/billing/promo', {
-                        method: 'POST',
-                        body: JSON.stringify({ code: promoCode }),
-                      })
-                      setSession(getToken(), r.user)
-                      setUser(r.user)
-                      setPromoMsg(r.message)
-                      setPromoCode('')
-                    } catch (err) {
-                      setPromoMsg(err instanceof Error ? err.message : 'Ошибка')
-                    }
-                  }}
-                >
-                  <div className="search-field">
-                    <input
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      placeholder="Промокод"
-                      maxLength={40}
-                      required
-                    />
-                  </div>
-                  <button className="btn primary" type="submit">
-                    Активировать
-                  </button>
-                </form>
-              ) : (
-                <p className="muted">Войдите в аккаунт, чтобы активировать промокод.</p>
-              )}
-              {promoMsg && <p className="status" style={{ marginTop: '0.75rem' }}>{promoMsg}</p>}
-              {plans?.checkout_message && <p className="muted" style={{ marginTop: '0.75rem' }}>{plans.checkout_message}</p>}
-            </div>
-          </section>
-        )}
-
         {view === 'radar' && (
           <section className="section page-enter radar-page">
             <div className="hero">
               <p className="eyebrow">Уведомления</p>
               <h2>📡 Радар цен</h2>
               <p className="lead">
-                Бот <strong>@igroscan_bot</strong> (Игроскан Радар) пишет в Telegram, когда в{' '}
-                <strong>Steam</strong> у игры из избранного цена упала или достигла твоей цели.
+                Бот <strong>@igroscan_bot</strong> (Игроскан Радар) пишет в Telegram, когда цена игры
+                достигла заданной цели на выбранной площадке и для выбранного типа предложения.
               </p>
             </div>
 
@@ -1030,7 +842,7 @@ export default function App() {
                     <span className="radar-step-n">1</span>
                     <h3>Избранное + цель</h3>
                     <p className="muted">
-                      Найди игру → ☆ в избранное → укажи целевую цену Steam (или не указывай — тогда только «цена упала»).
+                      Найди игру → ☆ в избранное → выбери Steam, Plati или GGsel и нужные типы предложений → укажи целевую цену.
                     </p>
                     <button type="button" className="btn ghost sm" onClick={() => setView('home')}>
                       К поиску
@@ -1048,7 +860,7 @@ export default function App() {
                     <span className="radar-step-n">3</span>
                     <h3>Жди уведомления</h3>
                     <p className="muted">
-                      Раз в несколько часов проверяем Steam. Цель достигнута → 🎯. Заметное падение → 📉.
+                      Сервер обновляет цены по расписанию. Подходящее предложение достигло цели → получишь 🎯 в Telegram.
                     </p>
                   </article>
                 </div>
@@ -1240,13 +1052,13 @@ export default function App() {
                   <h3>Когда придёт сообщение</h3>
                   <ul className="guide-list">
                     <li>
-                      <strong>🎯 Цель</strong> — цена Steam ≤ твоей целевой (задаётся при добавлении в избранное).
+                      <strong>🎯 Цель</strong> — цена в выбранном источнике и типе предложения стала ≤ заданной.
                     </li>
                     <li>
-                      <strong>📉 Скидка Steam</strong> — цена упала минимум на 5% или на 30 ₽ (если цели нет).
+                      <strong>Источники</strong> — можно следить за Steam, Plati и GGsel; для маркетплейсов отдельно выбираются ключи, гифты, аккаунты и аренда.
                     </li>
-                    <li>Проверка несколько раз в сутки (не мгновенно после каждой скидки Steam).</li>
-                    <li>Pro не обязателен для радара; без привязки Telegram уведомлений не будет.</li>
+                    <li>Обычно выпущенные игры обновляются примерно раз в 3 часа; это не мгновенная проверка при каждом действии пользователя.</li>
+                    <li>Поиск и алерты бесплатны; без привязки Telegram уведомлений не будет.</li>
                   </ul>
                   <button type="button" className="btn ghost" style={{ marginTop: '0.75rem' }} onClick={() => setView('cabinet')}>
                     К избранному в кабинете
@@ -1262,14 +1074,13 @@ export default function App() {
             <div className="hero">
               <p className="eyebrow">Админка</p>
               <h2>Панель {BRAND.name}</h2>
-              <p className="muted">Метрики, пользователи, выдача Pro. Доступ: is_admin или ADMIN_EMAILS.</p>
+              <p className="muted">Метрики и пользователи. Доступ: is_admin или ADMIN_EMAILS.</p>
             </div>
             {adminData && (
               <>
                 <div className="stats section stagger">
                   <div className="stat"><b>{adminData.stats.users_total as number}</b><span>пользователей</span></div>
-                  <div className="stat"><b>{adminData.stats.pro_active as number}</b><span>Pro</span></div>
-                  <div className="stat"><b>{adminData.stats.searches_today as number}</b><span>поисков сегодня</span></div>
+                  <div className="stat"><b>{adminData.stats.history_total as number}</b><span>записей истории</span></div>
                   <div className="stat"><b>{adminData.stats.partner_clicks_7d as number}</b><span>клики 7д</span></div>
                 </div>
                 <div className="panel section">
@@ -1280,8 +1091,7 @@ export default function App() {
                         <tr>
                           <th>ID</th>
                           <th>Email</th>
-                          <th>План</th>
-                          <th>Действия</th>
+                          <th>Статус</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1292,47 +1102,12 @@ export default function App() {
                               {u.display_name}
                               <span className="offer-meta">{u.email}{u.is_admin ? ' · admin' : ''}</span>
                             </td>
-                            <td>{u.plan}</td>
-                            <td>
-                              <div className="actions">
-                                <button
-                                  type="button"
-                                  className="btn ghost sm"
-                                  onClick={async () => {
-                                    await api(`/api/admin/users/${u.id}/plan`, {
-                                      method: 'POST',
-                                      body: JSON.stringify({ plan: 'pro', days: 30 }),
-                                    })
-                                    setToast(`Pro 30д → ${u.email}`)
-                                    const d = await api<NonNullable<typeof adminData>>('/api/admin/overview')
-                                    setAdminData(d)
-                                  }}
-                                >
-                                  +Pro 30д
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn ghost sm"
-                                  onClick={async () => {
-                                    await api(`/api/admin/users/${u.id}/plan`, {
-                                      method: 'POST',
-                                      body: JSON.stringify({ plan: 'free' }),
-                                    })
-                                    setToast(`Free → ${u.email}`)
-                                    const d = await api<NonNullable<typeof adminData>>('/api/admin/overview')
-                                    setAdminData(d)
-                                  }}
-                                >
-                                  Free
-                                </button>
-                              </div>
-                            </td>
+                            <td>{u.is_admin ? 'Администратор' : 'Пользователь'}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <p className="muted" style={{ marginTop: '0.75rem' }}>Промокоды: {adminData.promo_codes || '—'}</p>
                 </div>
               </>
             )}
@@ -1346,23 +1121,13 @@ export default function App() {
                 <p className="eyebrow">Кабинет</p>
                 <h2 style={{ margin: 0 }}>{user?.display_name}</h2>
                 <p className="muted">{user?.email}</p>
-                <p className="muted" style={{ marginTop: 6 }}>
-                  Тариф: <strong>{user?.plan_label || 'Free'}</strong>
-                  {user?.plan_expires_at
-                    ? ` · до ${new Date(user.plan_expires_at).toLocaleDateString('ru-RU')}`
-                    : user?.plan === 'pro' || user?.plan === 'unlimited'
-                      ? ' · без срока'
-                      : ''}
-                  {' · '}
-                  <button type="button" className="btn ghost sm" onClick={() => setView('plans')}>
-                    Тарифы / Pro
-                  </button>
-                  {user?.is_admin && (
+                {user?.is_admin && (
+                  <p className="muted" style={{ marginTop: 6 }}>
                     <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
                       Админка
                     </button>
-                  )}
-                </p>
+                  </p>
+                )}
               </div>
               {dashboard && (
                 <div className="stats stagger">
@@ -1502,9 +1267,6 @@ export default function App() {
             </div>
           </section>
         )}
-        {adByPlacement('footer') && (
-          <AdSlot slot={adByPlacement('footer')!} label={ads?.label} />
-        )}
       </main>
 
       {alertModal && (
@@ -1531,12 +1293,14 @@ export default function App() {
       )}
 
       <footer className="shell footer has-tabbar">
+        {adByPlacement('footer') && (
+          <AdSlot slot={adByPlacement('footer')!} label={ads?.label} />
+        )}
         <p>
           {BRAND.name} — {BRAND.tagline}. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
         {showAds && ads?.note && <p className="muted footer-note">{ads.note}</p>}
-        {isPro && <p className="muted footer-note">Pro: реклама отключена ✨</p>}
       </footer>
 
       <AnimatePresence>
@@ -1565,10 +1329,6 @@ export default function App() {
         >
           <span className="m-tab-ico" aria-hidden>📡</span>
           Радар
-        </button>
-        <button type="button" className={view === 'plans' ? 'active' : ''} onClick={() => setView('plans')}>
-          <span className="m-tab-ico" aria-hidden>★</span>
-          Pro
         </button>
         <button
           type="button"

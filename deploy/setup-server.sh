@@ -6,7 +6,6 @@
 set -euo pipefail
 
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/gpa}"
-HTTP_PORT="${HTTP_PORT:-8000}"
 
 echo "==> Install Docker if needed"
 if ! command -v docker >/dev/null 2>&1; then
@@ -27,15 +26,18 @@ echo "==> App directory ${DEPLOY_PATH}"
 mkdir -p "$DEPLOY_PATH"
 chmod 755 "$DEPLOY_PATH"
 
-echo "==> Firewall (ufw) — open SSH + app port ${HTTP_PORT}"
+echo "==> Firewall (ufw) — open SSH + HTTP/HTTPS"
 if command -v ufw >/dev/null 2>&1; then
   ufw allow OpenSSH || true
-  ufw allow "${HTTP_PORT}/tcp" || true
+  ufw allow 80/tcp || true
+  ufw allow 443/tcp || true
+  ufw allow 443/udp || true
   # Don't force-enable ufw if user never used it
   echo "ufw rules added (enable manually: ufw enable)"
 fi
 
 echo "==> Done. Next:"
 echo "  1) Add GitHub Secrets (DEPLOY_HOST=IP, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH=${DEPLOY_PATH})"
-echo "  2) Push to main → Actions Deploy"
-echo "  3) Open http://YOUR_IP:${HTTP_PORT}/"
+echo "  2) Configure required reviewers for the GitHub environment: production"
+echo "  3) Run Actions → Pipeline manually on main/master with deploy_production=true"
+echo "  4) Open https://gpa.YOUR_IP.sslip.io/"

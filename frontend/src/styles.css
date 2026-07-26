@@ -184,7 +184,7 @@ button, input { font: inherit; }
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.25s var(--ease-out), border-color 0.25s, transform 0.25s var(--ease-out);
 }
-.panel:hover, .plan-card:hover {
+.panel:hover {
   box-shadow: var(--shadow);
   border-color: color-mix(in srgb, var(--signal) 22%, var(--border));
 }
@@ -298,7 +298,7 @@ button, input { font: inherit; }
 .status.error { border-color: color-mix(in srgb, var(--signal) 40%, var(--border)); color: var(--signal); }
 
 .results-meta { display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 1rem 0; }
-.deal-card, .quota-pill {
+.deal-card {
   border: 1px solid var(--border); border-radius: 14px; background: var(--card);
   padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem;
   animation: rise 0.4s cubic-bezier(.22,1,.36,1) both;
@@ -306,31 +306,6 @@ button, input { font: inherit; }
 .deal-card.hot { border-color: color-mix(in srgb, var(--signal) 45%, var(--border)); }
 .deal-score { font-size: 1.7rem; font-weight: 800; color: var(--signal); min-width: 4rem; }
 .deal-score span { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
-.quota-pill {
-  font-size: 0.85rem; font-weight: 650; color: var(--ink-soft);
-  flex-wrap: wrap;
-}
-.quota-pill.low { color: var(--signal); }
-
-.plans-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: 1fr;
-}
-@media (min-width: 720px) {
-  .plans-grid { grid-template-columns: repeat(2, 1fr); }
-}
-@media (min-width: 1020px) {
-  .plans-grid { grid-template-columns: repeat(4, 1fr); }
-}
-.plan-card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
-.plan-price { margin-bottom: 0.35rem; font-size: 1.25rem; }
-.plan-price strong { letter-spacing: -0.02em; }
-.plan-card--pro {
-  border-color: color-mix(in srgb, var(--signal) 40%, var(--border));
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--signal) 12%, transparent);
-}
-
 .steam-card {
   display: grid; gap: 1rem; padding: 1rem; margin-bottom: 1rem;
   animation: rise 0.45s cubic-bezier(.22,1,.36,1) both;
@@ -633,7 +608,7 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
   bottom: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.15rem;
   padding: 0.4rem 0.35rem calc(0.4rem + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--paper) 92%, transparent);
@@ -785,14 +760,8 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
     flex-direction: column;
     align-items: stretch;
   }
-  .deal-card, .quota-pill {
+  .deal-card {
     width: 100%;
-  }
-  .quota-pill {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
   }
 
   .steam-card {
@@ -822,7 +791,6 @@ th { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-
   .list-card img, .ph { width: 72px; height: 34px; }
   .candidate img { width: 72px; height: 28px; }
   .footer { margin-top: 1.25rem; padding-top: 1rem; }
-  .plans-grid { grid-template-columns: 1fr; }
   .ad-slot { margin: 0.75rem 0; }
 }
 

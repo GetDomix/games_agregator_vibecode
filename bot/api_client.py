@@ -24,7 +24,12 @@ class LaravelClient:
                 response = await client.request(method, f"{self.base_url}{path}", headers=self._headers(), params=params, json=json)
         except httpx.HTTPError as exc:
             raise LaravelApiError("Сервер Игроскана временно недоступен. Попробуй ещё раз.") from exc
-        data = response.json() if response.content else {}
+        try:
+            data = response.json() if response.content else {}
+        except ValueError as exc:
+            raise LaravelApiError("Сервер Игроскана вернул некорректный ответ. Попробуй ещё раз.") from exc
+        if not isinstance(data, dict):
+            raise LaravelApiError("Сервер Игроскана вернул некорректный ответ. Попробуй ещё раз.")
         if response.status_code >= 400:
             raise LaravelApiError(str(data.get("detail") or data.get("message") or "Не удалось выполнить запрос."))
         return data
@@ -63,7 +68,7 @@ class LaravelClient:
         if not url or not url.startswith(("https://", "http://")):
             return None
         try:
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, transport=self.transport) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 return response.content if len(response.content) <= 5_000_000 else None

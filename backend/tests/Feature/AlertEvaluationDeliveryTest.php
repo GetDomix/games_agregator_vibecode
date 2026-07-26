@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\AlertEvaluationService;
 use App\Services\FavoriteAlertSettingsService;
 use App\Services\TelegramNotifyService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery\MockInterface;
@@ -93,6 +94,48 @@ class AlertEvaluationDeliveryTest extends TestCase
         $this->assertDatabaseHas('alert_deliveries', ['alert_event_id' => $event->id, 'status' => 'sent', 'attempts' => 2]);
     }
 
+    public function test_successful_delivery_replay_does_not_send_twice(): void
+    {
+        Queue::fake();
+        [$alert, $game] = $this->activeAlert(100, true);
+        FavoriteAlertScope::query()->create(['favorite_alert_id' => $alert->id, 'source' => 'steam', 'offer_kind' => 'official']);
+        $this->price($game, 'steam', 'official', 99);
+        app(AlertEvaluationService::class)->evaluate($game);
+        $event = AlertEvent::query()->firstOrFail();
+
+        $this->mock(TelegramNotifyService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('sendMessage')->once()->andReturnTrue();
+        });
+        $job = new DeliverAlertEventJob($event->id);
+        $job->handle(app(TelegramNotifyService::class));
+        $job->handle(app(TelegramNotifyService::class));
+
+        $this->assertDatabaseHas('alert_deliveries', [
+            'alert_event_id' => $event->id,
+            'status' => 'sent',
+            'attempts' => 1,
+        ]);
+    }
+
+    public function test_database_rejects_a_second_delivery_for_the_same_event(): void
+    {
+        [$alert, $game] = $this->activeAlert(100);
+        $event = $this->event($alert, $game);
+        AlertDelivery::query()->create(['alert_event_id' => $event->id, 'status' => 'pending']);
+
+        $this->expectException(QueryException::class);
+        AlertDelivery::query()->create(['alert_event_id' => $event->id, 'status' => 'pending']);
+    }
+
+    public function test_database_rejects_a_second_event_in_the_same_alert_cycle(): void
+    {
+        [$alert, $game] = $this->activeAlert(100);
+        $this->event($alert, $game);
+
+        $this->expectException(QueryException::class);
+        $this->event($alert, $game);
+    }
+
     public function test_alert_history_api_is_limited_to_the_authenticated_user(): void
     {
         [$alert, $game] = $this->activeAlert(100);
@@ -151,6 +194,21 @@ class AlertEvaluationDeliveryTest extends TestCase
             'offer_count' => 1,
             'cheapest_offer_title' => $title,
             'cheapest_offer_url' => $url,
+            'observed_at' => now(),
+        ]);
+    }
+
+    private function event(FavoriteAlert $alert, Game $game): AlertEvent
+    {
+        return AlertEvent::query()->create([
+            'favorite_alert_id' => $alert->id,
+            'alert_cycle' => 0,
+            'user_id' => $alert->favorite->user_id,
+            'favorite_id' => $alert->favorite_id,
+            'game_id' => $game->id,
+            'source' => 'steam',
+            'offer_kind' => 'official',
+            'offer_price_rub' => 99,
             'observed_at' => now(),
         ]);
     }

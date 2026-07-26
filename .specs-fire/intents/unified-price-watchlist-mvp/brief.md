@@ -1,8 +1,9 @@
 ---
 id: unified-price-watchlist-mvp
 title: Единое избранное и ценовые алерты MVP
-status: in_progress
+status: completed
 created: 2026-07-25T13:43:44Z
+completed_at: 2026-07-26T09:40:58.386Z
 ---
 
 # Intent: Единое избранное и ценовые алерты MVP

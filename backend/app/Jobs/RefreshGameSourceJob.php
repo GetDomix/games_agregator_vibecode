@@ -12,6 +12,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class RefreshGameSourceJob implements ShouldBeUnique, ShouldQueue
 {
@@ -43,10 +44,29 @@ class RefreshGameSourceJob implements ShouldBeUnique, ShouldQueue
     public function handle(GamePriceRefreshService $refresh): void
     {
         $game = Game::query()->findOrFail($this->gameId);
+        $startedAt = hrtime(true);
         try {
-            $refresh->refresh($game, $this->source);
+            $eventsCreated = $refresh->refresh($game, $this->source);
+            $state = $game->sourceStates()->where('source', $this->source)->first();
+            Log::info('price_refresh_completed', [
+                'game_id' => $game->id,
+                'source' => $this->source,
+                'duration_ms' => round((hrtime(true) - $startedAt) / 1_000_000, 2),
+                'status' => $state?->status,
+                'consecutive_failures' => $state?->consecutive_failures,
+                'events_created' => $eventsCreated,
+            ]);
         } catch (\Throwable $e) {
             $refresh->recordFailure($game, $this->source, $e);
+            $state = $game->sourceStates()->where('source', $this->source)->first();
+            Log::error('price_refresh_failed', [
+                'game_id' => $game->id,
+                'source' => $this->source,
+                'duration_ms' => round((hrtime(true) - $startedAt) / 1_000_000, 2),
+                'status' => $state?->status,
+                'consecutive_failures' => $state?->consecutive_failures,
+                'error_class' => $e::class,
+            ]);
             throw $e;
         }
     }

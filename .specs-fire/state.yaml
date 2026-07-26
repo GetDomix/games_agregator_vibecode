@@ -121,14 +121,16 @@ intents:
         completed_at: 2026-07-25T19:08:51.468Z
       - id: free-search-monetization-cleanup
         title: Бесплатный поиск и удаление Pro
-        status: pending
+        status: completed
         complexity: high
         mode: validate
         depends_on:
           - stored-price-search
+        run_id: run-agregator-games-vibecoding-011
+        completed_at: 2026-07-26T08:57:54.900Z
       - id: release-readiness-operations
         title: Сквозные тесты и production scheduler
-        status: pending
+        status: completed
         complexity: medium
         mode: confirm
         depends_on:
@@ -141,6 +143,8 @@ intents:
           - website-watchlist-ui
           - telegram-bot-shared-interface
           - free-search-monetization-cleanup
+        run_id: run-agregator-games-vibecoding-012
+        completed_at: 2026-07-26T09:40:58.376Z
 runs:
   active: []
   completed:
@@ -224,3 +228,19 @@ runs:
           mode: validate
       started: 2026-07-25T19:06:32.364Z
       completed: 2026-07-25T19:08:51.468Z
+    - id: run-agregator-games-vibecoding-011
+      scope: single
+      work_items:
+        - id: free-search-monetization-cleanup
+          intent: unified-price-watchlist-mvp
+          mode: validate
+      started: 2026-07-25T19:42:53.506Z
+      completed: 2026-07-26T08:57:54.900Z
+    - id: run-agregator-games-vibecoding-012
+      scope: single
+      work_items:
+        - id: release-readiness-operations
+          intent: unified-price-watchlist-mvp
+          mode: confirm
+      started: 2026-07-26T09:04:46.488Z
+      completed: 2026-07-26T09:40:58.376Z

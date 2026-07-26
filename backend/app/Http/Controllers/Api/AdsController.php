@@ -15,9 +15,7 @@ class AdsController extends Controller
         $slots = [];
         if ($enabled) {
             $defs = [
-                ['id' => 'header_leaderboard', 'placement' => 'header', 'format' => 'leaderboard', 'size_hint' => '728×90', 'title' => 'Реклама · шапка', 'subtitle' => 'Место для партнёров и спецпредложений.'],
-                ['id' => 'mid_billboard', 'placement' => 'mid', 'format' => 'billboard', 'size_hint' => '970×250', 'title' => 'Реклама · центр', 'subtitle' => 'Широкий баннер между поиском и результатами.'],
-                ['id' => 'results_inline', 'placement' => 'inline_results', 'format' => 'rectangle', 'size_hint' => '300×250', 'title' => 'Реклама · в результатах', 'subtitle' => 'Блок после карточки Steam.'],
+                ['id' => 'after_results_billboard', 'placement' => 'after_results', 'format' => 'billboard', 'size_hint' => '970×250', 'title' => 'Реклама · после результатов', 'subtitle' => 'Отдельный блок после полного списка предложений.'],
                 ['id' => 'footer_leaderboard', 'placement' => 'footer', 'format' => 'leaderboard', 'size_hint' => '728×90', 'title' => 'Реклама · подвал', 'subtitle' => 'Нижний баннер.'],
             ];
             foreach ($defs as $d) {
@@ -35,9 +33,8 @@ class AdsController extends Controller
             'enabled' => $enabled,
             'contact_email' => $email,
             'label' => $label,
-            'note' => 'Реклама показывается гостям и Free; у Pro отключена. Размещение: '.$email,
+            'note' => 'Реклама не влияет на состав и порядок предложений. Размещение: '.$email,
             'slots' => $slots,
-            'hidden_for_pro' => true,
         ]);
     }
 }

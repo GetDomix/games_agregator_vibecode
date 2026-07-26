@@ -20,8 +20,6 @@ class User extends Authenticatable
         'email',
         'password',
         'last_login_at',
-        'plan',
-        'plan_expires_at',
         'is_admin',
         'telegram_chat_id',
         'telegram_username',
@@ -39,7 +37,6 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
-            'plan_expires_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'telegram_linked_at' => 'datetime',
@@ -79,51 +76,12 @@ class User extends Authenticatable
         return $this->hasMany(ExternalIdentity::class);
     }
 
-    /** Active paid plan (pro/unlimited) and not expired. */
-    public function hasActivePro(): bool
-    {
-        $plan = strtolower((string) ($this->plan ?: 'free'));
-        if (! in_array($plan, ['pro', 'unlimited'], true)) {
-            return false;
-        }
-        if ($this->plan_expires_at === null) {
-            return true;
-        }
-
-        return $this->plan_expires_at->isFuture();
-    }
-
-    /**
-     * Daily search limit for this user, or null for unlimited.
-     */
-    public function dailySearchLimit(): ?int
-    {
-        if ($this->hasActivePro()) {
-            $pro = config('gpa.pro_searches_per_day');
-            if ($pro === null || $pro === '' || (int) $pro <= 0) {
-                return null;
-            }
-
-            return (int) $pro;
-        }
-
-        return (int) config('gpa.free_searches_per_day', 15);
-    }
-
-    public function planLabel(): string
-    {
-        return $this->hasActivePro() ? 'Pro' : 'Free';
-    }
-
     public function toPublicArray(): array
     {
         return [
             'id' => $this->id,
             'email' => $this->email,
             'display_name' => $this->display_name ?: $this->name,
-            'plan' => $this->hasActivePro() ? (strtolower((string) $this->plan) === 'unlimited' ? 'unlimited' : 'pro') : 'free',
-            'plan_label' => $this->planLabel(),
-            'plan_expires_at' => $this->hasActivePro() ? $this->plan_expires_at?->toIso8601String() : null,
             'is_admin' => $this->isAdminUser(),
             'telegram_linked' => (bool) $this->telegram_chat_id,
             'radar_enabled' => (bool) ($this->radar_enabled ?? true),

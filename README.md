@@ -13,16 +13,17 @@ cd backend && cp .env.example .env && composer install && php artisan key:genera
 cd frontend && npm install && npm run dev
 ```
 
+Production Compose запускает отдельные процессы `backend`, `scheduler` и
+`queue-worker`. Только `backend` выполняет миграции; scheduler и worker стартуют
+после его healthcheck. Единственный владелец расписания обновления цен — Laravel.
+
 ## Админка
 
 - Поле `users.is_admin` или env `ADMIN_EMAILS=you@mail.com`
 - UI: кабинет → «Админка» / кнопка Admin (desktop)
-- API: `GET /api/admin/overview`, `POST /api/admin/users/{id}/plan`
+- API: `GET /api/admin/overview`, `POST /api/admin/users/{id}/admin`
 
-## Pro
-
-- 99 ₽/мес · 790 ₽/год (env)
-- Промокод: `KEYSIGNAL-PRO` (30 дней)
+Поиск бесплатен для гостей и зарегистрированных пользователей. Защита API от спама обеспечивается техническими rate limits.
 
 ## Радар (Telegram)
 
@@ -31,5 +32,14 @@ cd frontend && npm install && npm run dev
 - Имя бота: **Игроскан Радар**
 - Username (проверить в BotFather): **`@igroscan_radar_bot`**
 - Лого: `bot/assets/bot_logo.jpg`
-- Скан: `php artisan radar:scan` + `php artisan schedule:work`
+- Расписание: `php artisan schedule:work` в отдельном Compose-сервисе
 - Бот: `cd bot && pip install -r requirements.txt && python main.py`
+
+## Проверки и выпуск
+
+CI проверяет Laravel на PostgreSQL, frontend lint/build, изолированные тесты бота
+и сборку Compose-образов. Production deploy запускается только вручную через
+GitHub Actions и защищённое environment `production`.
+
+Инструкции: [`deploy/README.md`](deploy/README.md) и
+[`deploy/RELEASE_RUNBOOK.md`](deploy/RELEASE_RUNBOOK.md).

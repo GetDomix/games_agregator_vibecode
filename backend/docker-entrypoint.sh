@@ -53,7 +53,12 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
-php artisan migrate --force --no-interaction
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+  echo "Running database migrations (migration owner)"
+  php artisan migrate --force --no-interaction
+else
+  echo "Skipping database migrations (RUN_MIGRATIONS is not true)"
+fi
 php artisan config:cache || true
 php artisan route:cache || true
 

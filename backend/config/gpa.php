@@ -9,20 +9,8 @@ return [
     'ads_enabled' => filter_var(env('ADS_ENABLED', true), FILTER_VALIDATE_BOOL),
     'ads_contact_email' => env('ADS_CONTACT_EMAIL', 'ads@example.com'),
     'ads_label' => env('ADS_LABEL', 'Реклама'),
-    'free_searches_per_day' => (int) env('FREE_SEARCHES_PER_DAY', 15),
-    'guest_searches_per_day' => (int) env('GUEST_SEARCHES_PER_DAY', 5),
-    // null / 0 = unlimited for Pro
-    'pro_searches_per_day' => env('PRO_SEARCHES_PER_DAY') !== null && env('PRO_SEARCHES_PER_DAY') !== ''
-        ? (int) env('PRO_SEARCHES_PER_DAY')
-        : null,
-    // MVP-friendly prices (subscription must feel cheap vs daily free limit)
-    'pro_price_rub_month' => (int) env('PRO_PRICE_RUB_MONTH', 99),
-    'pro_price_rub_year' => (int) env('PRO_PRICE_RUB_YEAR', 790),
     'search_cache_ttl' => (int) env('SEARCH_CACHE_TTL', 900),
     'http_max_retries' => (int) env('HTTP_MAX_RETRIES', 2),
-    // Comma-separated: CODE:days, e.g. KEYSIGNAL-PRO:30,VIP2026:365
-    'promo_codes' => env('PROMO_CODES', 'KEYSIGNAL-PRO:30,KEYSIGNAL-YEAR:365'),
-    'billing_contact_email' => env('BILLING_CONTACT_EMAIL', env('ADS_CONTACT_EMAIL', 'ads@example.com')),
     'watchlist_refresh_max' => (int) env('WATCHLIST_REFRESH_MAX', 5),
     'price_refresh_interval_hours' => (int) env('PRICE_REFRESH_INTERVAL_HOURS', 3),
     'announced_steam_refresh_hours' => (int) env('ANNOUNCED_STEAM_REFRESH_HOURS', 24),
@@ -38,15 +26,11 @@ return [
     'admin_emails' => env('ADMIN_EMAILS', ''),
     'brand_name' => env('BRAND_NAME', 'Игроскан'),
 
-    // Telegram Price Radar
+    // Telegram bot and shared-account authentication
     'telegram_bot_token' => env('TELEGRAM_BOT_TOKEN', ''),
     'telegram_bot_username' => env('TELEGRAM_BOT_USERNAME', ''),
     'telegram_oidc_client_id' => env('TELEGRAM_OIDC_CLIENT_ID', ''),
     'telegram_oidc_client_secret' => env('TELEGRAM_OIDC_CLIENT_SECRET', ''),
     'telegram_oidc_redirect_uri' => env('TELEGRAM_OIDC_REDIRECT_URI', ''),
     'radar_service_token' => env('RADAR_SERVICE_TOKEN', ''),
-    'radar_interval_minutes' => (int) env('RADAR_INTERVAL_MINUTES', 5),
-    'radar_drop_percent' => (int) env('RADAR_DROP_PERCENT', 5),
-    'radar_min_drop_rub' => (float) env('RADAR_MIN_DROP_RUB', 30),
-    'radar_steam_delay_ms' => (int) env('RADAR_STEAM_DELAY_MS', 400),
 ];

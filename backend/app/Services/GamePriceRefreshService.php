@@ -17,20 +17,21 @@ class GamePriceRefreshService
         private readonly ?AlertEvaluationService $alerts = null,
     ) {}
 
-    public function refresh(Game $game, string $source): void
+    public function refresh(Game $game, string $source): int
     {
         $state = GameSourceState::query()->firstOrCreate(['game_id' => $game->id, 'source' => $source]);
         if ($source !== GameSourceState::SOURCE_STEAM && ! $game->isReleased()) {
             $state->forceFill(['status' => GameSourceState::STATUS_PENDING, 'next_refresh_at' => now()->addHours(24)])->save();
 
-            return;
+            return 0;
         }
         $state->forceFill(['last_attempt_at' => now(), 'status' => GameSourceState::STATUS_PENDING])->save();
         $result = $this->sources->for($source)->refresh($game);
-        $this->apply($game->fresh(), $state->fresh(), $result);
+
+        return $this->apply($game->fresh(), $state->fresh(), $result);
     }
 
-    public function apply(Game $game, GameSourceState $state, PriceSourceResult $result): void
+    public function apply(Game $game, GameSourceState $state, PriceSourceResult $result): int
     {
         DB::transaction(function () use ($game, $state, $result) {
             $wasReleased = $game->isReleased();
@@ -96,7 +97,7 @@ class GamePriceRefreshService
             }
         });
 
-        $this->alerts?->evaluate($game->fresh());
+        return $this->alerts?->evaluate($game->fresh()) ?? 0;
     }
 
     public function recordFailure(Game $game, string $source, \Throwable $error): void

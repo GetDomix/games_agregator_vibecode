@@ -5,9 +5,6 @@ export type User = {
   id: number
   email: string
   display_name: string
-  plan?: 'free' | 'pro' | 'unlimited' | string
-  plan_label?: string
-  plan_expires_at?: string | null
   is_admin?: boolean
   telegram_linked?: boolean
   radar_enabled?: boolean

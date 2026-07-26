@@ -4,9 +4,12 @@ title: Бесплатный поиск и удаление Pro
 intent: unified-price-watchlist-mvp
 complexity: high
 mode: validate
-status: pending
-depends_on: [stored-price-search]
+status: completed
+depends_on:
+  - stored-price-search
 created: 2026-07-25T13:47:35Z
+run_id: run-agregator-games-vibecoding-011
+completed_at: 2026-07-26T08:57:54.900Z
 ---
 
 # Work Item: Бесплатный поиск и удаление Pro

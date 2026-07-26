@@ -4,9 +4,20 @@ title: Сквозные тесты и production scheduler
 intent: unified-price-watchlist-mvp
 complexity: medium
 mode: confirm
-status: pending
-depends_on: [canonical-game-price-model, central-price-refresh, stored-price-search, cross-source-alert-settings, telegram-identity-merge, alert-evaluation-delivery, website-watchlist-ui, telegram-bot-shared-interface, free-search-monetization-cleanup]
+status: completed
+depends_on:
+  - canonical-game-price-model
+  - central-price-refresh
+  - stored-price-search
+  - cross-source-alert-settings
+  - telegram-identity-merge
+  - alert-evaluation-delivery
+  - website-watchlist-ui
+  - telegram-bot-shared-interface
+  - free-search-monetization-cleanup
 created: 2026-07-25T13:47:35Z
+run_id: run-agregator-games-vibecoding-012
+completed_at: 2026-07-26T09:40:58.376Z
 ---
 
 # Work Item: Сквозные тесты и production scheduler
