@@ -25,6 +25,9 @@ class ReleaseReadinessOperationsTest extends TestCase
 
     public function test_price_sources_use_faked_http_and_normalize_responses(): void
     {
+        config(['gpa.steam_price_regions' => [[
+            'region' => 'RU', 'country' => 'ru', 'language' => 'russian', 'currency' => 'RUB', 'label' => 'Россия',
+        ]]]);
         Http::fake([
             'https://store.steampowered.com/api/appdetails*' => Http::response([
                 '730' => ['success' => true, 'data' => [
@@ -56,12 +59,40 @@ class ReleaseReadinessOperationsTest extends TestCase
             && $request['search_term'] === 'Counter-Strike 2');
     }
 
+    public function test_steam_keeps_an_official_foreign_price_and_converts_it_to_rubles(): void
+    {
+        config(['gpa.steam_price_regions' => [[
+            'region' => 'US', 'country' => 'us', 'language' => 'english', 'currency' => 'USD', 'label' => 'США',
+        ]]]);
+        Http::fake([
+            'https://store.steampowered.com/api/appdetails*' => Http::response([
+                '1091500' => ['success' => true, 'data' => [
+                    'name' => 'Cyberpunk 2077',
+                    'is_free' => false,
+                    'price_overview' => ['currency' => 'USD', 'final' => 5999],
+                    'release_date' => ['coming_soon' => false],
+                ]],
+            ]),
+            'https://www.cbr.ru/scripts/XML_daily.asp' => Http::response(
+                '<ValCurs><Valute><CharCode>USD</CharCode><Nominal>1</Nominal><Value>80,0000</Value></Valute></ValCurs>'
+            ),
+        ]);
+
+        $steam = app(SteamService::class)->refreshDetails(1091500, 'Cyberpunk 2077');
+
+        $this->assertNull($steam['price_rub']);
+        $this->assertSame('USD', $steam['regional_prices'][0]['currency']);
+        $this->assertSame(59.99, $steam['regional_prices'][0]['amount']);
+        $this->assertSame(4799.2, $steam['regional_prices'][0]['price_rub']);
+    }
+
     public function test_schedule_has_one_canonical_dispatch_owner_and_periodic_snapshot(): void
     {
         $this->assertSame(0, Artisan::call('schedule:list'));
         $schedule = Artisan::output();
 
         $this->assertSame(1, substr_count($schedule, 'prices:dispatch-due'));
+        $this->assertSame(1, substr_count($schedule, 'prices:refresh-rates'));
         $this->assertSame(1, substr_count($schedule, 'ops:snapshot --hours=24'));
         $this->assertStringNotContainsString('radar:scan', $schedule);
     }

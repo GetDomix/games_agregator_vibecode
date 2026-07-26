@@ -55,6 +55,11 @@ class Game extends Model
         return $this->hasMany(GamePriceObservation::class);
     }
 
+    public function steamRegionalPrices(): HasMany
+    {
+        return $this->hasMany(SteamRegionalPrice::class);
+    }
+
     public function isReleased(): bool
     {
         return $this->release_status === self::RELEASE_STATUS_RELEASED;

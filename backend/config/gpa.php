@@ -21,6 +21,13 @@ return [
         'plati' => (int) env('PRICE_SOURCE_PLATI_PER_MINUTE', 10),
         'ggsel' => (int) env('PRICE_SOURCE_GGSEL_PER_MINUTE', 15),
     ],
+    'steam_price_regions' => [
+        ['region' => 'RU', 'country' => 'ru', 'language' => 'russian', 'currency' => 'RUB', 'label' => 'Россия'],
+        ['region' => 'US', 'country' => 'us', 'language' => 'english', 'currency' => 'USD', 'label' => 'США'],
+        ['region' => 'KZ', 'country' => 'kz', 'language' => 'russian', 'currency' => 'KZT', 'label' => 'Казахстан'],
+        ['region' => 'TR', 'country' => 'tr', 'language' => 'english', 'currency' => 'TRY', 'label' => 'Турция'],
+        ['region' => 'DE', 'country' => 'de', 'language' => 'english', 'currency' => 'EUR', 'label' => 'Европа'],
+    ],
     'price_refresh_backoff_minutes' => [1, 5, 15, 30, 60],
     // Comma-separated admin emails (also users.is_admin flag)
     'admin_emails' => env('ADMIN_EMAILS', ''),

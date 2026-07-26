@@ -7,6 +7,7 @@ use App\Models\CurrentGamePrice;
 use App\Models\Game;
 use App\Models\GamePriceObservation;
 use App\Models\GameSourceState;
+use App\Models\SteamRegionalPrice;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -35,13 +36,36 @@ class GamePriceRefreshService
     {
         DB::transaction(function () use ($game, $state, $result) {
             $wasReleased = $game->isReleased();
-            $game->fill(array_filter([
+            $gameValues = array_filter([
                 'name' => $result->gameName,
                 'header_image' => $result->headerImage,
                 'release_status' => $result->releaseStatus,
                 'release_date' => $result->releaseDate,
-            ], fn ($value) => $value !== null));
+            ], fn ($value) => $value !== null);
+            $game->fill($gameValues);
             $game->save();
+
+            if ($result->source === GameSourceState::SOURCE_STEAM) {
+                $regions = [];
+                foreach ($result->regionalPrices as $regional) {
+                    $region = (string) ($regional['region'] ?? '');
+                    if ($region === '' || ! isset($regional['amount'], $regional['currency'])) {
+                        continue;
+                    }
+                    $regions[] = $region;
+                    SteamRegionalPrice::query()->updateOrCreate(
+                        ['game_id' => $game->id, 'region' => $region],
+                        [
+                            'currency' => (string) $regional['currency'],
+                            'price_amount' => $regional['amount'],
+                            'price_rub' => $regional['price_rub'] ?? null,
+                            'observed_at' => now(),
+                        ]
+                    );
+                }
+                $regionalQuery = SteamRegionalPrice::query()->where('game_id', $game->id);
+                $regions === [] ? $regionalQuery->delete() : $regionalQuery->whereNotIn('region', $regions)->delete();
+            }
 
             $kinds = [];
             foreach ($result->offerGroups as $group) {

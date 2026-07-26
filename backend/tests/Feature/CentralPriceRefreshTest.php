@@ -8,6 +8,7 @@ use App\Jobs\RefreshGameSourceJob;
 use App\Models\CurrentGamePrice;
 use App\Models\Game;
 use App\Models\GameSourceState;
+use App\Models\SteamRegionalPrice;
 use App\Models\User;
 use App\Services\AlertEvaluationService;
 use App\Services\DueGameRefreshDispatcher;
@@ -57,6 +58,24 @@ class CentralPriceRefreshTest extends TestCase
         $this->assertSame(1, $state->consecutive_failures);
         $this->assertTrue($state->next_refresh_at->isAfter(now()->addSeconds(30)));
         $this->assertTrue($state->next_refresh_at->isBefore(now()->addMinutes(2)));
+    }
+
+    public function test_steam_refresh_persists_regional_prices_without_mislabeling_them_as_rubles(): void
+    {
+        $game = Game::query()->create(['steam_appid' => 1091500, 'name' => 'Cyberpunk 2077']);
+        $this->refreshService(new PriceSourceResult(
+            source: 'steam',
+            offerGroups: [],
+            gameName: 'Cyberpunk 2077',
+            regionalPrices: [['region' => 'US', 'currency' => 'USD', 'amount' => 59.99, 'price_rub' => 4799.2]],
+        ))->refresh($game, 'steam');
+
+        $regional = SteamRegionalPrice::query()->where('game_id', $game->id)->firstOrFail();
+        $this->assertSame('US', $regional->region);
+        $this->assertSame('USD', $regional->currency);
+        $this->assertSame(59.99, $regional->price_amount);
+        $this->assertSame(4799.2, $regional->price_rub);
+        $this->assertDatabaseCount('current_game_prices', 0);
     }
 
     public function test_due_dispatch_skips_marketplaces_for_announced_games(): void

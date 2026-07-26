@@ -16,5 +16,6 @@ final readonly class PriceSourceResult
         public ?string $headerImage = null,
         public ?string $releaseStatus = null,
         public ?string $releaseDate = null,
+        public array $regionalPrices = [],
     ) {}
 }

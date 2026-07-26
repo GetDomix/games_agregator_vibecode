@@ -6,6 +6,7 @@ use App\Jobs\RefreshGameSourceJob;
 use App\Models\CurrentGamePrice;
 use App\Models\Game;
 use App\Models\GameSourceState;
+use App\Models\SteamRegionalPrice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -32,6 +33,20 @@ class StoredPriceSearchTest extends TestCase
         $this->getJson('/api/prices?q=New%20Game&appid=999')->assertOk()
             ->assertJsonPath('steam.name', 'New Game')->assertJsonPath('refreshing', true);
         Queue::assertPushed(RefreshGameSourceJob::class, fn (RefreshGameSourceJob $job) => $job->gameId === Game::query()->where('steam_appid', 999)->value('id'));
+    }
+
+    public function test_prices_exposes_official_regional_steam_prices(): void
+    {
+        $game = Game::query()->create(['steam_appid' => 1091500, 'name' => 'Cyberpunk 2077', 'release_status' => 'released']);
+        SteamRegionalPrice::query()->create([
+            'game_id' => $game->id, 'region' => 'US', 'currency' => 'USD', 'price_amount' => 59.99, 'price_rub' => 4799.2, 'observed_at' => now(),
+        ]);
+
+        $this->getJson('/api/prices?q=Cyberpunk&appid=1091500')->assertOk()
+            ->assertJsonPath('steam.price_rub', null)
+            ->assertJsonPath('steam.regional_prices.0.region', 'US')
+            ->assertJsonPath('steam.regional_prices.0.amount', 59.99)
+            ->assertJsonPath('steam.regional_prices.0.price_rub', 4799.2);
     }
 
     public function test_announced_game_has_no_marketplace_offers(): void

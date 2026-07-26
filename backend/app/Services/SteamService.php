@@ -6,6 +6,8 @@ use Carbon\CarbonImmutable;
 
 class SteamService
 {
+    public function __construct(private readonly ExchangeRateService $exchangeRates) {}
+
     public function search(string $query, int $limit = 8): array
     {
         $candidates = $this->storeSearch($query, 'ru', 'russian', true, $limit);
@@ -136,19 +138,42 @@ class SteamService
     public function refreshDetails(int $appid, ?string $fallbackName = null): array
     {
         $storeUrl = "https://store.steampowered.com/app/{$appid}/";
-        $ru = $this->fetchDetailsForRefresh($appid, 'ru', 'russian');
-        $data = $ru['data'];
-        $availableInRu = $data !== null;
-
-        if ($data === null) {
-            $us = $this->fetchDetailsForRefresh($appid, 'us', 'english');
-            $data = $us['data'];
-            if ($data === null && ($ru['error'] || $us['error'])) {
-                throw new \RuntimeException($ru['error'] ?: $us['error']);
+        $data = null;
+        $availableInRu = false;
+        $errors = [];
+        $regionalPrices = [];
+        foreach ((array) config('gpa.steam_price_regions', []) as $region) {
+            $response = $this->fetchDetailsForRefresh($appid, (string) $region['country'], (string) $region['language']);
+            if ($response['error']) {
+                $errors[] = $response['error'];
             }
+            $regionData = $response['data'];
+            if ($regionData === null) {
+                continue;
+            }
+            $data ??= $regionData;
+            if (($region['region'] ?? null) === 'RU') {
+                $availableInRu = true;
+            }
+            $overview = $regionData['price_overview'] ?? null;
+            if (! is_array($overview) || ! isset($overview['final'])) {
+                continue;
+            }
+            $amount = round($overview['final'] / 100, 2);
+            $currency = (string) ($overview['currency'] ?? $region['currency']);
+            $regionalPrices[] = [
+                'region' => (string) $region['region'],
+                'label' => (string) $region['label'],
+                'currency' => $currency,
+                'amount' => $amount,
+                'price_rub' => $this->exchangeRates->rubFor($currency, $amount),
+            ];
         }
 
         if ($data === null) {
+            if ($errors !== []) {
+                throw new \RuntimeException($errors[0]);
+            }
             return [
                 'appid' => $appid,
                 'name' => $fallbackName ?: "App {$appid}",
@@ -157,16 +182,15 @@ class SteamService
                 'price_rub' => null,
                 'release_status' => 'unknown',
                 'release_date' => null,
+                'regional_prices' => [],
             ];
         }
 
-        $price = $data['price_overview'] ?? null;
         $isFree = (bool) ($data['is_free'] ?? false);
-        $priceRub = null;
-        if ($availableInRu && is_array($price) && isset($price['final'])) {
-            $priceRub = round($price['final'] / 100, 2);
-        } elseif ($availableInRu && $isFree) {
-            $priceRub = 0.0;
+        $ru = collect($regionalPrices)->firstWhere('region', 'RU');
+        if ($availableInRu && $isFree && ! $ru) {
+            $ru = ['amount' => 0.0, 'currency' => 'RUB', 'price_rub' => 0.0];
+            $regionalPrices[] = ['region' => 'RU', 'label' => 'Россия', ...$ru];
         }
         $release = $data['release_date'] ?? [];
         $releaseDate = null;
@@ -183,9 +207,10 @@ class SteamService
             'name' => $data['name'] ?? $fallbackName ?? "App {$appid}",
             'header_image' => $data['header_image'] ?? $data['capsule_image'] ?? null,
             'store_url' => $storeUrl,
-            'price_rub' => $priceRub,
+            'price_rub' => $ru['price_rub'] ?? null,
             'release_status' => ! empty($release['coming_soon']) ? 'announced' : 'released',
             'release_date' => $releaseDate,
+            'regional_prices' => $regionalPrices,
         ];
     }
 

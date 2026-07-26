@@ -40,6 +40,7 @@ class SteamPriceSourceAdapter implements PriceSourceAdapter
             headerImage: $details['header_image'] ?? null,
             releaseStatus: $details['release_status'] ?? null,
             releaseDate: $details['release_date'] ?? null,
+            regionalPrices: $details['regional_prices'] ?? [],
         );
     }
 }

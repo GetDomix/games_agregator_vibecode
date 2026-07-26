@@ -1,6 +1,6 @@
 import unittest
 
-from ui import candidates_keyboard, format_card_details, price
+from ui import candidates_keyboard, format_card_details, official_price, price
 
 
 class UiTest(unittest.TestCase):
@@ -13,3 +13,7 @@ class UiTest(unittest.TestCase):
     def test_candidate_callback_is_compact(self):
         keyboard = candidates_keyboard([{"appid": 123, "name": "Game"}])
         self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "pick:123")
+
+    def test_official_regional_price_keeps_its_currency_and_ruble_estimate(self):
+        steam = {"regional_prices": [{"region": "US", "currency": "USD", "amount": 59.99, "price_rub": 4799.2}]}
+        self.assertEqual(official_price(steam), "$59.99 (≈ 4 799 ₽)")

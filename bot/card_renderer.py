@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from ui import price
+from ui import official_price, price
 
 WIDTH, HEIGHT = 1672, 942
 COVER_HEIGHT = 438
@@ -165,9 +165,8 @@ def render_card(card: dict, cover_bytes: bytes | None = None) -> bytes:
     draw.rounded_rectangle(steam_box, radius=14, fill=PALETTE["panel_deep"], outline=PALETTE["panel_border"], width=2)
     _draw_store_identity(result, draw, "steam", "Steam", (steam_box[0], steam_box[1], steam_box[0] + 170, steam_box[3]), meta_font)
     draw.line((steam_box[0] + 170, steam_box[1] + 6, steam_box[0] + 170, steam_box[3] - 6), fill=PALETTE["panel_border"], width=2)
-    steam_price = steam.get("price_rub")
     draw.text((steam_box[0] + 208, steam_box[1] + 27), "ОФИЦИАЛЬНАЯ ЦЕНА", font=kind_font, fill=PALETTE["muted"])
-    draw.text((steam_box[0] + 208, steam_box[1] + 61), price(steam_price) if steam_price is not None else "—", font=price_font, fill=PALETTE["ink"])
+    draw.text((steam_box[0] + 208, steam_box[1] + 61), official_price(steam), font=price_font, fill=PALETTE["ink"])
 
     _draw_offer_row(result, draw, card, "plati", "Plati.Market", (84, COVER_HEIGHT + 202, WIDTH - 84, COVER_HEIGHT + 322), price_font, kind_font, meta_font)
     _draw_offer_row(result, draw, card, "ggsel", "GGSEL", (84, COVER_HEIGHT + 334, WIDTH - 84, COVER_HEIGHT + 454), price_font, kind_font, meta_font)

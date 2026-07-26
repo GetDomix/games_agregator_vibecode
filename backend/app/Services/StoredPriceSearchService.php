@@ -30,13 +30,21 @@ class StoredPriceSearchService
 
     public function result(Game $game, string $query): array
     {
-        $game->loadMissing(['currentPrices', 'sourceStates']);
+        $game->loadMissing(['currentPrices', 'sourceStates', 'steamRegionalPrices']);
         $stateBySource = $game->sourceStates->keyBy('source');
         $steamPrice = $game->currentPrices->first(fn (CurrentGamePrice $p) => $p->source === 'steam' && $p->offer_kind === 'official');
         $steam = [
             'appid' => (int) $game->steam_appid, 'name' => $game->name,
             'header_image' => $game->header_image, 'store_url' => "https://store.steampowered.com/app/{$game->steam_appid}/",
             'price_rub' => $steamPrice?->min_price_rub, 'price_initial_rub' => null,
+            'regional_prices' => $game->steamRegionalPrices->map(fn ($regional) => [
+                'region' => $regional->region,
+                'label' => $this->regionalLabel($regional->region),
+                'currency' => $regional->currency,
+                'amount' => $regional->price_amount,
+                'price_rub' => $regional->price_rub,
+                'observed_at' => $regional->observed_at?->toIso8601String(),
+            ])->values(),
             'discount_percent' => 0, 'is_free' => $steamPrice?->min_price_rub === '0.00',
             'available_in_ru' => $steamPrice !== null, 'note' => $game->release_status === Game::RELEASE_STATUS_ANNOUNCED ? 'Игра ещё не вышла: предложения маркетплейсов не запрашиваются.' : null,
         ];
@@ -74,6 +82,17 @@ class StoredPriceSearchService
     private function emptyMarket(string $source, string $label): array
     {
         return ['marketplace' => $source, 'label' => $label, 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => [], 'error' => null];
+    }
+
+    private function regionalLabel(string $region): string
+    {
+        foreach ((array) config('gpa.steam_price_regions', []) as $configured) {
+            if (($configured['region'] ?? null) === $region) {
+                return (string) $configured['label'];
+            }
+        }
+
+        return $region;
     }
 
     private function warnings($states): array

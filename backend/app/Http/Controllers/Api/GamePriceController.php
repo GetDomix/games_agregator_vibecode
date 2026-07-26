@@ -11,7 +11,7 @@ class GamePriceController extends Controller
     public function show(int $appid): JsonResponse
     {
         $game = Game::query()->where('steam_appid', $appid)
-            ->with(['currentPrices', 'sourceStates'])
+            ->with(['currentPrices', 'sourceStates', 'steamRegionalPrices'])
             ->first();
         if (! $game) {
             return response()->json(['detail' => 'Игра пока не добавлена в ценовое хранилище'], 404);
@@ -24,6 +24,14 @@ class GamePriceController extends Controller
                 'header_image' => $game->header_image,
                 'release_status' => $game->release_status,
                 'release_date' => $game->release_date?->toDateString(),
+                'steam_regional_prices' => $game->steamRegionalPrices->map(fn ($regional) => [
+                    'region' => $regional->region,
+                    'label' => $this->regionalLabel($regional->region),
+                    'currency' => $regional->currency,
+                    'amount' => $regional->price_amount,
+                    'price_rub' => $regional->price_rub,
+                    'observed_at' => $regional->observed_at?->toIso8601String(),
+                ])->values(),
             ],
             'prices' => $game->currentPrices->map(fn ($price) => [
                 'source' => $price->source,
@@ -47,5 +55,16 @@ class GamePriceController extends Controller
                 'has_error' => $state->status === 'failed',
             ])->values(),
         ]);
+    }
+
+    private function regionalLabel(string $region): string
+    {
+        foreach ((array) config('gpa.steam_price_regions', []) as $configured) {
+            if (($configured['region'] ?? null) === $region) {
+                return (string) $configured['label'];
+            }
+        }
+
+        return $region;
     }
 }

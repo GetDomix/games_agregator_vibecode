@@ -28,6 +28,25 @@ def price(value: object | None) -> str:
         return "—"
 
 
+def official_price(steam: dict) -> str:
+    if steam.get("price_rub") is not None:
+        return price(steam["price_rub"])
+    regions = steam.get("regional_prices") or []
+    preferred = next((item for item in regions if item.get("region") == "US"), regions[0] if regions else None)
+    if not preferred:
+        return "—"
+    amount = preferred.get("amount")
+    currency = str(preferred.get("currency") or "")
+    try:
+        numeric = float(amount)
+    except (TypeError, ValueError):
+        return "—"
+    symbols = {"USD": "$", "EUR": "€", "TRY": "₺", "KZT": "₸"}
+    rendered = f"{symbols.get(currency, currency + ' ')}{numeric:,.2f}".replace(",", " ")
+    converted = preferred.get("price_rub")
+    return f"{rendered} (≈ {price(converted)})" if converted is not None else rendered
+
+
 def candidates_keyboard(items: Iterable[dict]) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=f"🎮 {item['name']}", callback_data=f"pick:{item['appid']}")]
             for item in items]
@@ -65,6 +84,12 @@ def format_card_details(card: dict, favorite: dict | None) -> str:
         lines.append("⏳ Цены обновляются в фоне; на карточке — последнее сохранённое состояние.")
     if steam.get("note"):
         lines.append(f"🗓 {escape(str(steam['note']))}")
+    regional = steam.get("regional_prices") or []
+    if regional:
+        values = []
+        for item in regional:
+            values.append(f"{escape(str(item.get('label') or item.get('region')))}: {escape(official_price({'regional_prices': [item]}))}")
+        lines.append("🌍 Steam по регионам: " + " · ".join(values))
     if favorite and favorite.get("alert"):
         alert = favorite["alert"]
         target = alert.get("target_value")
