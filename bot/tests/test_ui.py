@@ -8,6 +8,7 @@ class UiTest(unittest.TestCase):
         self.assertEqual(price(1234), "1 234 ₽")
         text = format_card_details({"steam": {"name": "<script>", "price_rub": 99}}, None)
         self.assertIn("&lt;script&gt;", text)
+        self.assertNotIn("<b>Steam:</b>", text)
 
     def test_candidate_callback_is_compact(self):
         keyboard = candidates_keyboard([{"appid": 123, "name": "Game"}])

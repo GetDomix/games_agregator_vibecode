@@ -15,6 +15,49 @@ workspace:
     - backend
     - bot
 intents:
+  - id: telegram-bot-experience
+    title: Полноценный пользовательский опыт Telegram-бота
+    status: in_progress
+    work_items:
+      - id: telegram-price-card
+        title: Полная ценовая карточка игры в Telegram
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on: []
+        run_id: run-agregator-games-vibecoding-013
+        completed_at: 2026-07-26T12:15:30.744Z
+      - id: telegram-menu-navigation
+        title: Главное меню и навигация бота без команд
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - telegram-price-card
+      - id: telegram-watchlist-alerts
+        title: Избранное и алерты как разделы Telegram-бота
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - telegram-menu-navigation
+      - id: telegram-message-continuity
+        title: Непрерывный диалог без дублирования сообщений
+        status: pending
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - telegram-menu-navigation
+      - id: telegram-visual-system-quality
+        title: Визуальная система и устойчивые сценарии Telegram-бота
+        status: pending
+        complexity: high
+        mode: validate
+        depends_on:
+          - telegram-price-card
+          - telegram-menu-navigation
+          - telegram-watchlist-alerts
+          - telegram-message-continuity
   - id: unified-price-watchlist-mvp
     title: Единое избранное и ценовые алерты MVP
     status: in_progress
@@ -244,3 +287,11 @@ runs:
           mode: confirm
       started: 2026-07-26T09:04:46.488Z
       completed: 2026-07-26T09:40:58.376Z
+    - id: run-agregator-games-vibecoding-013
+      scope: single
+      work_items:
+        - id: telegram-price-card
+          intent: telegram-bot-experience
+          mode: confirm
+      started: 2026-07-26T12:07:43.175Z
+      completed: 2026-07-26T12:15:30.744Z

@@ -67,9 +67,12 @@ async def show_card(api: LaravelClient, message: Message, telegram_user_id: int,
     await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_PHOTO)
     cover = await api.image((card.get("steam") or {}).get("header_image"))
     image = render_card(card, cover)
-    await message.answer_photo(BufferedInputFile(image, filename=f"igroscan-{appid}.png"), caption="Игроскан · цены из серверного хранилища")
-    await message.answer(format_card_details(card, favorite), parse_mode="HTML", disable_web_page_preview=True,
-                         reply_markup=card_keyboard(appid, favorite is not None))
+    await message.answer_photo(
+        BufferedInputFile(image, filename=f"igroscan-{appid}.png"),
+        caption=format_card_details(card, favorite),
+        parse_mode="HTML",
+        reply_markup=card_keyboard(appid, favorite is not None),
+    )
 
 
 def make_handlers(api: LaravelClient):

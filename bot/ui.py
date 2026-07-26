@@ -62,23 +62,15 @@ def format_card_details(card: dict, favorite: dict | None) -> str:
     steam = card.get("steam") or {}
     lines = [f"<b>{escape(str(steam.get('name') or 'Игра'))}</b>"]
     if card.get("refreshing"):
-        lines.append("⏳ Данные обновляются в фоне — карточка покажет последнее сохранённое состояние.")
+        lines.append("⏳ Цены обновляются в фоне; на карточке — последнее сохранённое состояние.")
     if steam.get("note"):
         lines.append(f"🗓 {escape(str(steam['note']))}")
-    lines.append(f"<b>Steam:</b> {price(steam.get('price_rub'))}")
-    for key, label in (("plati", "Plati.Market"), ("ggsel", "GGsel")):
-        market = card.get(key) or {}
-        groups = market.get("by_kind") or []
-        if groups:
-            summary = ", ".join(f"{escape(str(g.get('label') or g.get('kind')))} — {price(g.get('min_price'))}" for g in groups)
-            lines.append(f"<b>{label}:</b> {summary}")
-        elif market.get("error"):
-            lines.append(f"<b>{label}:</b> {escape(str(market['error']))}")
     if favorite and favorite.get("alert"):
         alert = favorite["alert"]
         target = alert.get("target_value")
         state = "сработал" if alert.get("status") == "triggered" else "активен"
         lines.append(f"🔔 Alert {state}: {price(target)}")
+    lines.append("Цены и типы предложений — на карточке.")
     return "\n".join(lines)
 
 

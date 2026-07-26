@@ -6,7 +6,7 @@ from aiogram.enums import ChatType
 from aiogram.types import CallbackQuery, Message
 
 from api_client import LaravelApiError
-from main import WatchSetup, make_handlers, session
+from main import WatchSetup, make_handlers, session, show_card
 
 
 def make_message(*, text: str = "", chat_type: ChatType = ChatType.PRIVATE) -> Message:
@@ -40,6 +40,22 @@ def make_state(**data):
 
 
 class HandlerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_show_card_sends_one_photo_with_caption_and_actions(self):
+        api = MagicMock()
+        api.card = AsyncMock(return_value={
+            "card": {"steam": {"name": "Half-Life", "header_image": "https://img.test/70.jpg", "price_rub": 99}, "plati": {"by_kind": []}, "ggsel": {"by_kind": []}},
+            "favorite": None,
+        })
+        api.image = AsyncMock(return_value=None)
+        message = make_message()
+
+        await show_card(api, message, 12, 70)
+
+        message.answer_photo.assert_awaited_once()
+        self.assertIn("Цены и типы предложений", message.answer_photo.await_args.kwargs["caption"])
+        self.assertIsNotNone(message.answer_photo.await_args.kwargs["reply_markup"])
+        message.answer.assert_not_awaited()
+
     async def test_session_rejects_group_chat_without_api_call(self):
         api = MagicMock()
         api.session = AsyncMock()
