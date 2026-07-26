@@ -27,6 +27,15 @@ intents:
         depends_on: []
         run_id: run-agregator-games-vibecoding-013
         completed_at: 2026-07-26T12:15:30.744Z
+      - id: telegram-price-card-composition
+        title: Перекомпоновка карточки цен для Telegram
+        status: completed
+        complexity: medium
+        mode: confirm
+        depends_on:
+          - telegram-price-card
+        run_id: run-agregator-games-vibecoding-014
+        completed_at: 2026-07-26T12:55:20.461Z
       - id: telegram-menu-navigation
         title: Главное меню и навигация бота без команд
         status: pending
@@ -295,3 +304,11 @@ runs:
           mode: confirm
       started: 2026-07-26T12:07:43.175Z
       completed: 2026-07-26T12:15:30.744Z
+    - id: run-agregator-games-vibecoding-014
+      scope: single
+      work_items:
+        - id: telegram-price-card-composition
+          intent: telegram-bot-experience
+          mode: confirm
+      started: 2026-07-26T12:50:41.265Z
+      completed: 2026-07-26T12:55:20.461Z
