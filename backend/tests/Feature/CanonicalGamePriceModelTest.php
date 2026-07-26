@@ -153,6 +153,7 @@ class CanonicalGamePriceModelTest extends TestCase
         // Newer tables depend on games, so remove only those test-local dependents first.
         Schema::dropIfExists('alert_deliveries');
         Schema::dropIfExists('alert_events');
+        Schema::dropIfExists('steam_regional_prices');
         Schema::table('favorite_alerts', fn (Blueprint $table) => $table->dropColumn('cycle'));
         $migration->down();
 

@@ -26,3 +26,7 @@ None required.
 ## Suggestions requiring approval
 
 None. Message editing and duplicate-message cleanup remain deliberately outside this work item.
+
+## CI regression correction
+
+The migration-backfill test manually rolls back `games`; it now first removes the Steam regional-price table that has a foreign key to `games`. This is isolated test setup and does not change the production migration or stored price behavior.

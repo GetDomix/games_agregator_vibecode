@@ -16,3 +16,10 @@
 ## Notes
 
 No real Telegram API was called. Tests use mocked messages and API client calls.
+
+## CI recovery verification
+
+The production pipeline exposed a PostgreSQL-only migration test failure after the regional Steam-price table was added. The legacy canonical-migration test now removes that test-local dependent table before temporarily dropping `games`.
+
+- Laravel feature suite split for the Docker time limit: 27 passed + 33 passed, 0 failed.
+- Bot suite: 29 passed, 0 failed.
