@@ -1,7 +1,7 @@
 import unittest
 from io import BytesIO
 
-from card_renderer import HEIGHT, WIDTH, render_card
+from card_renderer import HEIGHT, PALETTE, WIDTH, _price_tone, render_card
 from PIL import Image
 
 
@@ -36,3 +36,28 @@ class CardRendererTest(unittest.TestCase):
         pixel = image.getpixel((WIDTH // 2, 150))
         self.assertGreater(pixel[1], 130)
         self.assertGreater(pixel[2], 130)
+
+    def test_colors_market_prices_relative_to_the_official_steam_price(self):
+        self.assertEqual(_price_tone(900, 2000), PALETTE["good"])
+        self.assertEqual(_price_tone(1500, 2000), PALETTE["okay"])
+        self.assertEqual(_price_tone(2000, 2000), PALETTE["bad"])
+        self.assertEqual(_price_tone(900, None), PALETTE["muted"])
+
+    def test_renders_every_offer_kind_without_overflow(self):
+        png = render_card({
+            "steam": {"name": "Длинное русское название игры", "price_rub": 1999},
+            "plati": {"by_kind": [
+                {"kind": "gift", "min_price": 950, "count": 135},
+                {"kind": "account", "min_price": 92, "count": 232},
+                {"kind": "key", "min_price": 629, "count": 73},
+                {"kind": "rent", "min_price": 19, "count": 55},
+            ]},
+            "ggsel": {"by_kind": [
+                {"kind": "account", "min_price": 149, "count": 30},
+                {"kind": "gift", "min_price": 2468, "count": 8},
+                {"kind": "key", "min_price": 1328, "count": 5},
+                {"kind": "rent", "min_price": 149, "count": 3},
+                {"kind": "other", "min_price": 807, "count": 14},
+            ]},
+        })
+        self.assertEqual(Image.open(BytesIO(png)).size, (WIDTH, HEIGHT))

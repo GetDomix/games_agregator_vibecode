@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from math import ceil
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
@@ -9,6 +10,7 @@ from ui import price
 
 WIDTH, HEIGHT = 1280, 720
 COVER_HEIGHT = 330
+ASSETS = Path(__file__).with_name("assets")
 PALETTE = {
     "paper": "#101722",
     "panel": "#172131",
@@ -19,6 +21,9 @@ PALETTE = {
     "signal": "#ff6b4a",
     "cool": "#61b8ff",
     "violet": "#aa8cff",
+    "good": "#62d86b",
+    "okay": "#f5bd45",
+    "bad": "#ff6259",
 }
 
 
@@ -96,19 +101,40 @@ def _source_status(card: dict, source: str, groups: list[dict]) -> str:
     return "нет цен"
 
 
-def _minimum(groups: list[dict]) -> object | None:
-    values = [group.get("min_price") for group in groups if group.get("min_price") is not None]
-    return min(values) if values else None
+def _price_tone(value: object | None, steam_price: object | None) -> str:
+    if value is None or steam_price is None:
+        return PALETTE["muted"]
+    ratio = float(value) / float(steam_price)
+    if ratio >= 1:
+        return PALETTE["bad"]
+    if ratio >= 0.7:
+        return PALETTE["okay"]
+    return PALETTE["good"]
+
+
+def _logo(source: str, size: int) -> Image.Image:
+    if source == "steam":
+        icon = Image.new("RGBA", (size, size), "#1b75bb")
+        draw = ImageDraw.Draw(icon)
+        draw.ellipse((0, 0, size - 1, size - 1), fill="#1b75bb")
+        line = max(2, size // 13)
+        draw.line((size * 0.18, size * 0.67, size * 0.64, size * 0.44), fill="white", width=line)
+        draw.ellipse((size * 0.10, size * 0.55, size * 0.35, size * 0.80), outline="white", width=line)
+        draw.ellipse((size * 0.59, size * 0.24, size * 0.92, size * 0.57), outline="white", width=line)
+        draw.ellipse((size * 0.70, size * 0.35, size * 0.81, size * 0.46), fill="white")
+        return icon
+    filename = "plati-market-logo.png" if source == "plati" else "ggsel-logo.png"
+    logo = Image.open(ASSETS / filename).convert("RGBA")
+    return ImageOps.contain(logo, (size, size), method=Image.Resampling.LANCZOS)
 
 
 def _draw_market(
+    result: Image.Image,
     draw: ImageDraw.ImageDraw,
     card: dict,
     source: str,
     label: str,
-    color: str,
     box: tuple[int, int, int, int],
-    label_font: ImageFont.ImageFont,
     price_font: ImageFont.ImageFont,
     kind_font: ImageFont.ImageFont,
     meta_font: ImageFont.ImageFont,
@@ -116,36 +142,40 @@ def _draw_market(
     x1, y1, x2, y2 = box
     groups = _groups(card, source)
     status = _source_status(card, source, groups)
-    draw.rounded_rectangle(box, radius=18, fill=PALETTE["panel"], outline=PALETTE["panel_border"], width=2)
-    draw.rounded_rectangle((x1 + 18, y1 + 18, x1 + 24, y1 + 54), radius=3, fill=color)
-    draw.text((x1 + 36, y1 + 15), label, font=label_font, fill=PALETTE["ink"])
+    draw.rounded_rectangle(box, radius=14, fill=PALETTE["panel"], outline=PALETTE["panel_border"], width=2)
+    logo = _logo(source, 48)
+    result.paste(logo, (x1 + 18, y1 + 8), logo)
+    draw.text((x1 + 42, y2 - 12), _fit(label, _font(9, True), 62), font=_font(9, True), fill=PALETTE["muted"], anchor="ms")
     if status:
-        draw.text((x1 + 36, y1 + 63), status.upper(), font=kind_font, fill=PALETTE["muted"])
+        draw.text((x1 + 88, y1 + 18), status.upper(), font=kind_font, fill=PALETTE["muted"])
         return
 
-    minimum = _minimum(groups)
-    draw.text((x1 + 36, y1 + 55), f"от {price(minimum)}", font=price_font, fill=PALETTE["ink"])
-    draw.text((x1 + 36, y1 + 96), "МИНИМАЛЬНАЯ ЦЕНА", font=meta_font, fill=PALETTE["muted"])
+    steam_price = (card.get("steam") or {}).get("price_rub")
     if source == "steam":
-        draw.text((x1 + 36, y1 + 128), "ОФИЦИАЛЬНЫЙ МАГАЗИН", font=meta_font, fill=PALETTE["muted"])
+        draw.text((x1 + 88, y1 + 8), "ОФИЦИАЛЬНАЯ ЦЕНА", font=meta_font, fill=PALETTE["muted"])
+        draw.text((x1 + 88, y1 + 24), price(steam_price), font=price_font, fill=PALETTE["ink"])
         return
 
-    kinds_x = x1 + 192
+    kinds_x = x1 + 88
     kind_width = x2 - kinds_x - 20
-    columns = 2
+    columns = 3 if len(groups) > 4 else 2
     chip_width = kind_width if columns == 1 else (kind_width - 10) // 2
     rows = ceil(len(groups) / columns)
-    chip_height = min(42, max(30, (y2 - y1 - 34) // max(rows, 1)))
+    chip_gap = 4
+    chip_height = max(30, (y2 - y1 - 14 - chip_gap * max(rows - 1, 0)) // max(rows, 1))
     for index, group in enumerate(groups):
         row, column = divmod(index, columns)
         chip_x = kinds_x + column * (chip_width + 10)
-        chip_y = y1 + 18 + row * chip_height
+        chip_y = y1 + 7 + row * (chip_height + chip_gap)
         label_text = _fit(_kind_label(group).upper(), meta_font, chip_width - 12)
         count = group.get("count") or group.get("offer_count")
         suffix = f" · {count}" if count and source != "steam" else ""
-        draw.rounded_rectangle((chip_x, chip_y, chip_x + chip_width, chip_y + chip_height - 5), radius=8, fill=PALETTE["panel_deep"])
-        draw.text((chip_x + 10, chip_y + 5), label_text, font=meta_font, fill=PALETTE["muted"])
-        draw.text((chip_x + 10, chip_y + 20), _fit(price(group.get("min_price")) + suffix, kind_font, chip_width - 14), font=kind_font, fill=PALETTE["ink"])
+        draw.rounded_rectangle((chip_x, chip_y, chip_x + chip_width, chip_y + chip_height), radius=8, fill=PALETTE["panel_deep"])
+        amount = group.get("min_price")
+        draw.text((chip_x + 10, chip_y + 4), label_text, font=meta_font, fill=PALETTE["muted"])
+        draw.text((chip_x + 10, chip_y + 17), _fit(price(amount), price_font, chip_width - 14), font=price_font, fill=_price_tone(amount, steam_price))
+        if suffix:
+            draw.text((chip_x + chip_width - 9, chip_y + chip_height - 5), suffix.strip(" ·"), font=meta_font, fill=PALETTE["muted"], anchor="rs")
 
 
 def render_card(card: dict, cover_bytes: bytes | None = None) -> bytes:
@@ -156,8 +186,8 @@ def render_card(card: dict, cover_bytes: bytes | None = None) -> bytes:
     draw.rectangle((0, COVER_HEIGHT, WIDTH, HEIGHT), fill=PALETTE["paper"])
     draw.rectangle((0, COVER_HEIGHT, WIDTH, COVER_HEIGHT + 4), fill=PALETTE["signal"])
 
-    title_font, price_font = _font(32, True), _font(26, True)
-    label_font, kind_font, meta_font = _font(18, True), _font(16, True), _font(12, True)
+    title_font, price_font = _font(30, True), _font(20, True)
+    kind_font, meta_font = _font(14, True), _font(11, True)
     steam = card.get("steam") or {}
     name = _fit(str(steam.get("name") or "Игра"), title_font, WIDTH - 360)
     draw.text((36, COVER_HEIGHT + 28), name, font=title_font, fill=PALETTE["ink"])
@@ -166,14 +196,13 @@ def render_card(card: dict, cover_bytes: bytes | None = None) -> bytes:
     draw.rounded_rectangle((WIDTH - 204, COVER_HEIGHT + 28, WIDTH - 36, COVER_HEIGHT + 60), radius=16, fill=PALETTE["signal"])
     draw.text((WIDTH - 184, COVER_HEIGHT + 37), "ИГРОСКАН", font=kind_font, fill="white")
 
-    top = COVER_HEIGHT + 100
-    bottom = HEIGHT - 22
-    steam_box = (36, top, 310, bottom)
-    plati_box = (326, top, 785, bottom)
-    ggsel_box = (801, top, WIDTH - 36, bottom)
-    _draw_market(draw, card, "steam", "STEAM", PALETTE["cool"], steam_box, label_font, price_font, kind_font, meta_font)
-    _draw_market(draw, card, "plati", "PLATI.MARKET", PALETTE["violet"], plati_box, label_font, price_font, kind_font, meta_font)
-    _draw_market(draw, card, "ggsel", "GGSEL", PALETTE["signal"], ggsel_box, label_font, price_font, kind_font, meta_font)
+    top = COVER_HEIGHT + 94
+    steam_box = (36, top, WIDTH - 36, top + 50)
+    plati_box = (36, top + 56, WIDTH - 36, top + 160)
+    ggsel_box = (36, top + 166, WIDTH - 36, HEIGHT - 18)
+    _draw_market(result, draw, card, "steam", "Steam", steam_box, price_font, kind_font, meta_font)
+    _draw_market(result, draw, card, "plati", "Plati.Market", plati_box, price_font, kind_font, meta_font)
+    _draw_market(result, draw, card, "ggsel", "GGSEL", ggsel_box, price_font, kind_font, meta_font)
 
     stream = BytesIO()
     result.save(stream, format="PNG", optimize=True)
