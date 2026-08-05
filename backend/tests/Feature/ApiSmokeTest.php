@@ -35,6 +35,24 @@ class ApiSmokeTest extends TestCase
             ->assertJsonPath('email', 'user@example.com');
     }
 
+    public function test_login_from_production_frontend_does_not_require_csrf_token(): void
+    {
+        User::factory()->create([
+            'email' => 'login@example.com',
+            'password' => 'password1',
+        ]);
+
+        config(['sanctum.stateful' => ['gpa.185.100.157.180.sslip.io']]);
+
+        $this->withHeader('Origin', 'https://gpa.185.100.157.180.sslip.io')
+            ->postJson('/api/auth/login', [
+                'email' => 'login@example.com',
+                'password' => 'password1',
+            ])
+            ->assertOk()
+            ->assertJsonStructure(['access_token', 'user']);
+    }
+
     public function test_favorites_require_auth(): void
     {
         $this->getJson('/api/me/favorites')->assertUnauthorized();
