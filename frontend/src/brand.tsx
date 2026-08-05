@@ -8,7 +8,7 @@ export const BRAND = {
     'Игроскан — агрегатор цен на игры: сравниваем Steam RU, Plati.Market и GGsel. История, избранное, целевая цена.',
 } as const
 
-/** Geometric mark: scan arc + game diamond */
+/** Animated mark: radar sweep on a graphite tile — beam + trail + blip (CSS-driven, see .brand-sweep/.brand-blip) */
 export function BrandMark({ className = '', size = 42 }: { className?: string; size?: number }) {
   return (
     <svg
@@ -20,32 +20,21 @@ export function BrandMark({ className = '', size = 42 }: { className?: string; s
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
     >
-      <defs>
-        <linearGradient id="ig-g" x1="8" y1="6" x2="42" y2="44" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#ff6b4a" />
-          <stop offset="0.55" stopColor="#f59e0b" />
-          <stop offset="1" stopColor="#22c55e" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="2" width="44" height="44" rx="14" fill="url(#ig-g)" />
-      {/* scan rings */}
-      <path
-        d="M14 28c0-5.5 4.5-10 10-10s10 4.5 10 10"
-        stroke="#fff"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        opacity="0.95"
-      />
-      <path
-        d="M18.5 28c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"
-        stroke="#fff"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-      <circle cx="24" cy="28" r="2.4" fill="#fff" />
-      {/* soft pulse dot */}
-      <circle cx="34" cy="16" r="3" fill="#fff" opacity="0.9" />
+      <rect x="0.5" y="0.5" width="47" height="47" rx="12" fill="#0d131b" stroke="#2a3a4c" />
+      {/* radar rings — muted blue-grey, outermost carries a green tint */}
+      <circle cx="24" cy="24" r="15" stroke="#52d992" strokeWidth="1" opacity="0.28" />
+      <circle cx="24" cy="24" r="10" stroke="#4a5d72" strokeWidth="1" opacity="0.5" />
+      <circle cx="24" cy="24" r="5" stroke="#4a5d72" strokeWidth="1" opacity="0.32" />
+      {/* rotating sweep: soft trail wedges + beam line */}
+      <g className="brand-sweep">
+        <path d="M24 24 L24 9 A15 15 0 0 0 11.7 15.4 Z" fill="#52d992" opacity="0.1" />
+        <path d="M24 24 L24 9 A15 15 0 0 0 17.7 10.4 Z" fill="#52d992" opacity="0.14" />
+        <line x1="24" y1="24" x2="24" y2="9" stroke="#52d992" strokeWidth="1.8" strokeLinecap="round" />
+      </g>
+      {/* blip — pulses when the beam passes */}
+      <circle className="brand-blip" cx="30.7" cy="17.3" r="2.1" fill="#52d992" />
+      {/* center dot */}
+      <circle cx="24" cy="24" r="1.9" fill="#52d992" />
     </svg>
   )
 }

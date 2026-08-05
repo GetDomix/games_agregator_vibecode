@@ -17,5 +17,7 @@ final readonly class PriceSourceResult
         public ?string $releaseStatus = null,
         public ?string $releaseDate = null,
         public array $regionalPrices = [],
+        public ?int $discountPercent = null,
+        public ?float $priceInitialRub = null,
     ) {}
 }

@@ -1,3 +1,4 @@
+export type AlertPrefs = { mode: 'simple' | 'advanced'; kinds: ('key' | 'gift' | 'account' | 'rent')[] }
 export type AlertScope = { source: 'steam' | 'plati' | 'ggsel'; offer_kind: 'official' | 'key' | 'gift' | 'account' | 'rent' }
 export type Freshness = { source: string; status: string; last_success_at?: string | null; next_refresh_at?: string | null; last_error?: string | null }
 export type FavoriteItem = {

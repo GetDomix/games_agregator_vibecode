@@ -140,6 +140,7 @@ class SteamService
         $storeUrl = "https://store.steampowered.com/app/{$appid}/";
         $data = null;
         $availableInRu = false;
+        $ruOverview = null;
         $errors = [];
         $regionalPrices = [];
         foreach ((array) config('gpa.steam_price_regions', []) as $region) {
@@ -152,10 +153,13 @@ class SteamService
                 continue;
             }
             $data ??= $regionData;
+            $overview = $regionData['price_overview'] ?? null;
             if (($region['region'] ?? null) === 'RU') {
                 $availableInRu = true;
+                if (is_array($overview) && isset($overview['final'])) {
+                    $ruOverview = $overview;
+                }
             }
-            $overview = $regionData['price_overview'] ?? null;
             if (! is_array($overview) || ! isset($overview['final'])) {
                 continue;
             }
@@ -187,6 +191,19 @@ class SteamService
         }
 
         $isFree = (bool) ($data['is_free'] ?? false);
+        $discountPercent = null;
+        $priceInitialRub = null;
+        if (is_array($ruOverview)) {
+            if (isset($ruOverview['discount_percent'])) {
+                $discountPercent = (int) $ruOverview['discount_percent'];
+            }
+            if (isset($ruOverview['initial'])) {
+                $priceInitialRub = round($ruOverview['initial'] / 100, 2);
+                if ($discountPercent === null && $ruOverview['initial'] > $ruOverview['final'] && $ruOverview['final'] > 0) {
+                    $discountPercent = (int) round((1 - $ruOverview['final'] / $ruOverview['initial']) * 100);
+                }
+            }
+        }
         $ru = collect($regionalPrices)->firstWhere('region', 'RU');
         if ($availableInRu && $isFree && ! $ru) {
             $ru = ['amount' => 0.0, 'currency' => 'RUB', 'price_rub' => 0.0];
@@ -208,6 +225,8 @@ class SteamService
             'header_image' => $data['header_image'] ?? $data['capsule_image'] ?? null,
             'store_url' => $storeUrl,
             'price_rub' => $ru['price_rub'] ?? null,
+            'price_initial_rub' => $priceInitialRub,
+            'discount_percent' => $discountPercent,
             'release_status' => ! empty($release['coming_soon']) ? 'announced' : 'released',
             'release_date' => $releaseDate,
             'regional_prices' => $regionalPrices,

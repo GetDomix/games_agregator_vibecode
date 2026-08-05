@@ -41,6 +41,8 @@ class CurrentGamePrice extends Model
         'popular_offer_url',
         'popular_offer_price_rub',
         'popular_offer_sales',
+        'discount_percent',
+        'price_initial_rub',
         'observed_at',
     ];
 
@@ -52,6 +54,8 @@ class CurrentGamePrice extends Model
             'offer_count' => 'integer',
             'popular_offer_price_rub' => 'decimal:2',
             'popular_offer_sales' => 'integer',
+            'discount_percent' => 'integer',
+            'price_initial_rub' => 'float',
             'observed_at' => 'datetime',
         ];
     }

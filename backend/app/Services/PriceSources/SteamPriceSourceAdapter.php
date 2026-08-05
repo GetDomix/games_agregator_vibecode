@@ -41,6 +41,8 @@ class SteamPriceSourceAdapter implements PriceSourceAdapter
             releaseStatus: $details['release_status'] ?? null,
             releaseDate: $details['release_date'] ?? null,
             regionalPrices: $details['regional_prices'] ?? [],
+            discountPercent: $details['discount_percent'] ?? null,
+            priceInitialRub: $details['price_initial_rub'] ?? null,
         );
     }
 }

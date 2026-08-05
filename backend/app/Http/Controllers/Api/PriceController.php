@@ -9,6 +9,7 @@ use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
 use App\Models\User;
 use App\Services\AggregatorService;
+use App\Services\GamePriceRefreshService;
 use App\Services\GameRefreshRequestService;
 use App\Services\StoredPriceSearchService;
 use Illuminate\Http\JsonResponse;
@@ -17,7 +18,11 @@ use Illuminate\Support\Facades\Auth;
 
 class PriceController extends Controller
 {
-    public function __construct(private readonly AggregatorService $aggregator, private readonly StoredPriceSearchService $stored) {}
+    public function __construct(
+        private readonly AggregatorService $aggregator,
+        private readonly StoredPriceSearchService $stored,
+        private readonly GamePriceRefreshService $refreshService,
+    ) {}
 
     public function search(Request $request): JsonResponse
     {
@@ -48,6 +53,7 @@ class PriceController extends Controller
         }
 
         $user = Auth::guard('sanctum')->user();
+        $force = $request->boolean('force');
 
         $game = $appid ? Game::query()->where('steam_appid', $appid)->first() : null;
         if (! $game && $appid) {
@@ -57,11 +63,46 @@ class PriceController extends Controller
             $candidate = $this->stored->candidates($q, 1)[0] ?? null;
             if ($candidate) {
                 $game = Game::query()->where('steam_appid', $candidate['appid'])->first();
+                if (! $game && $force) {
+                    $game = Game::query()->firstOrCreate(
+                        ['steam_appid' => (int) $candidate['appid']],
+                        [
+                            'name' => mb_substr(trim($candidate['name'] ?? '') ?: "Steam app {$candidate['appid']}", 0, 200),
+                            'header_image' => $candidate['header_image'] ?? null,
+                        ]
+                    );
+                }
             }
         }
         if (! $game) {
-            return response()->json(['query' => $q, 'steam' => null, 'candidates' => [], 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => ['Игра не найдена в локальном каталоге. Выберите её из подсказок Steam.'], 'refreshing' => false]);
+            // Нет локальной игры: отдаём совпадения, чтобы пользователь выбрал из списка под поиском.
+            $matches = $this->stored->candidates($q);
+            if ($matches === []) {
+                $matches = array_slice($this->aggregator->searchCandidates($q), 0, 8);
+            }
+            if ($matches !== [] && $force) {
+                $top = $matches[0];
+                $game = Game::query()->firstOrCreate(
+                    ['steam_appid' => (int) $top['appid']],
+                    [
+                        'name' => mb_substr(trim($top['name'] ?? '') ?: "Steam app {$top['appid']}", 0, 200),
+                        'header_image' => $top['header_image'] ?? null,
+                    ]
+                );
+            }
+            if (! $game) {
+                return response()->json(['query' => $q, 'steam' => null, 'candidates' => $matches, 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => [], 'refreshing' => false]);
+            }
         }
+
+        if ($force) {
+            try {
+                $this->refreshService->refresh($game, 'steam');
+            } catch (\Throwable) {
+            }
+            $game->refresh();
+        }
+
         $result = $this->stored->result($game, $q);
 
         if ($user) {

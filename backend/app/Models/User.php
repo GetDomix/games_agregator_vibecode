@@ -25,6 +25,7 @@ class User extends Authenticatable
         'telegram_username',
         'telegram_linked_at',
         'radar_enabled',
+        'alert_prefs',
     ];
 
     protected $hidden = [
@@ -41,6 +42,7 @@ class User extends Authenticatable
             'is_admin' => 'boolean',
             'telegram_linked_at' => 'datetime',
             'radar_enabled' => 'boolean',
+            'alert_prefs' => 'array',
         ];
     }
 
@@ -85,6 +87,7 @@ class User extends Authenticatable
             'is_admin' => $this->isAdminUser(),
             'telegram_linked' => (bool) $this->telegram_chat_id,
             'radar_enabled' => (bool) ($this->radar_enabled ?? true),
+            'alert_prefs' => $this->alert_prefs,
             'created_at' => $this->created_at?->toIso8601String(),
             'last_login_at' => $this->last_login_at?->toIso8601String(),
         ];

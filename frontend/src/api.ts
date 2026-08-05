@@ -1,3 +1,5 @@
+import type { AlertPrefs } from './watchlist'
+
 const TOKEN_KEY = 'gpa_token'
 const USER_KEY = 'gpa_user'
 
@@ -10,6 +12,7 @@ export type User = {
   radar_enabled?: boolean
   created_at?: string
   last_login_at?: string | null
+  alert_prefs?: AlertPrefs | null
 }
 
 export function getToken(): string | null {

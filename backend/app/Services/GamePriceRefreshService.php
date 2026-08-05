@@ -85,6 +85,10 @@ class GamePriceRefreshService
                     'popular_offer_sales' => $popular['sales'] ?? null,
                     'observed_at' => now(),
                 ];
+                if ($result->source === GameSourceState::SOURCE_STEAM) {
+                    $values['discount_percent'] = $result->discountPercent;
+                    $values['price_initial_rub'] = $result->priceInitialRub;
+                }
                 CurrentGamePrice::query()->updateOrCreate(
                     ['game_id' => $game->id, 'source' => $result->source, 'offer_kind' => $kind],
                     $values

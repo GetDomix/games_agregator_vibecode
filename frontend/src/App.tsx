@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from './api'
 import type { User } from './api'
 import { BRAND, BrandMark } from './brand'
+import { IconClose, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from './icons'
 import { AlertSettingsModal } from './components/AlertSettingsModal'
 import { WatchlistAlerts } from './components/WatchlistAlerts'
-import type { AlertItem, AlertScope, FavoriteItem } from './watchlist'
+import type { AlertItem, AlertPrefs, AlertScope, FavoriteItem } from './watchlist'
 import './styles.css'
 
 type RecentItem = { q: string; appid?: number | null; at: number }
@@ -36,39 +37,42 @@ type PriceResponse = { query: string; steam: Steam | null; candidates: { appid: 
 type PopularItem = { query: string; game_name?: string | null; appid?: number | null; header_image?: string | null; count?: number }
 type Fav = { id: number; appid: number; game_name: string; header_image?: string | null; target_price_rub?: number | null; last_steam_price_rub?: number | null; price_below_target?: boolean }
 type Hist = { id: number; query: string; appid?: number | null; game_name?: string | null; header_image?: string | null; steam_price_rub?: number | null; plati_min_rub?: number | null; ggsel_min_rub?: number | null; created_at?: string }
-type AdSlotDef = {
-  id: string
-  placement: string
-  format: string
-  size_hint?: string
-  title: string
-  subtitle?: string
-  cta?: string
-  provider?: string
-  click_url?: string | null
-  image_url?: string | null
-  html?: string | null
+type WeeklyDeal = {
+  appid: number
+  name: string
+  header_image?: string | null
+  price_initial_rub?: number | null
+  price_final_rub?: number | null
+  discount_percent?: number | null
+  savings_rub?: number | null
 }
-type AdsConfig = {
-  enabled: boolean
-  contact_email?: string
-  label?: string
-  note?: string
-  slots: AdSlotDef[]
+type WeeklyDeals = {
+  generated_at?: string
+  items: WeeklyDeal[]
 }
+
+type SuggestItem = { appid: number; name: string; tiny_image?: string; price_rub?: number | null }
+const suggestCache = new Map<string, SuggestItem[]>()
 
 const rub = (v?: number | null) =>
   v == null || Number.isNaN(Number(v))
     ? '—'
     : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(Number(v))
 
+// Битая картинка (например, 404 на CDN Steam) — прячем её, чтобы не было разбитых иконок.
+const hideBrokenImg = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const el = e.currentTarget
+  el.onerror = null
+  el.style.display = 'none'
+}
+
 function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('gpa_theme') || 'light')
+  const [theme, setTheme] = useState(() => localStorage.getItem('gpa_theme') || 'dark')
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('gpa_theme', theme)
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b0f17' : '#f6f1e8')
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0a0e13' : '#eef1f5')
   }, [theme])
   return { theme, toggle: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')) }
 }
@@ -77,7 +81,7 @@ export default function App() {
   const { theme, toggle } = useTheme()
   const [user, setUser] = useState<User | null>(getStoredUser())
   const [token, setToken] = useState<string | null>(getToken())
-  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'admin' | 'radar'>('home')
+  const [view, setView] = useState<'home' | 'cabinet' | 'guide' | 'admin' | 'radar' | 'favorites' | 'account'>('home')
   const [linkCode, setLinkCode] = useState<string | null>(null)
   const [linkDeep, setLinkDeep] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -104,11 +108,12 @@ export default function App() {
     stats: Record<string, number | Record<string, number>>
     recent_users: { id: number; email: string; display_name: string; is_admin: boolean; created_at?: string }[]
   } | null>(null)
-  const [ads, setAds] = useState<AdsConfig | null>(null)
+  const [deals, setDeals] = useState<WeeklyDeal[]>([])
   const [marketTab, setMarketTab] = useState<'plati' | 'ggsel'>('plati')
   const [aboutOpen, setAboutOpen] = useState(false)
   const [suggests, setSuggests] = useState<{ appid: number; name: string; tiny_image?: string; price_rub?: number | null }[]>([])
   const [suggestOpen, setSuggestOpen] = useState(false)
+  const [suggestStatus, setSuggestStatus] = useState<'idle' | 'searching' | 'empty'>('idle')
   const [tgStatus, setTgStatus] = useState<{
     linked: boolean
     identity_linked?: boolean
@@ -121,6 +126,15 @@ export default function App() {
   const [watchlist, setWatchlist] = useState<FavoriteItem[]>([])
   const [alertItems, setAlertItems] = useState<AlertItem[]>([])
   const [alertModal, setAlertModal] = useState<{ favorite: FavoriteItem; create: boolean } | null>(null)
+  const [forceRefreshing, setForceRefreshing] = useState(false)
+  const autoForceRef = useRef(false)
+  const lastSearchRef = useRef<{ q: string; appid: number | null } | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [pwdCurrent, setPwdCurrent] = useState('')
+  const [pwdNew, setPwdNew] = useState('')
+  const [pwdConfirm, setPwdConfirm] = useState('')
+  const [pwdError, setPwdError] = useState('')
+  const [pwdSaving, setPwdSaving] = useState(false)
 
   const loggedIn = Boolean(token && user)
 
@@ -142,12 +156,6 @@ export default function App() {
     window.addEventListener('message', onTelegramOidc)
     return () => window.removeEventListener('message', onTelegramOidc)
   }, [])
-  const showAds = Boolean(ads?.enabled)
-
-  const adByPlacement = useCallback(
-    (placement: string) => (showAds ? ads?.slots.find((s) => s.placement === placement) : undefined),
-    [ads, showAds],
-  )
 
   const refreshMe = useCallback(async () => {
     if (!getToken()) return
@@ -165,11 +173,11 @@ export default function App() {
   useEffect(() => {
     refreshMe()
     api<{ items: PopularItem[] }>('/api/trends/popular?limit=8')
-      .then((d) => setPopular(d.items || []))
+      .then((d) => setPopular(d.items ?? []))
       .catch(() => {})
-    api<AdsConfig>('/api/ads/config')
-      .then((d) => setAds(d))
-      .catch(() => setAds(null))
+    api<WeeklyDeals>('/api/deals/steam')
+      .then((d) => setDeals(d.items ?? []))
+      .catch(() => {})
   }, [refreshMe])
 
   const loadDashboard = useCallback(async () => {
@@ -209,7 +217,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (loggedIn && view === 'cabinet') {
+    if (loggedIn && (view === 'cabinet' || view === 'favorites')) {
       loadDashboard().catch(() => {})
       loadWatchlist().catch(() => {})
     }
@@ -235,20 +243,35 @@ export default function App() {
     const q = query.trim()
     if (q.length < 2) {
       setSuggests([])
+      setSuggestStatus('idle')
+      return
+    }
+    const key = q.toLowerCase()
+    const cached = suggestCache.get(key)
+    if (cached) {
+      setSuggests(cached)
+      setSuggestStatus(cached.length ? 'idle' : 'empty')
       return
     }
     let cancelled = false
     const t = window.setTimeout(() => {
-      api<{ candidates: { appid: number; name: string; tiny_image?: string; price_rub?: number | null }[] }>(
-        `/api/search?q=${encodeURIComponent(q)}`,
-      )
+      setSuggestStatus('searching')
+      api<{ candidates: SuggestItem[] }>(`/api/search?q=${encodeURIComponent(q)}`)
         .then((d) => {
-          if (!cancelled) setSuggests((d.candidates || []).slice(0, 8))
+          if (cancelled) return
+          const items = (d.candidates || []).slice(0, 8)
+          suggestCache.set(key, items)
+          setSuggests(items)
+          setSuggestStatus(items.length === 0 ? 'empty' : 'idle')
         })
         .catch(() => {
-          if (!cancelled) setSuggests([])
+          // 429/Too Many Attempts и прочие ошибки — молча не показываем список
+          if (!cancelled) {
+            setSuggests([])
+            setSuggestStatus('idle')
+          }
         })
-    }, 260)
+    }, 250)
     return () => {
       cancelled = true
       window.clearTimeout(t)
@@ -266,9 +289,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function runSearch(q: string, appid?: number | null) {
+  async function runSearch(q: string, appid?: number | null, opts?: { force?: boolean }) {
     const term = q.trim()
     if (!term) return
+    const force = Boolean(opts?.force)
+    if (!force) autoForceRef.current = false
     setView('home')
     setQuery(term)
     setLoading(true)
@@ -276,7 +301,9 @@ export default function App() {
     try {
       const params = new URLSearchParams({ q: term })
       if (appid) params.set('appid', String(appid))
+      if (force) params.set('force', '1')
       const data = await api<PriceResponse>(`/api/prices?${params}`, { headers: authHeaders() })
+      lastSearchRef.current = { q: term, appid: appid ?? data.steam?.appid ?? null }
       setResult(data)
       pushRecent(term, appid ?? data.steam?.appid)
       setRecents(loadRecents())
@@ -285,9 +312,24 @@ export default function App() {
       if (data.steam?.appid) url.searchParams.set('appid', String(data.steam.appid))
       else url.searchParams.delete('appid')
       window.history.replaceState({}, '', url.toString())
+      if (data.refreshing && !force && !autoForceRef.current && (!data.steam || (data.steam.price_rub == null && !data.steam.is_free))) {
+        autoForceRef.current = true
+        setForceRefreshing(true)
+        try {
+          await runSearch(term, appid, { force: true })
+        } finally {
+          setForceRefreshing(false)
+        }
+        return
+      }
       if (loggedIn) loadDashboard().catch(() => {})
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка поиска')
+      const msg = e instanceof Error ? e.message : 'Ошибка поиска'
+      setError(
+        msg.includes('Too Many Attempts') || msg.includes('429')
+          ? 'Слишком много запросов. Подожди 5–10 секунд и попробуй снова.'
+          : msg,
+      )
       setResult(null)
     } finally {
       setLoading(false)
@@ -334,7 +376,28 @@ export default function App() {
     setToken(null)
     setUser(null)
     setDashboard(null)
+    setProfileOpen(false)
     setView('home')
+  }
+
+  async function submitPassword(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setPwdError('')
+    setPwdSaving(true)
+    try {
+      await api('/api/auth/password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: pwdCurrent, password: pwdNew, password_confirmation: pwdConfirm }),
+      })
+      setPwdCurrent('')
+      setPwdNew('')
+      setPwdConfirm('')
+      setToast('Пароль обновлён')
+    } catch (err) {
+      setPwdError(err instanceof Error ? err.message : 'Не удалось сменить пароль')
+    } finally {
+      setPwdSaving(false)
+    }
   }
 
   async function toggleFavorite() {
@@ -350,7 +413,12 @@ export default function App() {
         await api(`/api/me/favorites/${steam.appid}`, { method: 'DELETE' })
         setResult({ ...result, is_favorite: false })
       } else {
-        setAlertModal({ favorite: { id: 0, appid: steam.appid, game_name: steam.name, header_image: steam.header_image }, create: true })
+        await api('/api/me/favorites', {
+          method: 'POST',
+          body: JSON.stringify({ appid: steam.appid, game_name: steam.name, header_image: steam.header_image }),
+        })
+        setResult({ ...result, is_favorite: true })
+        setToast('Добавлено в избранное')
       }
       loadDashboard().catch(() => {})
     } catch (e) {
@@ -377,6 +445,24 @@ export default function App() {
     [result],
   )
 
+  useEffect(() => {
+    if (!profileOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (e.target instanceof Element && !e.target.closest('.profile-wrap')) setProfileOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setProfileOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [profileOpen])
+
+  const popularChips = popular.filter((p) => p.header_image || p.game_name || p.query)
+
   return (
     <>
       <div className="app-bg" aria-hidden />
@@ -384,19 +470,34 @@ export default function App() {
         <div className="header-inner">
           <button type="button" className="brand" onClick={() => setView('home')}>
             <span className="brand-mark-wrap">
-              <BrandMark size={42} />
+              <BrandMark size={30} />
             </span>
-            <div className="brand-text">
-              <h1>{BRAND.name}</h1>
-              <p className="brand-tagline">{BRAND.tagline} · {BRAND.shortTagline}</p>
-            </div>
+            <span className="brand-text">
+              <span className="brand-name">Игроскан</span>
+              <span className="brand-sub">цены на игры · Steam / Plati / GGsel</span>
+            </span>
           </button>
           <button type="button" className="btn ghost sm icon-btn m-only" onClick={toggle} aria-label="Тема">
-            {theme === 'dark' ? '☀' : '☾'}
+            {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
           </button>
+          {loggedIn && (
+            <div className="profile-wrap m-only">
+              <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
+                <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
+              </button>
+              {profileOpen && (
+                <div className="profile-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>Кабинет</button>
+                  <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>Настройки</button>
+                  <div className="profile-menu-sep" />
+                  <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>Выйти</button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="header-actions desk-only" data-auth={loggedIn ? 'user' : 'guest'}>
             <button type="button" className="btn ghost sm icon-btn" onClick={toggle} aria-label="Тема">
-              {theme === 'dark' ? '☀' : '☾'}
+              {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
             </button>
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
               Как пользоваться
@@ -412,7 +513,7 @@ export default function App() {
                 }
               }}
             >
-              📡 Радар
+              <IconRadar size={16} /> Радар
             </button>
             {user?.is_admin && (
               <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
@@ -420,16 +521,21 @@ export default function App() {
               </button>
             )}
             {loggedIn ? (
-              <>
-                <button type="button" className="btn ghost" onClick={() => setView('cabinet')}>
-                  Кабинет
-                </button>
-                <div className="chip-user">
+              <div className="profile-wrap">
+                <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
                   <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
-                  <span className="chip-user-name muted">{user?.display_name || user?.email}</span>
-                  <button type="button" className="btn ghost sm" onClick={logout}>Выйти</button>
-                </div>
-              </>
+                  <span className="profile-name">{user?.display_name || user?.email}</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                {profileOpen && (
+                  <div className="profile-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>Кабинет</button>
+                    <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>Настройки</button>
+                    <div className="profile-menu-sep" />
+                    <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>Выйти</button>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <button type="button" className="btn ghost" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>Войти</button>
@@ -461,7 +567,7 @@ export default function App() {
                 }}
               >
                 <div className="search-field search-field--suggest">
-                  <span aria-hidden>⌕</span>
+
                   <input
                     value={query}
                     onChange={(e) => {
@@ -479,28 +585,32 @@ export default function App() {
                     enterKeyHint="search"
                     autoComplete="off"
                     aria-autocomplete="list"
-                    aria-expanded={suggestOpen && suggests.length > 0}
+                    aria-expanded={suggestOpen && query.trim().length >= 2 && (suggests.length > 0 || suggestStatus === 'empty')}
                   />
-                  {suggestOpen && suggests.length > 0 && (
+                  {suggestOpen && query.trim().length >= 2 && (suggests.length > 0 || suggestStatus === 'empty') && (
                     <ul className="suggest-list" role="listbox">
-                      {suggests.map((s) => (
-                        <li key={s.appid}>
-                          <button
-                            type="button"
-                            className="suggest-item"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setQuery(s.name)
-                              setSuggestOpen(false)
-                              runSearch(s.name, s.appid)
-                            }}
-                          >
-                            {s.tiny_image ? <img src={s.tiny_image} alt="" /> : <span className="ph" />}
-                            <span className="suggest-name">{s.name}</span>
-                            <span className="suggest-price muted">{rub(s.price_rub)}</span>
-                          </button>
-                        </li>
-                      ))}
+                      {suggests.length === 0 ? (
+                        <li className="suggest-empty">Ничего не найдено — попробуй другое название.</li>
+                      ) : (
+                        suggests.map((s) => (
+                          <li key={s.appid}>
+                            <button
+                              type="button"
+                              className="suggest-item"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setQuery(s.name)
+                                setSuggestOpen(false)
+                                runSearch(s.name, s.appid)
+                              }}
+                            >
+                              {s.tiny_image ? <img src={s.tiny_image} alt="" onError={hideBrokenImg} /> : <span className="ph" />}
+                              <span className="suggest-name">{s.name}</span>
+                              <span className="suggest-price muted">{rub(s.price_rub)}</span>
+                            </button>
+                          </li>
+                        ))
+                      )}
                     </ul>
                   )}
                 </div>
@@ -508,6 +618,185 @@ export default function App() {
                   {loading ? 'Ищем…' : 'Сравнить'}
                 </button>
               </form>
+
+              {loading && !forceRefreshing && <div className="status">Ищем сохранённые цены…</div>}
+              {forceRefreshing && <div className="status">Обновляем цены из Steam…</div>}
+              {error && <div className="status error">{error}</div>}
+
+              {result && (
+                <section className="section">
+                  {result.warnings?.filter((w) => !w.includes('локальном каталоге')).length > 0 && (
+                    <div className="status" style={{ marginBottom: 12 }}>
+                      {result.warnings
+                        .filter((w) => !w.includes('локальном каталоге'))
+                        .map((w) => (
+                          <div key={w}>{w}</div>
+                        ))}
+                    </div>
+                  )}
+                  {!result.steam && (!result.candidates || result.candidates.length === 0) && (
+                    <div className="empty-state">
+                      <h3>Ничего не найдено</h3>
+                      <p className="muted">Попробуй другое название или проверь раскладку — ищем по Steam, Plati и GGsel. Если игра есть в подсказках под строкой поиска — выбери её там.</p>
+                    </div>
+                  )}
+                  {result.refreshing && result.steam && (
+                    <div className="status status-loading" style={{ marginBottom: 12 }}>
+                      <span className="spinner" aria-hidden="true" />
+                      Цены получены. Маркетплейсы ещё обновляются — таблица появится после цикла.
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => runSearch(lastSearchRef.current?.q ?? result.query, lastSearchRef.current?.appid ?? null, { force: true })}
+                      >
+                        Обновить сейчас
+                      </button>
+                    </div>
+                  )}
+                  {result.refreshing && !result.steam && (
+                    <div className="status" style={{ marginBottom: 12 }}>
+                      Цены Steam ещё подтягиваются.
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => runSearch(lastSearchRef.current?.q ?? result.query, lastSearchRef.current?.appid ?? null, { force: true })}
+                      >
+                        Обновить сейчас
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="results-meta">
+                    {result.deal && (result.steam || (result.candidates?.length ?? 0) > 0) && (
+                      <div className={`deal-card ${result.deal.is_better ? 'hot' : ''}`}>
+                        <div className="deal-score">
+                          {result.deal.score}
+                          <span>/100</span>
+                        </div>
+                        <div>
+                          <strong>{result.deal.label}</strong>
+                          <span className="offer-meta">
+                            рынок от {rub(result.deal.market_min_rub)}
+                            {result.deal.savings_percent != null
+                              ? ` · ${result.deal.savings_percent > 0 ? '−' : ''}${Math.abs(result.deal.savings_percent)}% vs Steam`
+                              : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {result.candidates?.length > 0 && (
+                    <div className="panel" style={{ marginBottom: 12, padding: '0.85rem' }}>
+                      <h3 style={{ marginTop: 0 }}>Совпадения Steam</h3>
+                      <div className="candidates">
+                        {result.candidates.map((c) => (
+                          <button key={c.appid} type="button" className="candidate" onClick={() => runSearch(c.name, c.appid)}>
+                            {c.tiny_image ? <img src={c.tiny_image} alt="" onError={hideBrokenImg} /> : <span className="ph" />}
+                            <div>
+                              <strong>{c.name}</strong>
+                              <span className="offer-meta">AppID {c.appid}</span>
+                            </div>
+                            <span className="candidate-price">{rub(c.price_rub)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {result.steam && (
+                    <article className="hero steam-card" style={{ marginTop: 0 }}>
+                      <div className="steam-card-media">{result.steam.header_image ? <img src={result.steam.header_image} alt="" onError={hideBrokenImg} /> : null}</div>
+                      <div>
+                        <div>
+                          <span className={`badge ${result.steam.available_in_ru ? 'ok' : 'warn'}`}>
+                            {result.steam.available_in_ru ? 'Steam RU' : 'не в RU'}
+                          </span>
+                          {(result.steam.discount_percent || 0) > 0 && (
+                            <span className="badge hot">−{result.steam.discount_percent}%</span>
+                          )}
+                          {result.saved_to_history && <span className="badge ok">в истории</span>}
+                        </div>
+                        <h2 style={{ margin: '0.4rem 0' }}>{result.steam.name}</h2>
+                        <div className="price-xl">
+                          {result.steam.is_free
+                            ? 'Бесплатно'
+                            : rub(result.steam.price_rub)}
+                          {result.steam.price_initial_rub &&
+                            result.steam.price_rub != null &&
+                            result.steam.price_initial_rub > result.steam.price_rub && (
+                              <span className="old">{rub(result.steam.price_initial_rub)}</span>
+                            )}
+                        </div>
+                        {result.steam.note && <p className="muted">{result.steam.note}</p>}
+                        <div className="actions">
+                          <a className="btn ghost" href={result.steam.store_url} target="_blank" rel="noreferrer">
+                            Steam
+                          </a>
+                          <button type="button" className={`btn ${result.is_favorite ? 'primary' : 'ghost'}`} onClick={toggleFavorite}>
+                            {result.is_favorite ? '★ В избранном' : '☆ В избранное'}
+                          </button>
+                          {result.is_favorite && (
+                            <button
+                              type="button"
+                              className="btn ghost"
+                              onClick={() => {
+                                const steam = result.steam
+                                if (!steam) return
+                                setAlertModal({
+                                  favorite: { id: 0, appid: steam.appid, game_name: steam.name, header_image: steam.header_image },
+                                  create: false,
+                                })
+                              }}
+                            >
+                              Алерт
+                            </button>
+                          )}
+                          <button type="button" className="btn ghost" onClick={shareResult}>
+                            Поделиться
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  )}
+
+                  {(result.steam || (result.candidates?.length ?? 0) > 0) && (
+                    <>
+                      <div className="market-tabs m-only" role="tablist">
+                        <button
+                          type="button"
+                          role="tab"
+                          className={`market-tab ${marketTab === 'plati' ? 'active' : ''}`}
+                          onClick={() => setMarketTab('plati')}
+                        >
+                          Plati
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          className={`market-tab ${marketTab === 'ggsel' ? 'active' : ''}`}
+                          onClick={() => setMarketTab('ggsel')}
+                        >
+                          GGsel
+                        </button>
+                      </div>
+                      <div className="grid-2 desk-only">
+                        <MarketCard market={result.plati} steamPrice={steamPrice} onTrack={trackClick} />
+                        <MarketCard market={result.ggsel} steamPrice={steamPrice} onTrack={trackClick} />
+                      </div>
+                      <div className="m-only">
+                        <MarketCard
+                          market={marketTab === 'plati' ? result.plati : result.ggsel}
+                          steamPrice={steamPrice}
+                          onTrack={trackClick}
+                        />
+                      </div>
+                    </>
+                  )}
+                </section>
+              )}
 
               <div className="history-under-search">
                 <div className="history-under-head">
@@ -580,34 +869,43 @@ export default function App() {
               </div>
             </section>
 
-            <section className="section panel radar-home-cta">
-              <h3 style={{ marginTop: 0 }}>📡 Не пропусти выгодную цену</h3>
-              <p className="muted">
-                Радар + бот <strong>@igroscan_bot</strong>: избранное, целевая цена, уведомление в Telegram.
-              </p>
-              <button
-                type="button"
-                className="btn primary"
-                style={{ marginTop: '0.5rem' }}
-                onClick={() => {
-                  if (loggedIn) setView('radar')
-                  else {
-                    setAuthTab('register')
-                    setAuthOpen(true)
-                  }
-                }}
-              >
-                {loggedIn ? 'Настроить радар' : 'Войти и включить радар'}
-              </button>
+            <section className="section radar-cta">
+              <div className="radar-cta-copy">
+                <p className="eyebrow">Радар цен</p>
+                <h3>Не пропусти выгодную цену</h3>
+                <p className="muted">
+                  Радар + бот <strong>@igroscan_bot</strong>: избранное, целевая цена, уведомление в Telegram.
+                </p>
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{ marginTop: '0.5rem' }}
+                  onClick={() => {
+                    if (loggedIn) setView('radar')
+                    else {
+                      setAuthTab('register')
+                      setAuthOpen(true)
+                    }
+                  }}
+                >
+                  {loggedIn ? 'Настроить радар' : 'Войти и включить радар'}
+                </button>
+              </div>
+              <div className="radar-cta-visual" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+                <i></i>
+              </div>
             </section>
 
-            {popular.length > 0 && (
+            {popularChips.length > 0 && (
               <section className="section panel">
                 <h3>Сейчас ищут</h3>
                 <div className="chip-list">
-                  {popular.map((p) => (
+                  {popularChips.map((p) => (
                     <button key={p.query} type="button" className="chip" onClick={() => runSearch(p.query, p.appid)}>
-                      {p.header_image ? <img src={p.header_image} alt="" /> : null}
+                      {p.header_image ? <img src={p.header_image} alt="" onError={hideBrokenImg} /> : null}
                       <span>{p.game_name || p.query}</span>
                     </button>
                   ))}
@@ -615,129 +913,22 @@ export default function App() {
               </section>
             )}
 
-            {loading && <div className="status">Ищем сохранённые цены…</div>}
-            {error && <div className="status error">{error}</div>}
-
-            {result && (
-              <section className="section">
-                {result.warnings?.length > 0 && (
-                  <div className="status" style={{ marginBottom: 12 }}>
-                    {result.warnings.map((w) => (
-                      <div key={w}>{w}</div>
-                    ))}
-                  </div>
-                )}
-                {result.refreshing && <div className="status" style={{ marginBottom: 12 }}>Игра поставлена на фоновое обновление. Цены появятся после следующего цикла.</div>}
-
-                <div className="results-meta">
-                  {result.deal && (
-                    <div className={`deal-card ${result.deal.is_better ? 'hot' : ''}`}>
-                      <div className="deal-score">
-                        {result.deal.score}
-                        <span>/100</span>
-                      </div>
-                      <div>
-                        <strong>{result.deal.label}</strong>
-                        <span className="offer-meta">
-                          рынок от {rub(result.deal.market_min_rub)}
-                          {result.deal.savings_percent != null
-                            ? ` · ${result.deal.savings_percent > 0 ? '−' : ''}${Math.abs(result.deal.savings_percent)}% vs Steam`
-                            : ''}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+            {deals.length > 0 && (
+              <section className="section panel">
+                <h3>Скидки недели</h3>
+                <div className="sale-grid">
+                  {deals.slice(0, 8).map((d) => (
+                    <button key={d.appid} type="button" className="sale-card" onClick={() => runSearch(d.name, d.appid, { force: true })}>
+                      {d.header_image ? <img src={d.header_image} alt="" loading="lazy" onError={hideBrokenImg} /> : null}
+                      <span className="sale-name">{d.name}</span>
+                      <span className="sale-price">
+                        {d.discount_percent != null && <b className="sale-discount">−{d.discount_percent}%</b>}
+                        {d.price_initial_rub != null && <s>{rub(d.price_initial_rub)}</s>}
+                        <em>{rub(d.price_final_rub)}</em>
+                      </span>
+                    </button>
+                  ))}
                 </div>
-
-                {result.candidates?.length > 0 && (
-                  <div className="panel" style={{ marginBottom: 12, padding: '0.85rem' }}>
-                    <h3 style={{ marginTop: 0 }}>Совпадения Steam</h3>
-                    <div className="candidates">
-                      {result.candidates.map((c) => (
-                        <button key={c.appid} type="button" className="candidate" onClick={() => runSearch(c.name, c.appid)}>
-                          {c.tiny_image ? <img src={c.tiny_image} alt="" /> : <span className="ph" />}
-                          <div>
-                            <strong>{c.name}</strong>
-                            <span className="offer-meta">AppID {c.appid} · {rub(c.price_rub)}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {result.steam && (
-                  <article className="hero steam-card" style={{ marginTop: 0 }}>
-                    <div>{result.steam.header_image ? <img src={result.steam.header_image} alt="" /> : null}</div>
-                    <div>
-                      <div>
-                        <span className={`badge ${result.steam.available_in_ru ? 'ok' : 'warn'}`}>
-                          {result.steam.available_in_ru ? 'Steam RU' : 'не в RU'}
-                        </span>
-                        {(result.steam.discount_percent || 0) > 0 && (
-                          <span className="badge hot">−{result.steam.discount_percent}%</span>
-                        )}
-                        {result.saved_to_history && <span className="badge ok">в истории</span>}
-                      </div>
-                      <h2 style={{ margin: '0.4rem 0' }}>{result.steam.name}</h2>
-                      <div className="price-xl">
-                        {result.steam.is_free
-                          ? 'Бесплатно'
-                          : rub(result.steam.price_rub)}
-                        {result.steam.price_initial_rub &&
-                          result.steam.price_rub != null &&
-                          result.steam.price_initial_rub > result.steam.price_rub && (
-                            <span className="old">{rub(result.steam.price_initial_rub)}</span>
-                          )}
-                      </div>
-                      {result.steam.note && <p className="muted">{result.steam.note}</p>}
-                      <div className="actions">
-                        <a className="btn ghost" href={result.steam.store_url} target="_blank" rel="noreferrer">
-                          Steam
-                        </a>
-                        <button type="button" className={`btn ${result.is_favorite ? 'primary' : 'ghost'}`} onClick={toggleFavorite}>
-                          {result.is_favorite ? '★ В избранном' : '☆ В избранное'}
-                        </button>
-                        <button type="button" className="btn ghost" onClick={shareResult}>
-                          Поделиться
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                )}
-
-                <div className="market-tabs m-only" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`market-tab ${marketTab === 'plati' ? 'active' : ''}`}
-                    onClick={() => setMarketTab('plati')}
-                  >
-                    Plati
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`market-tab ${marketTab === 'ggsel' ? 'active' : ''}`}
-                    onClick={() => setMarketTab('ggsel')}
-                  >
-                    GGsel
-                  </button>
-                </div>
-                <div className="grid-2 desk-only">
-                  <MarketCard market={result.plati} steamPrice={steamPrice} onTrack={trackClick} />
-                  <MarketCard market={result.ggsel} steamPrice={steamPrice} onTrack={trackClick} />
-                </div>
-                <div className="m-only">
-                  <MarketCard
-                    market={marketTab === 'plati' ? result.plati : result.ggsel}
-                    steamPrice={steamPrice}
-                    onTrack={trackClick}
-                  />
-                </div>
-                {adByPlacement('after_results') && (
-                  <AdSlot slot={adByPlacement('after_results')!} label={ads?.label} />
-                )}
               </section>
             )}
           </>
@@ -815,7 +1006,7 @@ export default function App() {
           <section className="section page-enter radar-page">
             <div className="hero">
               <p className="eyebrow">Уведомления</p>
-              <h2>📡 Радар цен</h2>
+              <h2>Радар цен</h2>
               <p className="lead">
                 Бот <strong>@igroscan_bot</strong> (Игроскан Радар) пишет в Telegram, когда цена игры
                 достигла заданной цели на выбранной площадке и для выбранного типа предложения.
@@ -860,7 +1051,7 @@ export default function App() {
                     <span className="radar-step-n">3</span>
                     <h3>Жди уведомления</h3>
                     <p className="muted">
-                      Сервер обновляет цены по расписанию. Подходящее предложение достигло цели → получишь 🎯 в Telegram.
+                      Сервер обновляет цены по расписанию. Предложение достигло цели — получишь уведомление в Telegram.
                     </p>
                   </article>
                 </div>
@@ -868,7 +1059,7 @@ export default function App() {
                 <div className="panel section radar-panel">
                   <h3 style={{ marginTop: 0 }}>Статус</h3>
                   <p className={tgStatus?.identity_linked ? 'radar-status ok' : 'radar-status warn'}>
-                    {tgStatus?.identity_linked ? '✅ Telegram-аккаунт подтверждён' : '⚪ Telegram-аккаунт ещё не подтверждён'}
+                    {tgStatus?.identity_linked ? 'Telegram-аккаунт подтверждён' : 'Telegram-аккаунт ещё не подтверждён'}
                   </p>
                   {!tgStatus?.identity_linked && tgStatus?.oidc_available && (
                     <button
@@ -902,7 +1093,7 @@ export default function App() {
                   {tgStatus?.linked ? (
                     <>
                       <p className="radar-status ok">
-                        ✅ Telegram привязан
+                        Telegram привязан
                         {tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''}
                       </p>
                       <p>
@@ -973,7 +1164,7 @@ export default function App() {
                     </>
                   ) : (
                     <>
-                      <p className="radar-status warn">⚪ Telegram ещё не привязан</p>
+                      <p className="radar-status warn">Telegram ещё не привязан</p>
                       <div className="actions" style={{ marginTop: '0.85rem' }}>
                         <button
                           type="button"
@@ -1052,7 +1243,7 @@ export default function App() {
                   <h3>Когда придёт сообщение</h3>
                   <ul className="guide-list">
                     <li>
-                      <strong>🎯 Цель</strong> — цена в выбранном источнике и типе предложения стала ≤ заданной.
+                      <strong>Цель</strong> — цена в выбранном источнике и типе предложения стала ≤ заданной.
                     </li>
                     <li>
                       <strong>Источники</strong> — можно следить за Steam, Plati и GGsel; для маркетплейсов отдельно выбираются ключи, гифты, аккаунты и аренда.
@@ -1139,11 +1330,11 @@ export default function App() {
               )}
             </div>
             {dashboard?.ctas?.map((c) => (
-              <p key={c} className="muted" style={{ marginTop: 8 }}>💡 {c}</p>
+              <p key={c} className="muted" style={{ marginTop: 8 }}>{c}</p>
             ))}
 
             <div className="panel section radar-panel">
-              <h3 style={{ marginTop: 0 }}>📡 Радар / Telegram</h3>
+              <h3 style={{ marginTop: 0 }}>Радар / Telegram</h3>
               <p className="muted" style={{ marginBottom: '0.75rem' }}>
                 {tgStatus?.linked
                   ? `Привязан${tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''} · уведомления ${tgStatus.radar_enabled ? 'вкл' : 'выкл'}`
@@ -1173,7 +1364,7 @@ export default function App() {
                 <div className="list-cards">
                   {dashboard.price_hits.map((f) => (
                     <article key={f.appid} className="list-card hit">
-                      {f.header_image ? <img src={f.header_image} alt="" /> : <div className="ph" />}
+                      {f.header_image ? <img src={f.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
                       <div>
                         <strong>{f.game_name}</strong>
                         <span className="offer-meta">Steam {rub(f.last_steam_price_rub)} · цель {rub(f.target_price_rub)}</span>
@@ -1205,7 +1396,7 @@ export default function App() {
                 <div className="list-cards" style={{ marginTop: 12 }}>
                   {(dashboard?.recent_history || []).map((h) => (
                     <article key={h.id} className="list-card">
-                      {h.header_image ? <img src={h.header_image} alt="" /> : <div className="ph" />}
+                      {h.header_image ? <img src={h.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
                       <div>
                         <strong>{h.game_name || h.query}</strong>
                         <span className="offer-meta">Steam {rub(h.steam_price_rub)} · Plati {rub(h.plati_min_rub)} · GGsel {rub(h.ggsel_min_rub)}</span>
@@ -1238,11 +1429,11 @@ export default function App() {
                 <div className="list-cards" style={{ marginTop: 12 }}>
                   {watchlist.map((f) => (
                     <article key={f.appid} className="list-card">
-                      {f.header_image ? <img src={f.header_image} alt="" /> : <div className="ph" />}
+                      {f.header_image ? <img src={f.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
                       <div>
                         <strong>{f.game_name} {f.alert?.status === 'triggered' ? <span className="badge hot">сработал</span> : null}</strong>
                         <span className="offer-meta">цель {rub(f.alert?.target_value)} · {f.alert?.scopes?.map((scope) => `${scope.source}/${scope.offer_kind}`).join(' · ')}</span>
-                        {f.release_status === 'announced' ? <span className="offer-meta">⏳ Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
+                        {f.release_status === 'announced' ? <span className="offer-meta">Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
                         {f.freshness?.map((source) => <span className="offer-meta" key={source.source}>{source.source}: {source.status}{source.last_error ? ` · ${source.last_error}` : ''}</span>)}
                         <div className="actions">
                           <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>Цены</button>
@@ -1267,19 +1458,138 @@ export default function App() {
             </div>
           </section>
         )}
+
+        {view === 'favorites' && (
+          loggedIn ? (
+            <section className="section page-enter">
+              <p className="eyebrow">Избранное</p>
+              <h2>Игры под наблюдением</h2>
+              <p className="muted">Целевые цены и уведомления — в настройках каждой игры.</p>
+              <div className="list-cards" style={{ marginTop: 12 }}>
+                {watchlist.map((f) => (
+                  <article key={f.appid} className="list-card">
+                    {f.header_image ? <img src={f.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
+                    <div>
+                      <strong>{f.game_name} {f.alert?.status === 'triggered' ? <span className="badge hot">сработал</span> : null}</strong>
+                      <span className="offer-meta">цель {rub(f.alert?.target_value)} · {f.alert?.scopes?.map((scope) => `${scope.source}/${scope.offer_kind}`).join(' · ')}</span>
+                      {f.release_status === 'announced' ? <span className="offer-meta">Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
+                      <div className="actions">
+                        <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>Цены</button>
+                        <button type="button" className="btn ghost sm" onClick={() => setAlertModal({ favorite: f, create: false })}>Настроить</button>
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          onClick={async () => {
+                            await api(`/api/me/favorites/${f.appid}`, { method: 'DELETE' })
+                            loadWatchlist().catch(() => {})
+                            loadDashboard().catch(() => {})
+                          }}
+                        >
+                          Убрать
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+                {!watchlist.length && <p className="muted">Добавляй ☆ на карточке Steam — появятся здесь.</p>}
+              </div>
+            </section>
+          ) : (
+            <section className="section hero page-enter">
+              <p className="eyebrow">Избранное</p>
+              <h2>Войди, чтобы следить за ценами</h2>
+              <p className="lead">Избранное, целевая цена и уведомления в Telegram — после входа в аккаунт.</p>
+              <button type="button" className="btn primary" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>
+                Войти
+              </button>
+            </section>
+          )
+        )}
+
+        {view === 'account' && (
+          loggedIn ? (
+            <section className="section page-enter">
+              <p className="eyebrow">Аккаунт</p>
+              <h2>Настройки аккаунта</h2>
+              <div className="grid-2 section" style={{ alignItems: 'start' }}>
+                <div className="panel">
+                  <h3 style={{ marginTop: 0 }}>Аккаунт</h3>
+                  <div className="account-grid">
+                    <div className="account-row">
+                      <span>Email</span>
+                      <strong>{user?.email}</strong>
+                    </div>
+                    <div className="account-row">
+                      <span>Имя</span>
+                      <strong>{user?.display_name || '—'}</strong>
+                    </div>
+                    <div className="account-row">
+                      <span>Дата регистрации</span>
+                      <strong>{user?.created_at ? new Date(user.created_at).toLocaleDateString('ru-RU') : '—'}</strong>
+                    </div>
+                    <div className="account-row">
+                      <span>Telegram</span>
+                      <strong>{user?.telegram_linked ? 'привязан' : 'не привязан'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="panel">
+                  <h3 style={{ marginTop: 0 }}>Смена пароля</h3>
+                  <form className="auth-form" onSubmit={submitPassword}>
+                    <label>
+                      Текущий пароль
+                      <input type="password" required autoComplete="current-password" value={pwdCurrent} onChange={(e) => setPwdCurrent(e.target.value)} />
+                    </label>
+                    <label>
+                      Новый пароль
+                      <input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={pwdNew} onChange={(e) => setPwdNew(e.target.value)} />
+                    </label>
+                    <label>
+                      Повторите новый пароль
+                      <input type="password" required minLength={8} maxLength={72} autoComplete="new-password" value={pwdConfirm} onChange={(e) => setPwdConfirm(e.target.value)} />
+                    </label>
+                    <button className="btn primary" type="submit" disabled={pwdSaving}>
+                      {pwdSaving ? 'Сохраняем…' : 'Обновить пароль'}
+                    </button>
+                  </form>
+                  {pwdError && <p className="auth-error">{pwdError}</p>}
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="section hero page-enter">
+              <p className="eyebrow">Аккаунт</p>
+              <h2>Настройки доступны после входа</h2>
+              <button type="button" className="btn primary" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>
+                Войти
+              </button>
+            </section>
+          )
+        )}
       </main>
 
       {alertModal && (
         <AlertSettingsModal
           favorite={alertModal.favorite}
+          initialPrefs={(user as (User & { alert_prefs?: AlertPrefs | null }) | null)?.alert_prefs ?? null}
           onClose={() => setAlertModal(null)}
+          onSavedPrefs={(p) => {
+            if (user) {
+              const updated = { ...user, alert_prefs: p }
+              setUser(updated)
+              setSession(getToken(), updated)
+            }
+          }}
           onSave={async ({ target_value, scopes }: { target_value: number | null; scopes: AlertScope[] }) => {
             const favorite = alertModal.favorite
             if (alertModal.create) {
-              await api('/api/me/favorites', {
-                method: 'POST',
-                body: JSON.stringify({ appid: favorite.appid, game_name: favorite.game_name, header_image: favorite.header_image, alert: { target_value, scopes } }),
-              })
+              const body: Record<string, unknown> = {
+                appid: favorite.appid,
+                game_name: favorite.game_name,
+                header_image: favorite.header_image,
+              }
+              if (target_value != null) body.alert = { target_value, scopes }
+              await api('/api/me/favorites', { method: 'POST', body: JSON.stringify(body) })
               if (result) setResult({ ...result, is_favorite: true })
             } else {
               await api(`/api/me/favorites/${favorite.appid}`, { method: 'PATCH', body: JSON.stringify({ alert: { target_value, scopes } }) })
@@ -1293,15 +1603,13 @@ export default function App() {
       )}
 
       <footer className="shell footer has-tabbar">
-        {adByPlacement('footer') && (
-          <AdSlot slot={adByPlacement('footer')!} label={ads?.label} />
-        )}
         <p>
           {BRAND.name} — {BRAND.tagline}. Мы не продаём ключи напрямую — покупка на сторонних площадках.
           Перед оплатой проверяйте продавца и условия.
         </p>
-        {showAds && ads?.note && <p className="muted footer-note">{ads.note}</p>}
+        <p className="footer-note">Цены берутся из открытых источников и могут отличаться от фактических.</p>
       </footer>
+
 
       <AnimatePresence>
         {toast && (
@@ -1310,10 +1618,9 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-
       <nav className="m-tabbar m-only" aria-label="Основное меню">
         <button type="button" className={view === 'home' ? 'active' : ''} onClick={() => setView('home')}>
-          <span className="m-tab-ico" aria-hidden>⌕</span>
+          <span className="m-tab-ico" aria-hidden><IconSearch size={20} /></span>
           Поиск
         </button>
         <button
@@ -1327,8 +1634,22 @@ export default function App() {
             }
           }}
         >
-          <span className="m-tab-ico" aria-hidden>📡</span>
+          <span className="m-tab-ico" aria-hidden><IconRadar size={20} /></span>
           Радар
+        </button>
+        <button
+          type="button"
+          className={view === 'favorites' ? 'active' : ''}
+          onClick={() => {
+            if (loggedIn) setView('favorites')
+            else {
+              setAuthTab('login')
+              setAuthOpen(true)
+            }
+          }}
+        >
+          <span className="m-tab-ico" aria-hidden><IconStar size={20} /></span>
+          Избранное
         </button>
         <button
           type="button"
@@ -1341,7 +1662,7 @@ export default function App() {
             }
           }}
         >
-          <span className="m-tab-ico" aria-hidden>◎</span>
+          <span className="m-tab-ico" aria-hidden><IconUser size={20} /></span>
           {loggedIn ? 'Кабинет' : 'Вход'}
         </button>
       </nav>
@@ -1350,7 +1671,10 @@ export default function App() {
         {authOpen && (
           <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAuthOpen(false)}>
             <motion.div className="modal" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} onClick={(e) => e.stopPropagation()}>
-              <button type="button" className="modal-close" onClick={() => setAuthOpen(false)} aria-label="Закрыть">×</button>
+              <div className="modal-head">
+                <h2>{authTab === 'login' ? 'Вход в Игроскан' : 'Регистрация'}</h2>
+                <button type="button" className="modal-close" onClick={() => setAuthOpen(false)} aria-label="Закрыть"><IconClose size={18} /></button>
+              </div>
               <div className="tabs">
                 <button type="button" className={`tab ${authTab === 'login' ? 'active' : ''}`} onClick={() => setAuthTab('login')}>Вход</button>
                 <button type="button" className={`tab ${authTab === 'register' ? 'active' : ''}`} onClick={() => setAuthTab('register')}>Регистрация</button>
@@ -1383,65 +1707,28 @@ export default function App() {
   )
 }
 
-function AdSlot({ slot, label }: { slot: AdSlotDef; label?: string }) {
-  const href = slot.click_url || '#'
-  const isMailto = href.startsWith('mailto:')
-  return (
-    <aside className={`ad-slot ad-slot--${slot.format}`} aria-label={slot.title} data-ad-id={slot.id}>
-      <div className={`ad-billboard ad-billboard--${slot.format}`}>
-        <span className="ad-billboard__badge">{label || 'Реклама'}</span>
-        <div className="ad-billboard__body">
-          <div className="ad-billboard__icon" aria-hidden>
-            ▣
-          </div>
-          <div className="ad-billboard__copy">
-            <div className="ad-billboard__title">{slot.title}</div>
-            {slot.subtitle && <div className="ad-billboard__subtitle">{slot.subtitle}</div>}
-            {slot.size_hint && (
-              <div className="ad-billboard__meta">
-                Формат: {slot.size_hint}
-                {slot.provider ? ` · ${slot.provider}` : ''}
-              </div>
-            )}
-          </div>
-          <a
-            className="ad-billboard__cta btn sm primary"
-            href={href}
-            {...(isMailto ? {} : { target: '_blank', rel: 'noopener noreferrer sponsored' })}
-          >
-            {slot.cta || 'Разместить'}
-          </a>
-        </div>
-      </div>
-    </aside>
-  )
-}
-
-function MarketCard({
-  market,
-  steamPrice,
-  onTrack,
-}: {
-  market: Market
-  steamPrice?: number | null
-  onTrack: (mp: string, url: string, price?: number) => void
-}) {
+function MarketCard({ market, onTrack, steamPrice }: { market: Market; onTrack: (marketplace: string, url: string, price?: number) => void; steamPrice?: number | null }) {
   if (market.error) {
     return (
       <article className={`panel market ${market.marketplace}`}>
-        <h3>{market.label}</h3>
-        <p className="muted">Не удалось загрузить: {market.error}</p>
+        <div className="market-head">
+          <h3 style={{ margin: 0 }}>{market.label}</h3>
+        </div>
+        <p className="status error" style={{ marginTop: 0.4 }}>{market.error}</p>
       </article>
     )
   }
-  if (!market.by_kind?.length) {
+  const visibleKinds = market.by_kind.filter((k) => k.popular || k.cheapest || k.count > 0)
+  if (visibleKinds.length === 0 && market.total_offers === 0) {
     return (
-      <article className={`panel market ${market.marketplace}`}>
+      <article className={`panel market ${market.marketplace} market-empty`}>
         <div className="market-head">
-          <h3>{market.label}</h3>
-          <span className="muted">0 офферов</span>
+          <h3 style={{ margin: 0 }}>{market.label}</h3>
+          <span className="badge">0 офферов</span>
         </div>
-        <p className="muted">Подходящих предложений не найдено.</p>
+        <p className="market-empty-note">
+          Парсер не нашёл предложений по этому запросу на {market.label}. Таблица появится автоматически, когда офферы будут найдены.
+        </p>
       </article>
     )
   }
@@ -1462,7 +1749,7 @@ function MarketCard({
           </tr>
         </thead>
         <tbody>
-          {market.by_kind.map((k) => (
+          {visibleKinds.map((k) => (
             <tr key={k.kind}>
               <td data-label="Тип">
                 <strong>{k.label}</strong>

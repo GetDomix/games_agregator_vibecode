@@ -60,10 +60,12 @@ class FavoriteController extends Controller
         ]);
         $fav->save();
         $refresh->linkFavorite($fav);
-        try {
-            $alerts->save($fav, $data['alert'] ?? ['target_value' => $fav->target_price_rub]);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['detail' => $e->getMessage()], 422);
+        if (array_key_exists('alert', $data) || ($data['target_price_rub'] ?? null) !== null) {
+            try {
+                $alerts->save($fav, $data['alert'] ?? ['target_value' => $fav->target_price_rub]);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['detail' => $e->getMessage()], 422);
+            }
         }
         $fav->load(['alert.scopes', 'game.sourceStates']);
 

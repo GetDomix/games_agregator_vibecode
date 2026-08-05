@@ -36,7 +36,7 @@ class StoredPriceSearchService
         $steam = [
             'appid' => (int) $game->steam_appid, 'name' => $game->name,
             'header_image' => $game->header_image, 'store_url' => "https://store.steampowered.com/app/{$game->steam_appid}/",
-            'price_rub' => $steamPrice?->min_price_rub, 'price_initial_rub' => null,
+            'price_rub' => $steamPrice?->min_price_rub, 'price_initial_rub' => $steamPrice?->price_initial_rub !== null ? (float) $steamPrice->price_initial_rub : null,
             'regional_prices' => $game->steamRegionalPrices->map(fn ($regional) => [
                 'region' => $regional->region,
                 'label' => $this->regionalLabel($regional->region),
@@ -45,7 +45,7 @@ class StoredPriceSearchService
                 'price_rub' => $regional->price_rub,
                 'observed_at' => $regional->observed_at?->toIso8601String(),
             ])->values(),
-            'discount_percent' => 0, 'is_free' => $steamPrice?->min_price_rub === '0.00',
+            'discount_percent' => $steamPrice?->discount_percent !== null ? (int) $steamPrice->discount_percent : 0, 'is_free' => $steamPrice?->min_price_rub === '0.00',
             'available_in_ru' => $steamPrice !== null, 'note' => $game->release_status === Game::RELEASE_STATUS_ANNOUNCED ? 'Игра ещё не вышла: предложения маркетплейсов не запрашиваются.' : null,
         ];
         $plati = $this->market('plati', 'Plati.Market', $game, $stateBySource->get('plati'));

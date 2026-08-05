@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\GamePriceController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\PriceController;
+use App\Http\Controllers\Api\SteamDealsController;
 use App\Http\Controllers\Api\TelegramBotController;
 use App\Http\Controllers\Api\TelegramController;
 use App\Http\Controllers\Api\TrackingController;
@@ -26,9 +27,9 @@ Route::post('/auth/telegram/begin', [TelegramController::class, 'oidcBegin'])->m
 Route::get('/auth/telegram/callback', [TelegramController::class, 'oidcCallback'])->middleware('throttle:10,1');
 
 Route::get('/search', [PriceController::class, 'search'])
-    ->middleware('throttle:30,1');
+    ->middleware('throttle:60,1');
 Route::get('/prices', [PriceController::class, 'prices'])
-    ->middleware('throttle:20,1');
+    ->middleware('throttle:60,1');
 Route::get('/games/{appid}/prices', [GamePriceController::class, 'show'])
     ->whereNumber('appid')
     ->middleware('throttle:60,1');
@@ -37,11 +38,14 @@ Route::get('/trends/popular', [DashboardController::class, 'popular'])
     ->middleware('throttle:60,1');
 Route::post('/track/click', [TrackingController::class, 'click'])
     ->middleware('throttle:60,1');
+Route::get('/deals/steam', [SteamDealsController::class, 'index'])->middleware('throttle:30,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::patch('/auth/me', [AuthController::class, 'updateMe']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::post('/auth/password', [AuthController::class, 'updatePassword'])
+        ->middleware('throttle:10,1');
 
     Route::get('/me/dashboard', [DashboardController::class, 'me']);
     Route::get('/me/history', [HistoryController::class, 'index']);
