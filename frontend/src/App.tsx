@@ -54,6 +54,19 @@ type WeeklyDeals = {
 type SuggestItem = { appid: number; name: string; tiny_image?: string; price_rub?: number | null }
 const suggestCache = new Map<string, SuggestItem[]>()
 
+// Живой поиск в Steam (storesearch) — актуальные цены/картинки для списка кандидатов.
+async function discover(q: string): Promise<SuggestItem[]> {
+  const d = await api<{ candidates: SuggestItem[] }>(`/api/search?q=${encodeURIComponent(q)}`)
+  return (d.candidates || []).slice(0, 8)
+}
+
+function mergeCandidates(live: { appid: number; name: string; tiny_image?: string | null; price_rub?: number | null }[], stored: typeof live): SuggestItem[] {
+  const seen = new Map<number, (typeof live)[number]>()
+  for (const c of live) seen.set(c.appid, c)
+  for (const c of stored) if (!seen.has(c.appid)) seen.set(c.appid, c)
+  return [...seen.values()].slice(0, 8).map((c) => ({ ...c, tiny_image: c.tiny_image ?? undefined }))
+}
+
 const rub = (v?: number | null) =>
   v == null || Number.isNaN(Number(v))
     ? '—'
@@ -129,6 +142,7 @@ export default function App() {
   const [forceRefreshing, setForceRefreshing] = useState(false)
   const autoForceRef = useRef(false)
   const lastSearchRef = useRef<{ q: string; appid: number | null } | null>(null)
+  const livePollRef = useRef(0)
   const [profileOpen, setProfileOpen] = useState(false)
   const [pwdCurrent, setPwdCurrent] = useState('')
   const [pwdNew, setPwdNew] = useState('')
@@ -303,8 +317,17 @@ export default function App() {
       if (appid) params.set('appid', String(appid))
       if (force) params.set('force', '1')
       const data = await api<PriceResponse>(`/api/prices?${params}`, { headers: authHeaders() })
+      let candidates = data.candidates ?? []
+      // Живое дополнение: либо сохранённых кандидатов нет, либо у Steam ещё нет цены.
+      if (candidates.length === 0 || !data.steam || data.steam.price_rub == null) {
+        try {
+          const cached = suggestCache.get(term.toLowerCase())
+          const live = cached && cached.length ? cached : await discover(term)
+          candidates = mergeCandidates(live, data.candidates ?? [])
+        } catch { /* оставляем сохранённых кандидатов */ }
+      }
       lastSearchRef.current = { q: term, appid: appid ?? data.steam?.appid ?? null }
-      setResult(data)
+      setResult({ ...data, candidates })
       pushRecent(term, appid ?? data.steam?.appid)
       setRecents(loadRecents())
       const url = new URL(window.location.href)
@@ -335,6 +358,20 @@ export default function App() {
       setLoading(false)
     }
   }
+
+  // Пока маркетплейсы обновляются — тихо повторяем поиск каждые 4 секунды (максимум ~8 попыток).
+  useEffect(() => {
+    if (!result?.refreshing || !result?.steam) { livePollRef.current = 0; return }
+    if (livePollRef.current >= 8) return
+    const t = window.setInterval(() => {
+      livePollRef.current += 1
+      if (livePollRef.current > 8) { window.clearInterval(t); return }
+      const last = lastSearchRef.current
+      if (last) runSearch(last.q, last.appid)
+    }, 4000)
+    return () => window.clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result?.refreshing, result?.steam?.appid])
 
   function shareResult() {
     if (!result) return
@@ -474,31 +511,33 @@ export default function App() {
             </span>
             <span className="brand-text">
               <span className="brand-name">Игроскан</span>
-              <span className="brand-sub">цены на игры · Steam / Plati / GGsel</span>
             </span>
           </button>
-          <button type="button" className="btn ghost sm icon-btn m-only" onClick={toggle} aria-label="Тема">
-            {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
-          </button>
-          {loggedIn && (
-            <div className="profile-wrap m-only">
-              <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
-                <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
+          {loggedIn ? (
+            <div className="profile-cluster m-only">
+              <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label="Тема">
+                {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
               </button>
-              {profileOpen && (
-                <div className="profile-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>Кабинет</button>
-                  <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>Настройки</button>
-                  <div className="profile-menu-sep" />
-                  <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>Выйти</button>
-                </div>
-              )}
+              <div className="profile-wrap">
+                <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
+                  <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
+                </button>
+                {profileOpen && (
+                  <div className="profile-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>Кабинет</button>
+                    <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>Настройки</button>
+                    <div className="profile-menu-sep" />
+                    <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>Выйти</button>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="header-actions desk-only" data-auth={loggedIn ? 'user' : 'guest'}>
-            <button type="button" className="btn ghost sm icon-btn" onClick={toggle} aria-label="Тема">
+          ) : (
+            <button type="button" className="btn ghost sm icon-btn m-only theme-toggle" onClick={toggle} aria-label="Тема">
               {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
             </button>
+          )}
+          <div className="header-actions desk-only" data-auth={loggedIn ? 'user' : 'guest'}>
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
               Как пользоваться
             </button>
@@ -521,23 +560,31 @@ export default function App() {
               </button>
             )}
             {loggedIn ? (
-              <div className="profile-wrap">
-                <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
-                  <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
-                  <span className="profile-name">{user?.display_name || user?.email}</span>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
+              <div className="profile-cluster">
+                <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label="Тема">
+                  {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
                 </button>
-                {profileOpen && (
-                  <div className="profile-menu" role="menu">
-                    <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>Кабинет</button>
-                    <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>Настройки</button>
-                    <div className="profile-menu-sep" />
-                    <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>Выйти</button>
-                  </div>
-                )}
+                <div className="profile-wrap">
+                  <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
+                    <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
+                    <span className="profile-name">{user?.display_name || user?.email}</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  {profileOpen && (
+                    <div className="profile-menu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>Кабинет</button>
+                      <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>Настройки</button>
+                      <div className="profile-menu-sep" />
+                      <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>Выйти</button>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <>
+                <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label="Тема">
+                  {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+                </button>
                 <button type="button" className="btn ghost" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>Войти</button>
                 <button type="button" className="btn primary" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>
                   Регистрация
@@ -643,7 +690,7 @@ export default function App() {
                   {result.refreshing && result.steam && (
                     <div className="status status-loading" style={{ marginBottom: 12 }}>
                       <span className="spinner" aria-hidden="true" />
-                      Цены получены. Маркетплейсы ещё обновляются — таблица появится после цикла.
+                      Проверяем маркетплейсы (Plati и GGsel) прямо сейчас — таблица появится здесь через несколько секунд.
                       <button
                         type="button"
                         className="btn ghost sm"
@@ -689,20 +736,23 @@ export default function App() {
                   </div>
 
                   {result.candidates?.length > 0 && (
-                    <div className="panel" style={{ marginBottom: 12, padding: '0.85rem' }}>
+                    <div className="panel matches-panel" style={{ marginBottom: 12, padding: '0.85rem' }}>
                       <h3 style={{ marginTop: 0 }}>Совпадения Steam</h3>
-                      <div className="candidates">
+                      <ul className="suggest-list matches-list" role="listbox">
                         {result.candidates.map((c) => (
-                          <button key={c.appid} type="button" className="candidate" onClick={() => runSearch(c.name, c.appid)}>
-                            {c.tiny_image ? <img src={c.tiny_image} alt="" onError={hideBrokenImg} /> : <span className="ph" />}
-                            <div>
-                              <strong>{c.name}</strong>
-                              <span className="offer-meta">AppID {c.appid}</span>
-                            </div>
-                            <span className="candidate-price">{rub(c.price_rub)}</span>
-                          </button>
+                          <li key={c.appid}>
+                            <button type="button" className="suggest-item" role="option" aria-selected={false} onClick={() => runSearch(c.name, c.appid)}>
+                              {c.tiny_image ? <img src={c.tiny_image} alt="" loading="lazy" onError={hideBrokenImg} /> : <span className="ph" />}
+                              <span className="suggest-name">{c.name}</span>
+                              {c.price_rub != null ? (
+                                <span className="suggest-price">{rub(c.price_rub)}</span>
+                              ) : (
+                                <span className="suggest-price muted" title="Цена ещё не проверена">не проверено</span>
+                              )}
+                            </button>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </div>
                   )}
 

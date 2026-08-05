@@ -20,32 +20,32 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', HealthController::class);
 
 Route::post('/auth/register', [AuthController::class, 'register'])
-    ->middleware('throttle:8,1');
+    ->middleware('throttle:auth-register');
 Route::post('/auth/login', [AuthController::class, 'login'])
-    ->middleware('throttle:20,1');
-Route::post('/auth/telegram/begin', [TelegramController::class, 'oidcBegin'])->middleware('throttle:10,1');
-Route::get('/auth/telegram/callback', [TelegramController::class, 'oidcCallback'])->middleware('throttle:10,1');
+    ->middleware('throttle:auth-login');
+Route::post('/auth/telegram/begin', [TelegramController::class, 'oidcBegin'])->middleware('throttle:api-telegram');
+Route::get('/auth/telegram/callback', [TelegramController::class, 'oidcCallback'])->middleware('throttle:api-telegram');
 
 Route::get('/search', [PriceController::class, 'search'])
-    ->middleware('throttle:60,1');
+    ->middleware('throttle:api-search');
 Route::get('/prices', [PriceController::class, 'prices'])
-    ->middleware('throttle:60,1');
+    ->middleware('throttle:api-read');
 Route::get('/games/{appid}/prices', [GamePriceController::class, 'show'])
     ->whereNumber('appid')
-    ->middleware('throttle:60,1');
+    ->middleware('throttle:api-read');
 Route::get('/ads/config', [AdsController::class, 'config']);
 Route::get('/trends/popular', [DashboardController::class, 'popular'])
-    ->middleware('throttle:60,1');
+    ->middleware('throttle:api-read');
 Route::post('/track/click', [TrackingController::class, 'click'])
-    ->middleware('throttle:60,1');
-Route::get('/deals/steam', [SteamDealsController::class, 'index'])->middleware('throttle:30,1');
+    ->middleware('throttle:api-read');
+Route::get('/deals/steam', [SteamDealsController::class, 'index'])->middleware('throttle:api-deals');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::patch('/auth/me', [AuthController::class, 'updateMe']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::post('/auth/password', [AuthController::class, 'updatePassword'])
-        ->middleware('throttle:10,1');
+        ->middleware('throttle:auth-password');
 
     Route::get('/me/dashboard', [DashboardController::class, 'me']);
     Route::get('/me/history', [HistoryController::class, 'index']);
@@ -66,7 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/telegram/link-code', [TelegramController::class, 'createLinkCode']);
     Route::post('/telegram/oidc/begin', [TelegramController::class, 'oidcBegin'])
-        ->middleware('throttle:10,1');
+        ->middleware('throttle:api-telegram');
     Route::get('/telegram/status', [TelegramController::class, 'status']);
     Route::post('/telegram/radar', [TelegramController::class, 'updateRadar']);
     Route::delete('/telegram/link', [TelegramController::class, 'unlink']);
@@ -74,9 +74,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Service token for the Python bot
 Route::post('/internal/telegram/bind', [TelegramController::class, 'bind'])
-    ->middleware('throttle:60,1');
+    ->middleware('throttle:api-internal');
 
-Route::prefix('/internal/telegram')->middleware([EnsureRadarServiceToken::class, 'throttle:60,1'])->group(function () {
+Route::prefix('/internal/telegram')->middleware([EnsureRadarServiceToken::class, 'throttle:api-internal'])->group(function () {
     Route::post('/session', [TelegramBotController::class, 'session']);
     Route::get('/search', [TelegramBotController::class, 'search']);
     Route::get('/games/{appid}', [TelegramBotController::class, 'card'])->whereNumber('appid');
