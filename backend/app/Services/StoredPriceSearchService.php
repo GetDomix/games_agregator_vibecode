@@ -15,17 +15,24 @@ class StoredPriceSearchService
             return [];
         }
         $escaped = str_replace(['%', '_'], ['\\%', '\\_'], mb_strtolower($term));
-        $games = Game::query()->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])->limit($limit * 3)->get();
+        $games = Game::query()
+            ->with('currentPrices')
+            ->whereRaw('LOWER(name) LIKE ?', ["%{$escaped}%"])
+            ->limit($limit * 3)
+            ->get();
 
         return $games->sortBy(fn (Game $game) => match (true) {
             mb_strtolower($game->name) === mb_strtolower($term) => 0,
             str_starts_with(mb_strtolower($game->name), mb_strtolower($term)) => 1,
             default => 2,
-        })->take($limit)->map(fn (Game $game) => [
-            'appid' => (int) $game->steam_appid, 'name' => $game->name,
-            'tiny_image' => $game->header_image, 'header_image' => $game->header_image,
-            'price_rub' => null,
-        ])->values()->all();
+        })->take($limit)->map(function (Game $game) {
+            $steam = $game->currentPrices->first(fn (CurrentGamePrice $p) => $p->source === 'steam' && $p->offer_kind === 'official');
+            return [
+                'appid' => (int) $game->steam_appid, 'name' => $game->name,
+                'tiny_image' => $game->header_image, 'header_image' => $game->header_image,
+                'price_rub' => $steam?->min_price_rub !== null ? (float) $steam->min_price_rub : null,
+            ];
+        })->values()->all();
     }
 
     public function result(Game $game, string $query): array

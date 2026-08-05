@@ -510,6 +510,12 @@ export default function App() {
               <BrandMark size={30} />
             </span>
             <span className="brand-text">
+              <svg className="brand-decor" aria-hidden="true" viewBox="0 0 140 36" fill="none">
+                <circle cx="8" cy="30" r="9" />
+                <circle cx="8" cy="30" r="20" />
+                <circle cx="8" cy="30" r="32" />
+                <circle cx="8" cy="30" r="2.2" fill="currentColor" />
+              </svg>
               <span className="brand-name">Игроскан</span>
             </span>
           </button>
@@ -653,7 +659,7 @@ export default function App() {
                             >
                               {s.tiny_image ? <img src={s.tiny_image} alt="" onError={hideBrokenImg} /> : <span className="ph" />}
                               <span className="suggest-name">{s.name}</span>
-                              <span className="suggest-price muted">{rub(s.price_rub)}</span>
+                              {s.price_rub != null ? <span className="suggest-price">{rub(s.price_rub)}</span> : null}
                             </button>
                           </li>
                         ))
@@ -735,24 +741,9 @@ export default function App() {
                     )}
                   </div>
 
-                  {result.candidates?.length > 0 && (
-                    <div className="panel matches-panel" style={{ marginBottom: 12, padding: '0.85rem' }}>
-                      <h3 style={{ marginTop: 0 }}>Совпадения Steam</h3>
-                      <ul className="suggest-list matches-list" role="listbox">
-                        {result.candidates.map((c) => (
-                          <li key={c.appid}>
-                            <button type="button" className="suggest-item" role="option" aria-selected={false} onClick={() => runSearch(c.name, c.appid)}>
-                              {c.tiny_image ? <img src={c.tiny_image} alt="" loading="lazy" onError={hideBrokenImg} /> : <span className="ph" />}
-                              <span className="suggest-name">{c.name}</span>
-                              {c.price_rub != null ? (
-                                <span className="suggest-price">{rub(c.price_rub)}</span>
-                              ) : (
-                                <span className="suggest-price muted" title="Цена ещё не проверена">не проверено</span>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                  {!result.steam && result.candidates?.length > 0 && (
+                    <div className="panel suggest-hint">
+                      Точного совпадения в каталоге нет. Введи название в строке поиска выше и выбери игру из подсказок — тогда сравним цены.
                     </div>
                   )}
 
@@ -1357,17 +1348,17 @@ export default function App() {
 
         {view === 'cabinet' && loggedIn && (
           <section className="section page-enter">
-            <div className="hero" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '1rem' }}>
-              <div>
+            <div className="hero cabinet-head">
+              <div className="cabinet-id">
                 <p className="eyebrow">Кабинет</p>
-                <h2 style={{ margin: 0 }}>{user?.display_name}</h2>
+                <h2>{user?.display_name}</h2>
                 <p className="muted">{user?.email}</p>
                 {user?.is_admin && (
-                  <p className="muted" style={{ marginTop: 6 }}>
+                  <div className="cabinet-admin">
                     <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
                       Админка
                     </button>
-                  </p>
+                  </div>
                 )}
               </div>
               {dashboard && (
@@ -1380,12 +1371,12 @@ export default function App() {
               )}
             </div>
             {dashboard?.ctas?.map((c) => (
-              <p key={c} className="muted" style={{ marginTop: 8 }}>{c}</p>
+              <p key={c} className="muted cabinet-cta">{c}</p>
             ))}
 
             <div className="panel section radar-panel">
-              <h3 style={{ marginTop: 0 }}>Радар / Telegram</h3>
-              <p className="muted" style={{ marginBottom: '0.75rem' }}>
+              <h3>Радар / Telegram</h3>
+              <p className="muted">
                 {tgStatus?.linked
                   ? `Привязан${tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''} · уведомления ${tgStatus.radar_enabled ? 'вкл' : 'выкл'}`
                   : 'Не привязан — не получишь алерты о скидках Steam.'}
@@ -1429,8 +1420,8 @@ export default function App() {
             )}
             <div className="grid-2 section">
               <div className="panel">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0 }}>История</h3>
+                <div className="panel-head">
+                  <h3>История</h3>
                   <button
                     type="button"
                     className="btn ghost sm"
@@ -1443,7 +1434,7 @@ export default function App() {
                     Очистить
                   </button>
                 </div>
-                <div className="list-cards" style={{ marginTop: 12 }}>
+                <div className="list-cards panel-list">
                   {(dashboard?.recent_history || []).map((h) => (
                     <article key={h.id} className="list-card">
                       {h.header_image ? <img src={h.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
@@ -1458,8 +1449,8 @@ export default function App() {
                 </div>
               </div>
               <div className="panel">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0 }}>Избранное</h3>
+                <div className="panel-head">
+                  <h3>Избранное</h3>
                   <button
                     type="button"
                     className="btn ghost sm"
@@ -1476,7 +1467,7 @@ export default function App() {
                     Обновить
                   </button>
                 </div>
-                <div className="list-cards" style={{ marginTop: 12 }}>
+                <div className="list-cards panel-list">
                   {watchlist.map((f) => (
                     <article key={f.appid} className="list-card">
                       {f.header_image ? <img src={f.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
