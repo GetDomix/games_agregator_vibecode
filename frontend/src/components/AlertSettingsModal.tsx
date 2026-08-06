@@ -10,16 +10,18 @@ type Props = {
   onClose: () => void
   onSave: (value: { target_value: number | null; scopes: AlertScope[] }) => Promise<void>
   onSavedPrefs: (prefs: AlertPrefs) => void
+  onRemoveAlert?: () => Promise<void>
 }
 const MARKET_KINDS: Exclude<AlertScope['offer_kind'], 'official'>[] = ['key', 'gift', 'account', 'rent']
 const KIND_LABEL: Record<AlertScope['offer_kind'], string> = { official: 'Официальная версия', key: 'Ключ', gift: 'Гифт', account: 'Аккаунт', rent: 'Аренда' }
 
-export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, onSavedPrefs }: Props) {
+export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, onSavedPrefs, onRemoveAlert }: Props) {
   const [target, setTarget] = useState(favorite.alert?.target_value?.toString() || '')
   const [mode, setMode] = useState<AlertPrefs['mode']>(initialPrefs?.mode ?? 'simple')
   const [kinds, setKinds] = useState<AlertPrefs['kinds']>(initialPrefs?.kinds ?? [])
   const [scopes, setScopes] = useState<AlertScope[]>(favorite.alert?.scopes ?? [])
   const [saving, setSaving] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const has = (source: AlertScope['source'], offer_kind: AlertScope['offer_kind']) => scopes.some((scope) => scope.source === source && scope.offer_kind === offer_kind)
   const toggle = (source: AlertScope['source'], offer_kind: AlertScope['offer_kind']) => setScopes((current) => {
     const exists = current.some((scope) => scope.source === source && scope.offer_kind === offer_kind)
@@ -74,7 +76,7 @@ export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, on
         {(['plati', 'ggsel'] as const).map((source) => <div className="scope-group" key={source}><strong>{source === 'plati' ? 'Plati.Market' : 'GGsel'}</strong><div className="scope-row">{MARKET_KINDS.map((kind) => <label className="scope-check" key={kind}><input type="checkbox" checked={has(source, kind)} onChange={() => toggle(source, kind)} /> {KIND_LABEL[kind]}</label>)}</div></div>)}
         {scopes.length === 0 && <p className="alert-hint">Отметь хотя бы одну площадку и тип товара.</p>}
       </>}
-      <div className="actions"><button type="button" className="btn ghost" onClick={onClose}>Отмена</button><button type="button" className="btn primary" disabled={!canSave} onClick={() => save(parsedTarget)}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>
+      <div className="actions">{onRemoveAlert && favorite.alert && <button type="button" className="btn ghost" disabled={removing} onClick={async () => { setRemoving(true); try { await onRemoveAlert() } finally { setRemoving(false) } }}>{removing ? 'Удаляем…' : 'Удалить алерт'}</button>}<button type="button" className="btn ghost" onClick={onClose}>Отмена</button><button type="button" className="btn primary" disabled={!canSave} onClick={() => save(parsedTarget)}>{saving ? 'Сохраняем…' : 'Сохранить'}</button></div>
     </section>
   </div>
 }

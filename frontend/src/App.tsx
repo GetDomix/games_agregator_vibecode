@@ -4,7 +4,7 @@ import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from './api'
 import type { User } from './api'
 import { BRAND, BrandMark } from './brand'
-import { IconClose, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from './icons'
+import { IconClose, IconGift, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from './icons'
 import { AlertSettingsModal } from './components/AlertSettingsModal'
 import { WatchlistAlerts } from './components/WatchlistAlerts'
 import type { AlertItem, AlertPrefs, AlertScope, FavoriteItem } from './watchlist'
@@ -25,6 +25,17 @@ function pushRecent(q: string, appid?: number | null) {
   const prev = loadRecents().filter((r) => r.q.toLowerCase() !== term.toLowerCase())
   const next = [{ q: term, appid: appid ?? null, at: Date.now() }, ...prev].slice(0, 8)
   localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+}
+
+type GiftGame = { name: string; appid?: number | null; image?: string | null; received_at: number }
+const GIFT_KEY = 'gpa_gift_v1'
+const GIFT_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000
+function loadGift(): GiftGame | null {
+  try {
+    return JSON.parse(localStorage.getItem(GIFT_KEY) || 'null') as GiftGame | null
+  } catch {
+    return null
+  }
 }
 
 type Offer = { title: string; url: string; price_rub: number; sales?: number; seller_name?: string | null; kind?: string }
@@ -139,6 +150,7 @@ export default function App() {
   const [watchlist, setWatchlist] = useState<FavoriteItem[]>([])
   const [alertItems, setAlertItems] = useState<AlertItem[]>([])
   const [alertModal, setAlertModal] = useState<{ favorite: FavoriteItem; create: boolean } | null>(null)
+  const [gift, setGift] = useState<GiftGame | null>(() => loadGift())
   const [forceRefreshing, setForceRefreshing] = useState(false)
   const autoForceRef = useRef(false)
   const lastSearchRef = useRef<{ q: string; appid: number | null } | null>(null)
@@ -151,6 +163,34 @@ export default function App() {
   const [pwdSaving, setPwdSaving] = useState(false)
 
   const loggedIn = Boolean(token && user)
+
+  const giftReady = !gift || Date.now() - gift.received_at >= GIFT_COOLDOWN_MS
+  function receiveGift() {
+    if (!tgStatus?.linked) {
+      setToast('Сначала привяжи Telegram в Радаре')
+      setView('radar')
+      return
+    }
+    if (gift && !giftReady) {
+      const left = Math.ceil((GIFT_COOLDOWN_MS - (Date.now() - gift.received_at)) / (24 * 60 * 60 * 1000))
+      setToast(`Следующий подарок через ${left} дн.`)
+      return
+    }
+    const pool: PopularItem[] = popular.length
+      ? popular
+      : [
+          { query: 'Hollow Knight', game_name: 'Hollow Knight', appid: 367520 },
+          { query: 'Hades', game_name: 'Hades', appid: 1145360 },
+          { query: 'Disco Elysium', game_name: 'Disco Elysium', appid: 632470 },
+          { query: 'Terraria', game_name: 'Terraria', appid: 105600 },
+          { query: 'Stardew Valley', game_name: 'Stardew Valley', appid: 413150 },
+        ]
+    const pick = pool[Math.floor(Math.random() * pool.length)]
+    const next: GiftGame = { name: pick.game_name || pick.query, appid: pick.appid ?? null, image: pick.header_image ?? null, received_at: Date.now() }
+    setGift(next)
+    localStorage.setItem(GIFT_KEY, JSON.stringify(next))
+    setToast('Подарок получен! Игра в кабинете')
+  }
 
   useEffect(() => {
     const onTelegramOidc = (event: MessageEvent) => {
@@ -303,14 +343,15 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function runSearch(q: string, appid?: number | null, opts?: { force?: boolean }) {
+  async function runSearch(q: string, appid?: number | null, opts?: { force?: boolean; silent?: boolean }) {
     const term = q.trim()
     if (!term) return
     const force = Boolean(opts?.force)
+    const silent = Boolean(opts?.silent)
     if (!force) autoForceRef.current = false
     setView('home')
     setQuery(term)
-    setLoading(true)
+    if (!silent) setLoading(true)
     setError('')
     try {
       const params = new URLSearchParams({ q: term })
@@ -325,6 +366,21 @@ export default function App() {
           const live = cached && cached.length ? cached : await discover(term)
           candidates = mergeCandidates(live, data.candidates ?? [])
         } catch { /* оставляем сохранённых кандидатов */ }
+      }
+      // Первый поиск неизвестной игры: сразу берём лучшего кандидата
+      // и запускаем парсинг всех источников (Steam + Plati + GGsel) без лишних кликов.
+      if (!data.steam && !force && !autoForceRef.current && candidates.length > 0) {
+        const top = candidates[0]
+        autoForceRef.current = true
+        setForceRefreshing(true)
+        setSuggestOpen(false)
+        setQuery(top.name)
+        try {
+          await runSearch(top.name, top.appid, { force: true })
+        } finally {
+          setForceRefreshing(false)
+        }
+        return
       }
       lastSearchRef.current = { q: term, appid: appid ?? data.steam?.appid ?? null }
       setResult({ ...data, candidates })
@@ -361,13 +417,13 @@ export default function App() {
 
   // Пока маркетплейсы обновляются — тихо повторяем поиск каждые 4 секунды (максимум ~8 попыток).
   useEffect(() => {
-    if (!result?.refreshing || !result?.steam) { livePollRef.current = 0; return }
+    if (!result?.refreshing) { livePollRef.current = 0; return }
     if (livePollRef.current >= 8) return
     const t = window.setInterval(() => {
       livePollRef.current += 1
       if (livePollRef.current > 8) { window.clearInterval(t); return }
       const last = lastSearchRef.current
-      if (last) runSearch(last.q, last.appid)
+      if (last) runSearch(last.q, last.appid, { silent: true })
     }, 4000)
     return () => window.clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -673,7 +729,7 @@ export default function App() {
               </form>
 
               {loading && !forceRefreshing && <div className="status">Ищем сохранённые цены…</div>}
-              {forceRefreshing && <div className="status">Обновляем цены из Steam…</div>}
+              {forceRefreshing && <div className="status">Парсим Steam, Plati и GGsel — первые данные появятся через несколько секунд…</div>}
               {error && <div className="status error">{error}</div>}
 
               {result && (
@@ -1347,19 +1403,35 @@ export default function App() {
         )}
 
         {view === 'cabinet' && loggedIn && (
-          <section className="section page-enter">
+          <section className="section page-enter cabinet">
             <div className="hero cabinet-head">
               <div className="cabinet-id">
-                <p className="eyebrow">Кабинет</p>
-                <h2>{user?.display_name}</h2>
-                <p className="muted">{user?.email}</p>
-                {user?.is_admin && (
-                  <div className="cabinet-admin">
+                <div className="cab-avatar" aria-hidden="true">
+                  {(user?.display_name || user?.email || 'И').trim().charAt(0).toUpperCase()}
+                </div>
+                <div className="cabinet-id-text">
+                  <p className="eyebrow">Кабинет</p>
+                  <h2>{user?.display_name || user?.email}</h2>
+                  <p className="muted">{user?.email}</p>
+                  <div className="cabinet-badges">
+                    {user?.is_admin && <span className="badge">админ</span>}
+                    {!tgStatus?.linked
+                      ? <span className="badge warn">Telegram не привязан</span>
+                      : tgStatus?.identity_linked
+                        ? <span className="badge ok">Telegram подключён</span>
+                        : <span className="badge warn">Telegram: подтвердить</span>}
+                  </div>
+                </div>
+                <div className="cabinet-actions">
+                  {user?.is_admin && (
                     <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
                       Админка
                     </button>
-                  </div>
-                )}
+                  )}
+                  <button type="button" className="btn ghost sm" onClick={receiveGift}>
+                    <IconGift size={15} /> Подарок
+                  </button>
+                </div>
               </div>
               {dashboard && (
                 <div className="stats stagger">
@@ -1374,13 +1446,33 @@ export default function App() {
               <p key={c} className="muted cabinet-cta">{c}</p>
             ))}
 
+            <div className="panel section gift-panel">
+              <div className="panel-head">
+                <h3>Подарок</h3>
+                {gift && !giftReady && <span className="badge ok">получен</span>}
+              </div>
+              {gift && !giftReady ? (
+                <>
+                  <p className="muted">Твой дроп: <strong>{gift.name}</strong></p>
+                  <div className="actions">
+                    {gift.appid ? <button type="button" className="btn ghost sm" onClick={() => runSearch(gift.name, gift.appid)}>Цены</button> : null}
+                  </div>
+                  <p className="muted">Следующий подарок через {Math.ceil((GIFT_COOLDOWN_MS - (Date.now() - gift.received_at)) / (24 * 60 * 60 * 1000))} дн.</p>
+                </>
+              ) : (
+                <>
+                  <p className="muted">Раз в 3 дня случайно дропается игра. Нужен привязанный Telegram.</p>
+                  {!tgStatus?.linked && <p className="muted">Сначала привяжи Telegram в Радаре.</p>}
+                </>
+              )}
+            </div>
+
             <div className="panel section radar-panel">
               <h3>Радар / Telegram</h3>
               <p className="muted">
-                {tgStatus?.linked
-                  ? `Привязан${tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''} · уведомления ${tgStatus.radar_enabled ? 'вкл' : 'выкл'}`
-                  : 'Не привязан — не получишь алерты о скидках Steam.'}
-                {tgStatus?.identity_linked ? ' · Telegram-аккаунт подтверждён' : ' · Telegram-аккаунт ещё не подтверждён'}
+                {!tgStatus?.linked
+                  ? 'Не привязан — не получишь алерты о скидках Steam.'
+                  : `Привязан${tgStatus.telegram_username ? ` (@${tgStatus.telegram_username})` : ''} · ${tgStatus.identity_linked ? 'аккаунт подтверждён' : 'аккаунт не подтверждён'} · уведомления ${tgStatus.radar_enabled ? 'вкл' : 'выкл'}`}
               </p>
               <button type="button" className="btn primary" onClick={() => setView('radar')}>
                 Открыть радар
@@ -1396,6 +1488,11 @@ export default function App() {
                 await api(`/api/me/favorites/${alert.favorite.appid}/alert/rearm`, { method: 'POST' })
                 await loadWatchlist()
                 setToast('Алерт снова активен')
+              }}
+              onRemove={async (alert) => {
+                await api(`/api/me/favorites/${alert.favorite.appid}/alert`, { method: 'DELETE' })
+                await loadWatchlist()
+                setToast('Алерт удалён')
               }}
             />
 
@@ -1484,7 +1581,9 @@ export default function App() {
                             className="btn ghost sm"
                             onClick={async () => {
                               await api(`/api/me/favorites/${f.appid}`, { method: 'DELETE' })
+                              loadWatchlist().catch(() => {})
                               loadDashboard()
+                              setToast('Убрано из избранного')
                             }}
                           >
                             Убрать
@@ -1506,7 +1605,7 @@ export default function App() {
               <p className="eyebrow">Избранное</p>
               <h2>Игры под наблюдением</h2>
               <p className="muted">Целевые цены и уведомления — в настройках каждой игры.</p>
-              <div className="list-cards" style={{ marginTop: 12 }}>
+              <div className="list-cards panel-list">
                 {watchlist.map((f) => (
                   <article key={f.appid} className="list-card">
                     {f.header_image ? <img src={f.header_image} alt="" onError={hideBrokenImg} /> : <div className="ph" />}
@@ -1639,6 +1738,12 @@ export default function App() {
             await loadWatchlist()
             loadDashboard().catch(() => {})
             setToast('Настройки алерта сохранены')
+          }}
+          onRemoveAlert={async () => {
+            await api(`/api/me/favorites/${alertModal.favorite.appid}/alert`, { method: 'DELETE' })
+            setAlertModal(null)
+            loadWatchlist().catch(() => {})
+            setToast('Алерт удалён')
           }}
         />
       )}

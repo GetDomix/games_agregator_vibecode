@@ -98,11 +98,12 @@ class PriceController extends Controller
         if ($force) {
             foreach (['steam', 'plati', 'ggsel'] as $source) {
                 try {
+                    $game = $game->fresh() ?? $game;
                     $this->refreshService->refresh($game, $source);
                 } catch (\Throwable) {
                 }
             }
-            $game->refresh();
+            $game = $game->fresh() ?? $game;
         }
 
         $result = $this->stored->result($game, $q);

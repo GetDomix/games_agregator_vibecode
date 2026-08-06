@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AlertEvent;
 use App\Models\Favorite;
 use App\Models\FavoriteAlert;
 
@@ -40,5 +41,16 @@ class FavoriteAlertSettingsService
         $alert->update(['status' => 'active', 'cycle' => $alert->cycle + 1, 'triggered_at' => null]);
 
         return $alert->load('scopes');
+    }
+
+    public function remove(Favorite $favorite): void
+    {
+        $alert = $favorite->alert()->first();
+        if (! $alert) {
+            return;
+        }
+        AlertEvent::query()->where('favorite_alert_id', $alert->id)->delete();
+        $alert->scopes()->delete();
+        $alert->delete();
     }
 }

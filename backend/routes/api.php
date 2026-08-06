@@ -57,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/me/favorites/refresh', [FavoriteController::class, 'refresh']);
     Route::patch('/me/favorites/{appid}', [FavoriteController::class, 'update']);
     Route::post('/me/favorites/{appid}/alert/rearm', [FavoriteController::class, 'rearm']);
+    Route::delete('/me/favorites/{appid}/alert', [FavoriteController::class, 'destroyAlert']);
     Route::get('/me/alerts', [AlertController::class, 'index']);
     Route::get('/me/alerts/events', [AlertController::class, 'events']);
     Route::delete('/me/favorites/{appid}', [FavoriteController::class, 'destroy']);

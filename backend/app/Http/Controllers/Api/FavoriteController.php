@@ -107,6 +107,14 @@ class FavoriteController extends Controller
         return response()->json($fav->fresh()->load(['alert.scopes', 'game.sourceStates'])->toApiArray());
     }
 
+    public function destroyAlert(Request $request, int $appid, FavoriteAlertSettingsService $alerts): Response
+    {
+        $fav = Favorite::query()->where('user_id', $request->user()->id)->where('appid', $appid)->firstOrFail();
+        $alerts->remove($fav);
+
+        return response()->noContent();
+    }
+
     public function destroy(Request $request, int $appid): Response
     {
         $fav = Favorite::query()

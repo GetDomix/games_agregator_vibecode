@@ -12,7 +12,7 @@ class GameRefreshRequestService
     public function requestUnknown(int $appid, string $name): Game
     {
         $game = Game::query()->firstOrCreate(['steam_appid' => $appid], ['name' => mb_substr(trim($name) ?: "Steam app {$appid}", 0, 200)]);
-        $this->request($game, [GameSourceState::SOURCE_STEAM]);
+        $this->request($game, GameSourceState::SOURCES);
 
         return $game;
     }
@@ -27,7 +27,7 @@ class GameRefreshRequestService
             $favorite->game()->associate($game);
             $favorite->save();
         }
-        $this->request($game, [GameSourceState::SOURCE_STEAM]);
+        $this->request($game, GameSourceState::SOURCES);
 
         return $game;
     }

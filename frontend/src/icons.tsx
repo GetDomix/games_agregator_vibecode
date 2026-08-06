@@ -99,6 +99,17 @@ export function IconStar(props: IconProps) {
   )
 }
 
+export function IconGift(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="8" width="17" height="4" rx="1" />
+      <path d="M12 8v12.5" />
+      <path d="M5.5 12v8.5h13V12" />
+      <path d="M12 8c-1.6-3-5.6-3.4-5-.9S12 8 12 8Zm0 0c1.6-3 5.6-3.4 5-.9S12 8 12 8Z" />
+    </svg>
+  )
+}
+
 export function IconClose(props: IconProps) {
   return (
     <svg {...base(props)}>
