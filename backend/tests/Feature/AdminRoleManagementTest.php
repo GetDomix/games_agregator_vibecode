@@ -71,10 +71,27 @@ class AdminRoleManagementTest extends TestCase
 
         Sanctum::actingAs($root);
 
-        $this->getJson('/api/admin/team')
+        $response = $this->getJson('/api/admin/team')->assertOk();
+        $rootItem = collect($response->json('items'))->firstWhere('id', $root->id);
+        $this->assertSame(User::ROLE_OWNER, $rootItem['admin_role']);
+        $this->assertTrue($rootItem['is_server_managed_owner']);
+
+        $this->getJson('/api/auth/me')
             ->assertOk()
-            ->assertJsonCount(1, 'items')
-            ->assertJsonPath('items.0.admin_role', User::ROLE_OWNER);
+            ->assertJsonMissingPath('is_server_managed_owner');
+
+        $this->assertArrayNotHasKey('is_server_managed_owner', $root->toPublicArray());
+    }
+
+    public function test_database_owner_is_not_marked_as_server_managed_in_team_response(): void
+    {
+        config(['gpa.admin_emails' => 'root@example.com']);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        Sanctum::actingAs($owner);
+
+        $response = $this->getJson('/api/admin/team')->assertOk();
+        $ownerItem = collect($response->json('items'))->firstWhere('id', $owner->id);
+        $this->assertFalse($ownerItem['is_server_managed_owner']);
     }
 
     public function test_owner_can_promote_admin_and_target_tokens_are_revoked(): void

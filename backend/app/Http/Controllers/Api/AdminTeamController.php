@@ -25,7 +25,10 @@ class AdminTeamController extends Controller
             })
             ->orderBy('id')
             ->get()
-            ->map(fn (User $user) => $user->toPublicArray())
+            ->map(fn (User $user) => [
+                ...$user->toPublicArray(),
+                'is_server_managed_owner' => $user->isServerManagedOwner(),
+            ])
             ->values();
 
         return response()->json(['items' => $users]);

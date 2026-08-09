@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api'
 import type { AdminOverview, AdminTabProps } from './types'
@@ -20,16 +20,29 @@ export function AdminCatalogTab({ onError, onNotice }: AdminTabProps) {
   const [appid, setAppid] = useState('')
   const [sources, setSources] = useState<string[]>([...allSources])
   const [busy, setBusy] = useState(false)
+  const mounted = useRef(false)
+  const requestGeneration = useRef(0)
 
   const load = useCallback(async () => {
+    const request = ++requestGeneration.current
     try {
-      setOverview(await api<AdminOverview>('/api/admin/overview'))
+      const response = await api<AdminOverview>('/api/admin/overview')
+      if (mounted.current && request === requestGeneration.current) setOverview(response)
     } catch (error) {
-      onError(errorMessage(error, 'Не удалось загрузить состояние каталога'))
+      if (mounted.current && request === requestGeneration.current) {
+        onError(errorMessage(error, 'Не удалось загрузить состояние каталога'))
+      }
     }
   }, [onError])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    mounted.current = true
+    void load()
+    return () => {
+      mounted.current = false
+      requestGeneration.current += 1
+    }
+  }, [load])
 
   const requestRefresh = async (event: FormEvent) => {
     event.preventDefault()
@@ -43,13 +56,14 @@ export function AdminCatalogTab({ onError, onNotice }: AdminTabProps) {
         method: 'POST',
         body: JSON.stringify({ sources }),
       })
+      if (!mounted.current) return
       onNotice(`Обновление AppID ${appid} поставлено в очередь`)
       setAppid('')
       await load()
     } catch (error) {
-      onError(errorMessage(error, 'Не удалось поставить обновление в очередь'))
+      if (mounted.current) onError(errorMessage(error, 'Не удалось поставить обновление в очередь'))
     } finally {
-      setBusy(false)
+      if (mounted.current) setBusy(false)
     }
   }
 

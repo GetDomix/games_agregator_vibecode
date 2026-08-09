@@ -8,7 +8,7 @@ export type SourceHealth = {
 
 export type AdminAuditEntry = {
   id: number
-  request_id: string
+  request_id: string | null
   actor: string | null
   action: string
   target_type: string | null
@@ -47,7 +47,7 @@ export type AdminOverview = {
 
 export type SafeAdminUser = {
   id: number
-  email: string
+  email: string | null
   display_name: string
   admin_role: AdminRole
   can_access_admin: boolean
@@ -61,12 +61,16 @@ export type SafeAdminUser = {
   last_login_at: string | null
 }
 
+export type AdminTeamUser = SafeAdminUser & {
+  is_server_managed_owner: boolean
+}
+
 export type UserDirectoryResponse = {
   data: SafeAdminUser[]
   meta: { page: number; per_page: number; total: number }
 }
 
-export type TeamResponse = { items: SafeAdminUser[] }
+export type TeamResponse = { items: AdminTeamUser[] }
 
 export type AuditPage = {
   data: AdminAuditEntry[]

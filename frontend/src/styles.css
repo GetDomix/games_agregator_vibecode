@@ -1424,8 +1424,10 @@ strong { color: var(--ink); }
 .admin-role-badge.admin { border-color: color-mix(in srgb, var(--ok) 32%, var(--border)); color: var(--ok); }
 .admin-role-badge.owner { border-color: color-mix(in srgb, var(--signal) 38%, var(--border)); color: var(--text); }
 .admin-role-control { display: flex; align-items: center; gap: 0.45rem; min-width: 270px; }
+.admin-role-control-wrap { display: grid; gap: 0.3rem; }
 .admin-role-control select { min-width: 145px; padding: 0.55rem 1.8rem 0.55rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); background: var(--bg-soft); }
 .admin-role-control select:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.admin-role-reason { max-width: 300px; color: var(--muted); font-size: 0.66rem; line-height: 1.35; }
 .admin-team-note { margin: -0.3rem 0 0; padding-left: 0.8rem; border-left: 2px solid var(--signal); color: var(--muted); font-size: 0.82rem; }
 .admin-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 0.65rem; padding-top: 0.8rem; }
 .admin-pagination span { color: var(--muted); font: 650 0.68rem var(--mono); }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { AdminOverview, AdminTabProps } from './types'
 
@@ -21,19 +21,32 @@ function HealthBadge({ value, label }: { value: number; label: string }) {
 export function AdminOverviewTab({ onError }: AdminTabProps) {
   const [overview, setOverview] = useState<AdminOverview | null>(null)
   const [loading, setLoading] = useState(true)
+  const mounted = useRef(false)
+  const requestGeneration = useRef(0)
 
   const load = useCallback(async () => {
+    const request = ++requestGeneration.current
     setLoading(true)
     try {
-      setOverview(await api<AdminOverview>('/api/admin/overview'))
+      const response = await api<AdminOverview>('/api/admin/overview')
+      if (mounted.current && request === requestGeneration.current) setOverview(response)
     } catch (error) {
-      onError(errorMessage(error, 'Не удалось загрузить обзор'))
+      if (mounted.current && request === requestGeneration.current) {
+        onError(errorMessage(error, 'Не удалось загрузить обзор'))
+      }
     } finally {
-      setLoading(false)
+      if (mounted.current && request === requestGeneration.current) setLoading(false)
     }
   }, [onError])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    mounted.current = true
+    void load()
+    return () => {
+      mounted.current = false
+      requestGeneration.current += 1
+    }
+  }, [load])
 
   if (!overview && loading) return <p className="admin-empty" aria-live="polite">Собираем состояние системы…</p>
   if (!overview) return <p className="admin-empty">Обзор временно недоступен. Попробуйте обновить данные.</p>

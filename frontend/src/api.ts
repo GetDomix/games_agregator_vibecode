@@ -6,7 +6,7 @@ const USER_KEY = 'gpa_user'
 
 export type User = {
   id: number
-  email: string
+  email: string | null
   display_name: string
   admin_role: AdminRole
   can_access_admin: boolean

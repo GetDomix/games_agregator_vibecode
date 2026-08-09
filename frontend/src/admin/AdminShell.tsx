@@ -30,12 +30,10 @@ export function AdminShell({ currentUser }: { currentUser: User }) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
 
   const showError = useCallback((message: string) => {
-    setNotice('')
     setError(message)
   }, [])
 
   const showNotice = useCallback((message: string) => {
-    setError('')
     setNotice(message)
   }, [])
 

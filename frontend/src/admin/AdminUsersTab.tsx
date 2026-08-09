@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api'
 import type { AdminTabProps, SafeAdminUser, UserDirectoryResponse } from './types'
@@ -20,21 +20,34 @@ export function AdminUsersTab({ onError }: AdminTabProps) {
   const [users, setUsers] = useState<SafeAdminUser[]>([])
   const [meta, setMeta] = useState({ page: 1, per_page: 30, total: 0 })
   const [loading, setLoading] = useState(true)
+  const mounted = useRef(false)
+  const requestGeneration = useRef(0)
 
   const load = useCallback(async (term: string, page: number) => {
+    const request = ++requestGeneration.current
     setLoading(true)
     try {
       const response = await api<UserDirectoryResponse>(`/api/admin/users?q=${encodeURIComponent(term)}&page=${page}`)
+      if (!mounted.current || request !== requestGeneration.current) return
       setUsers(response.data)
       setMeta(response.meta)
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Не удалось загрузить пользователей')
+      if (mounted.current && request === requestGeneration.current) {
+        onError(error instanceof Error ? error.message : 'Не удалось загрузить пользователей')
+      }
     } finally {
-      setLoading(false)
+      if (mounted.current && request === requestGeneration.current) setLoading(false)
     }
   }, [onError])
 
-  useEffect(() => { void load('', 1) }, [load])
+  useEffect(() => {
+    mounted.current = true
+    void load('', 1)
+    return () => {
+      mounted.current = false
+      requestGeneration.current += 1
+    }
+  }, [load])
 
   const search = (event: FormEvent) => {
     event.preventDefault()
@@ -63,7 +76,7 @@ export function AdminUsersTab({ onError }: AdminTabProps) {
             <tbody>
               {users.map((item) => (
                 <tr key={item.id}>
-                  <td><b>{item.display_name || 'Без имени'}</b><span className="offer-meta">#{item.id} · {item.email}</span></td>
+                  <td><b>{item.display_name || item.email || 'Без имени'}</b><span className="offer-meta">#{item.id} · {item.email || 'Без email'}</span></td>
                   <td>{item.searches_count ?? 0} поисков<span className="offer-meta">{item.favorites_count ?? 0} в избранном · вход {dateTime(item.last_login_at)}</span></td>
                   <td>{item.telegram_linked ? 'Telegram подключён' : 'Telegram не подключён'}{item.telegram_linked && <span className="offer-meta">Радар {item.radar_enabled ? 'включён' : 'выключен'}</span>}</td>
                   <td><span className={`admin-role-badge ${item.admin_role}`}>{roleLabel(item)}</span></td>

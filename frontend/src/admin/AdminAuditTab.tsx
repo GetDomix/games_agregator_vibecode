@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { AdminAuditEntry, AdminTabProps, AuditPage } from './types'
 
@@ -27,19 +27,32 @@ function auditContext(item: AdminAuditEntry) {
 export function AdminAuditTab({ onError }: AdminTabProps) {
   const [page, setPage] = useState<AuditPage | null>(null)
   const [loading, setLoading] = useState(true)
+  const mounted = useRef(false)
+  const requestGeneration = useRef(0)
 
   const load = useCallback(async (pageNumber: number) => {
+    const request = ++requestGeneration.current
     setLoading(true)
     try {
-      setPage(await api<AuditPage>(`/api/admin/audit?page=${pageNumber}&per_page=25`))
+      const response = await api<AuditPage>(`/api/admin/audit?page=${pageNumber}&per_page=25`)
+      if (mounted.current && request === requestGeneration.current) setPage(response)
     } catch (error) {
-      onError(error instanceof Error ? error.message : 'Не удалось загрузить аудит')
+      if (mounted.current && request === requestGeneration.current) {
+        onError(error instanceof Error ? error.message : 'Не удалось загрузить аудит')
+      }
     } finally {
-      setLoading(false)
+      if (mounted.current && request === requestGeneration.current) setLoading(false)
     }
   }, [onError])
 
-  useEffect(() => { void load(1) }, [load])
+  useEffect(() => {
+    mounted.current = true
+    void load(1)
+    return () => {
+      mounted.current = false
+      requestGeneration.current += 1
+    }
+  }, [load])
 
   return (
     <div className="admin-tab-stack">

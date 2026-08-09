@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api'
 import type { User } from '../api'
 import { RoleChangeDialog } from './RoleChangeDialog'
-import type { AdminRole, AdminTabProps, SafeAdminUser, TeamResponse, UserDirectoryResponse } from './types'
+import type { AdminRole, AdminTabProps, AdminTeamUser, SafeAdminUser, TeamResponse, UserDirectoryResponse } from './types'
 
 type Transition = { target: SafeAdminUser; nextRole: AdminRole }
+type EditableUser = SafeAdminUser | AdminTeamUser
 
 const roleLabels: Record<AdminRole, string> = {
   user: 'Пользователь',
@@ -17,48 +18,91 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+function userName(user: SafeAdminUser) {
+  return user.display_name || user.email || 'Без имени'
+}
+
 export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps & { currentUser: User }) {
-  const [team, setTeam] = useState<SafeAdminUser[]>([])
+  const [team, setTeam] = useState<AdminTeamUser[]>([])
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SafeAdminUser[]>([])
   const [drafts, setDrafts] = useState<Record<number, AdminRole>>({})
   const [transition, setTransition] = useState<Transition | null>(null)
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
+  const mounted = useRef(true)
+  const teamRequest = useRef(0)
+  const searchRequest = useRef(0)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      teamRequest.current += 1
+      searchRequest.current += 1
+    }
+  }, [])
 
   const loadTeam = useCallback(async () => {
+    const request = ++teamRequest.current
     setLoading(true)
     try {
       const response = await api<TeamResponse>('/api/admin/team')
+      if (!mounted.current || request !== teamRequest.current) return false
       setTeam(response.items)
+      return true
     } catch (error) {
-      onError(errorMessage(error, 'Не удалось загрузить команду'))
+      if (mounted.current && request === teamRequest.current) {
+        onError(errorMessage(error, 'Не удалось загрузить команду'))
+      }
+      return false
     } finally {
-      setLoading(false)
+      if (mounted.current && request === teamRequest.current) setLoading(false)
     }
   }, [onError])
 
   useEffect(() => { void loadTeam() }, [loadTeam])
 
+  const loadSearch = async (term: string) => {
+    const request = ++searchRequest.current
+    setSearching(true)
+    try {
+      const response = await api<UserDirectoryResponse>(`/api/admin/users?q=${encodeURIComponent(term)}`)
+      if (!mounted.current || request !== searchRequest.current) return false
+      setResults(response.data)
+      return true
+    } catch (error) {
+      if (mounted.current && request === searchRequest.current) {
+        onError(errorMessage(error, 'Не удалось найти пользователя'))
+      }
+      return false
+    } finally {
+      if (mounted.current && request === searchRequest.current) setSearching(false)
+    }
+  }
+
   const search = async (event: FormEvent) => {
     event.preventDefault()
     const term = query.trim()
     if (!term) {
+      searchRequest.current += 1
       setResults([])
       return
     }
-    setSearching(true)
-    try {
-      const response = await api<UserDirectoryResponse>(`/api/admin/users?q=${encodeURIComponent(term)}`)
-      setResults(response.data)
-    } catch (error) {
-      onError(errorMessage(error, 'Не удалось найти пользователя'))
-    } finally {
-      setSearching(false)
-    }
+    await loadSearch(term)
   }
 
   const chosenRole = (user: SafeAdminUser) => drafts[user.id] ?? user.admin_role
+  const effectiveOwnerCount = team.filter((member) => member.admin_role === 'owner').length
+
+  const demotionReason = (user: EditableUser) => {
+    if (user.admin_role !== 'owner') return null
+    if ('is_server_managed_owner' in user && user.is_server_managed_owner) {
+      return 'Этот владелец управляется серверной конфигурацией'
+    }
+    if (effectiveOwnerCount <= 1) return 'Нельзя понизить единственного эффективного владельца'
+    return null
+  }
 
   const openTransition = (target: SafeAdminUser) => {
     const nextRole = chosenRole(target)
@@ -79,35 +123,41 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
         ...(currentPassword ? { current_password: currentPassword } : {}),
       }),
     })
-    setTransition(null)
+    if (!mounted.current) return
+
     setDrafts((current) => {
       const next = { ...current }
       delete next[target.id]
       return next
     })
-    onNotice(`${target.display_name || target.email}: роль «${roleLabels[nextRole]}» применена`)
+    onNotice(`${userName(target)}: роль «${roleLabels[nextRole]}» применена`)
     await loadTeam()
-    if (query.trim()) {
-      const response = await api<UserDirectoryResponse>(`/api/admin/users?q=${encodeURIComponent(query.trim())}`)
-      setResults(response.data)
-    }
+    if (query.trim() && mounted.current) await loadSearch(query.trim())
   }
 
-  const renderRoleControl = (item: SafeAdminUser) => (
-    <div className="admin-role-control">
-      <label className="sr-only" htmlFor={`admin-role-${item.id}`}>Новая роль для {item.display_name || item.email}</label>
-      <select
-        id={`admin-role-${item.id}`}
-        value={chosenRole(item)}
-        onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value as AdminRole }))}
-      >
-        <option value="user">Пользователь</option>
-        <option value="admin">Администратор</option>
-        <option value="owner">Владелец</option>
-      </select>
-      <button type="button" className="btn ghost sm" disabled={chosenRole(item) === item.admin_role} onClick={() => openTransition(item)}>Изменить</button>
-    </div>
-  )
+  const renderRoleControl = (item: EditableUser) => {
+    const restriction = demotionReason(item)
+    const reasonId = restriction ? `admin-role-reason-${item.id}` : undefined
+    return (
+      <div className="admin-role-control-wrap">
+        <div className="admin-role-control">
+          <label className="sr-only" htmlFor={`admin-role-${item.id}`}>Новая роль для {userName(item)}</label>
+          <select
+            id={`admin-role-${item.id}`}
+            aria-describedby={reasonId}
+            value={chosenRole(item)}
+            onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value as AdminRole }))}
+          >
+            <option value="user" disabled={Boolean(restriction)}>Пользователь</option>
+            <option value="admin" disabled={Boolean(restriction)}>Администратор</option>
+            <option value="owner">Владелец</option>
+          </select>
+          <button type="button" className="btn ghost sm" disabled={chosenRole(item) === item.admin_role} onClick={() => openTransition(item)}>Изменить</button>
+        </div>
+        {restriction && <small id={reasonId} className="admin-role-reason">{restriction}</small>}
+      </div>
+    )
+  }
 
   const candidates = results.filter((candidate) => !team.some((member) => member.id === candidate.id))
 
@@ -127,7 +177,7 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
             <tbody>
               {team.map((item) => (
                 <tr key={item.id}>
-                  <td><b>{item.display_name || 'Без имени'}{item.id === currentUser.id ? ' · вы' : ''}</b><span className="offer-meta">#{item.id} · {item.email}</span></td>
+                  <td><b>{userName(item)}{item.id === currentUser.id ? ' · вы' : ''}</b><span className="offer-meta">#{item.id} · {item.email || 'Без email'}</span></td>
                   <td><span className={`admin-role-badge ${item.admin_role}`}>{roleLabels[item.admin_role]}</span></td>
                   <td>{renderRoleControl(item)}</td>
                 </tr>
@@ -153,7 +203,7 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
               <tbody>
                 {candidates.map((item) => (
                   <tr key={item.id}>
-                    <td><b>{item.display_name || 'Без имени'}</b><span className="offer-meta">#{item.id} · {item.email}</span></td>
+                    <td><b>{userName(item)}</b><span className="offer-meta">#{item.id} · {item.email || 'Без email'}</span></td>
                     <td>{roleLabels[item.admin_role]}</td>
                     <td>{renderRoleControl(item)}</td>
                   </tr>
@@ -172,6 +222,7 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
           nextRole={transition.nextRole}
           onCancel={() => setTransition(null)}
           onConfirm={confirmTransition}
+          onSuccess={() => setTransition(null)}
         />
       )}
     </div>

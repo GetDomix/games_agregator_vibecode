@@ -699,7 +699,7 @@ export default function App() {
                 <div className="profile-wrap">
                   <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
                     <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
-                    <span className="profile-name">{user?.display_name || user?.email}</span>
+                    <span className="profile-name">{user?.display_name || user?.email || 'Пользователь'}</span>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
                   </button>
                   {profileOpen && (
@@ -1430,8 +1430,8 @@ export default function App() {
                 </div>
                 <div className="cabinet-id-text">
                   <p className="eyebrow">{tr('Личный кабинет', 'Dashboard')}</p>
-                  <h1>{user?.display_name || user?.email}</h1>
-                  <p className="cabinet-email">{user?.email}</p>
+                  <h1>{user?.display_name || user?.email || 'Пользователь'}</h1>
+                  <p className="cabinet-email">{user?.email || 'Email не указан'}</p>
                   <div className="cabinet-badges">
                     {user?.can_access_admin && <span className="badge">{user.admin_role === 'owner' ? tr('владелец', 'owner') : tr('админ', 'admin')}</span>}
                     {!tgStatus?.linked
@@ -1723,7 +1723,7 @@ export default function App() {
                   <div className="account-grid">
                     <div className="account-row">
                       <span>Email</span>
-                      <strong>{user?.email}</strong>
+                      <strong>{user?.email || 'Email не указан'}</strong>
                     </div>
                     <div className="account-row">
                       <span>{tr('Имя', 'Name')}</span>
