@@ -46,6 +46,7 @@
 
 Маршрут только для `owner`:
 
+- `GET /api/admin/team` — полный список пользователей с эффективными ролями `admin` и `owner`;
 - `PATCH /api/admin/team/{user}` с `role=user|admin|owner`; поле `current_password` обязательно, если прежняя или новая роль равна `owner`.
 
 Старый маршрут `POST /api/admin/users/{id}/admin` удаляется после перевода интерфейса и тестов. Массовое назначение ролей не добавляется.
