@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { StrictMode, useState } from 'react'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -45,13 +45,23 @@ afterEach(cleanup)
 describe('RoleChangeDialog', () => {
   it('traps focus for a password transition and restores its trigger on Escape', async () => {
     const user = userEvent.setup()
-    render(<DialogHarness />)
+    render(<StrictMode><DialogHarness /></StrictMode>)
     const trigger = screen.getByRole('button', { name: 'Изменить роль' })
+    const backgroundRoot = screen.getByTestId('dialog-background').parentElement
+    let backgroundWasIsolatedBeforeFocus: boolean | undefined
+    const recordPasswordFocus = (event: FocusEvent) => {
+      if ((event.target as HTMLElement).id === 'admin-current-password') {
+        backgroundWasIsolatedBeforeFocus = backgroundRoot?.hasAttribute('inert')
+          || backgroundRoot?.getAttribute('aria-hidden') === 'true'
+      }
+    }
+    document.addEventListener('focusin', recordPasswordFocus)
 
     await user.click(trigger)
+    document.removeEventListener('focusin', recordPasswordFocus)
     const password = screen.getByLabelText('Текущий пароль')
     expect(password).toHaveFocus()
-    const backgroundRoot = screen.getByTestId('dialog-background').parentElement
+    expect(backgroundWasIsolatedBeforeFocus).toBe(false)
     expect(backgroundRoot).toHaveAttribute('inert')
 
     const close = screen.getByRole('button', { name: 'Закрыть' })

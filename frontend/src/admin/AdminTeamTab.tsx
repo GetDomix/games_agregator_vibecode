@@ -30,6 +30,7 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
   const [transition, setTransition] = useState<Transition | null>(null)
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
+  const focusFallbackRef = useRef<HTMLHeadingElement>(null)
   const mounted = useRef(true)
   const teamRequest = useRef(0)
   const searchRequest = useRef(0)
@@ -164,7 +165,7 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
   return (
     <div className="admin-tab-stack">
       <div className="admin-tab-heading">
-        <div><p className="eyebrow">Только для владельца</p><h3>Команда сайта</h3></div>
+        <div><p className="eyebrow">Только для владельца</p><h3 ref={focusFallbackRef} tabIndex={-1}>Команда сайта</h3></div>
         <span className="admin-count" aria-label={`Участников команды: ${team.length}`}>{team.length}</span>
       </div>
       <p className="admin-team-note">Назначайте администраторов и владельцев точечно. Любая смена роли завершает активные сессии выбранного пользователя.</p>
@@ -223,6 +224,7 @@ export function AdminTeamTab({ currentUser, onError, onNotice }: AdminTabProps &
           onCancel={() => setTransition(null)}
           onConfirm={confirmTransition}
           onSuccess={() => setTransition(null)}
+          returnFocusFallbackRef={focusFallbackRef}
         />
       )}
     </div>

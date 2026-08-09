@@ -123,6 +123,32 @@ describe('AdminTeamTab security integration', () => {
     expect(screen.getByRole('status')).toHaveTextContent('роль «Администратор» применена')
   })
 
+  it('returns focus to the Team heading when refresh removes the changed user trigger', async () => {
+    const admin = { ...secondOwner, admin_role: 'admin' as const, can_manage_admin_team: false }
+    let teamLoads = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input)
+      if (path === '/api/admin/team' && teamLoads++ === 0) return response({ items: [owner, admin] })
+      if (path === '/api/admin/team/2' && init?.method === 'PATCH') {
+        return response({ ok: true, user: { ...admin, admin_role: 'user' } })
+      }
+      if (path === '/api/admin/team') return response({ items: [owner] })
+      return response({ message: 'Неожиданный запрос' }, 500)
+    }))
+    const user = userEvent.setup()
+    render(<TeamHarness />)
+    const heading = screen.getByRole('heading', { name: 'Команда сайта' })
+    const role = await screen.findByLabelText('Новая роль для Второй владелец')
+    await user.selectOptions(role, 'user')
+    await user.click(screen.getAllByRole('button', { name: 'Изменить' })[1])
+    await user.click(screen.getByRole('button', { name: 'Подтвердить' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByLabelText('Новая роль для Второй владелец')).not.toBeInTheDocument()
+    expect(document.activeElement).not.toBe(document.body)
+    expect(heading).toHaveFocus()
+  })
+
   it.each([
     [403, 'Доступ только для владельца'],
     [422, 'Текущий пароль неверен'],

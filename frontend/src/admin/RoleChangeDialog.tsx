@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { AdminRole, SafeAdminUser } from './types'
 
@@ -15,6 +15,7 @@ export type RoleChangeDialogProps = {
   onCancel: () => void
   onConfirm: (currentPassword?: string) => Promise<void>
   onSuccess?: () => void
+  returnFocusFallbackRef?: RefObject<HTMLElement | null>
 }
 
 type BackgroundState = {
@@ -23,7 +24,7 @@ type BackgroundState = {
   ariaHidden: string | null
 }
 
-export function RoleChangeDialog({ target, nextRole, onCancel, onConfirm, onSuccess }: RoleChangeDialogProps) {
+export function RoleChangeDialog({ target, nextRole, onCancel, onConfirm, onSuccess, returnFocusFallbackRef }: RoleChangeDialogProps) {
   const titleId = useId()
   const descriptionId = useId()
   const backdropRef = useRef<HTMLDivElement>(null)
@@ -55,6 +56,7 @@ export function RoleChangeDialog({ target, nextRole, onCancel, onConfirm, onSucc
     const backdrop = backdropRef.current
     if (!backdrop) return
     const previousFocus = previousFocusRef.current
+    const returnFocusFallback = returnFocusFallbackRef?.current
 
     const background: BackgroundState[] = Array.from(document.body.children)
       .filter((element) => element !== backdrop)
@@ -64,13 +66,13 @@ export function RoleChangeDialog({ target, nextRole, onCancel, onConfirm, onSucc
         ariaHidden: element.getAttribute('aria-hidden'),
       }))
 
+    const initialFocus = requiresPassword ? passwordRef.current : cancelRef.current
+    initialFocus?.focus()
+
     for (const state of background) {
       state.element.setAttribute('inert', '')
       state.element.setAttribute('aria-hidden', 'true')
     }
-
-    const initialFocus = requiresPassword ? passwordRef.current : cancelRef.current
-    initialFocus?.focus()
 
     return () => {
       for (const state of background) {
@@ -78,9 +80,10 @@ export function RoleChangeDialog({ target, nextRole, onCancel, onConfirm, onSucc
         if (state.ariaHidden === null) state.element.removeAttribute('aria-hidden')
         else state.element.setAttribute('aria-hidden', state.ariaHidden)
       }
-      previousFocus?.focus()
+      const returnTarget = previousFocus?.isConnected ? previousFocus : returnFocusFallback
+      if (returnTarget?.isConnected) returnTarget.focus()
     }
-  }, [requiresPassword])
+  }, [requiresPassword, returnFocusFallbackRef])
 
   const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
