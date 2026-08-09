@@ -49,6 +49,7 @@ class FavoriteController extends Controller
             'user_id' => $request->user()->id,
             'appid' => $data['appid'],
         ]);
+        $isNew = ! $fav->exists;
         if (! $fav->exists && Favorite::query()->where('user_id', $request->user()->id)->count() >= 200) {
             return response()->json(['detail' => 'Лимит избранного: 200 игр'], 400);
         }
@@ -60,10 +61,12 @@ class FavoriteController extends Controller
         ]);
         $fav->save();
         $refresh->linkFavorite($fav);
-        try {
-            $alerts->save($fav, $data['alert'] ?? ['target_value' => $fav->target_price_rub]);
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['detail' => $e->getMessage()], 422);
+        if ($isNew || ! $fav->alert()->exists() || array_key_exists('alert', $data) || array_key_exists('target_price_rub', $data)) {
+            try {
+                $alerts->save($fav, $data['alert'] ?? ['target_value' => $fav->target_price_rub]);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['detail' => $e->getMessage()], 422);
+            }
         }
         $fav->load(['alert.scopes', 'game.sourceStates']);
 

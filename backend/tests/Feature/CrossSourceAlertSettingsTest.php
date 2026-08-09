@@ -23,6 +23,10 @@ class CrossSourceAlertSettingsTest extends TestCase
             ->assertCreated()->assertJsonPath('alert.scopes.0.source', 'steam');
         $this->patchJson('/api/me/favorites/42', ['alert' => ['target_value' => 500, 'scopes' => [['source' => 'steam', 'offer_kind' => 'official'], ['source' => 'plati', 'offer_kind' => 'gift']]]])
             ->assertOk()->assertJsonCount(2, 'alert.scopes');
+        $this->postJson('/api/me/favorites', ['appid' => 42, 'game_name' => 'Scoped'])
+            ->assertOk()
+            ->assertJsonCount(2, 'alert.scopes')
+            ->assertJsonPath('alert.scopes.1.source', 'plati');
         $this->assertDatabaseHas('favorite_alerts', ['favorite_id' => Favorite::query()->where('user_id', $user->id)->value('id'), 'status' => 'active']);
     }
 
