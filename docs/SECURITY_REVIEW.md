@@ -61,14 +61,18 @@
 |---|---|---|
 | Кража bearer token или активной browser session | High | TLS, безопасное хранение cookies/tokens, короткие сессии, отзыв токенов при смене роли; добавить MFA и оповещения владельцев до публичного запуска |
 | Компрометация аккаунта или почты владельца из `ADMIN_EMAILS` | High | Минимальный allowlist, отдельный защищённый аккаунт, MFA у провайдера входа, регулярный пересмотр списка |
-| Новые уязвимости зависимостей после даты проверки | Medium | `npm audit --omit=dev` завершён: 0 уязвимостей. Packagist advisory endpoint трижды завершил TLS timeout; успешный `composer audit` обязателен в CI или Task 7 до release approval |
+| Новые уязвимости зависимостей после даты проверки | Medium | `npm audit --omit=dev` и повторный OSV Scanner для 118 Composer-пакетов завершены без находок. До каждого production deploy сохранить обязательный audit-gate в CI |
 | Poisoning/некорректные данные внешних API цен | Medium | Валидация схемы и диапазонов, наблюдаемость источников, отсутствие прямого редактирования цены из admin UI |
 | Отсутствие внешнего penetration testing | Medium | Провести отдельный тест staging/production boundary перед публичным запуском; этот документ не является сертификатом |
 | Прямой доступ к origin в обход доверенного proxy | Medium | Firewall/Cloudflare Tunnel должен разрешать origin только доверенному proxy; проверить инфраструктуру при release readiness |
 
-## Открытый release blocker
+## Dependency gate и ограничение среды
 
-На момент этой записи `composer audit --locked --no-interaction` не завершён: `repo.packagist.org/packages.json` и `packagist.org/api/security-advisories/` недоступны из локальной среды по TLS timeout. Это не считается успешной проверкой и не означает отсутствие Composer-уязвимостей. Выпуск нельзя одобрить, пока та же команда не завершится успешно в Task 7 или CI и найденные advisories (если будут) не получат анализ воздействия и решение.
+Первичный независимый OSV Scanner обнаружил 8 advisories в двух production-зависимостях: `guzzlehttp/guzzle` 7.15.1 — GHSA-f7vp-7xgx-4w4r (Medium) и GHSA-v5mv-p594-2x33 (High); `league/commonmark` 2.8.3 — GHSA-29pj-957v-52mc (Medium), GHSA-2q4p-g7hv-5rgv, GHSA-g2gp-3wwq-f4ph, GHSA-jfm3-95jq-q3rf и GHSA-mh25-x5hq-wrqp (High), GHSA-mj63-m3rc-8ppr (Medium). Оба пакета приходят через `laravel/framework`; Guzzle обслуживает исходящие HTTP-запросы, CommonMark — framework-функции Markdown. Прямого пользовательского Markdown-контракта в проверенной области нет, но зависимости всё равно считались затронутыми без попытки понизить риск только по текущей достижимости.
+
+Исправление: точечное обновление до `guzzlehttp/guzzle` 7.15.2 и `league/commonmark` 2.9.0 без изменения остальных пакетов. Повторный официальный OSV Scanner проверил 118 пакетов и завершился с `No issues found`; Composer dry-run подтвердил воспроизводимость lock-файла, а production Docker build установил обе новые версии.
+
+`composer audit --locked --no-interaction` из этой локальной сети по-прежнему не получает ответ от Packagist API и был остановлен после повторного тайм-аута. Это не записано как успешный Composer audit. Кодовый blocker по известным advisories закрыт обновлением и независимым повторным OSV-сканированием; перед фактическим production deploy CI в сети с доступом к Packagist должен дополнительно успешно выполнить `composer audit --locked --no-interaction`.
 
 ## Воспроизводимая проверка
 
@@ -78,7 +82,7 @@ Backend на машине с PHP и PostgreSQL test database:
 cd backend
 php artisan test --filter='AdminSecurityTest|AdminAuthorizationTest|AdminRoleManagementTest|AdminRoleMigrationTest'
 php artisan test
-composer audit --no-interaction
+composer audit --locked --no-interaction
 ```
 
 Frontend:
@@ -108,3 +112,22 @@ docker run --rm --network igroscan_default \
   --entrypoint php igroscan-backend \
   vendor/bin/phpunit -c phpunit.task3.xml
 ```
+
+## Проверка готовности выпуска — 9 августа 2026 года
+
+### Upgrade-shaped миграция PostgreSQL
+
+В отдельной базе `sdd_upgrade_task7` миграции сначала выполнены только по `2026_07_22_180000_add_users_is_admin.php`. После добавления обычного пользователя, legacy-администратора и пользователя из `ADMIN_EMAILS` выполнены оставшиеся миграции по `2026_08_09_131000` включительно. Проверка через реальный Laravel HTTP kernel и bearer tokens подтвердила:
+
+- legacy `is_admin=true` преобразован в `admin_role=admin`, `/api/admin/overview` вернул 200;
+- настроенный через `ADMIN_EMAILS` пользователь получил эффективную роль `owner`, `/api/admin/team` вернул 200;
+- обычный пользователь получил 403 от `/api/admin/overview`.
+
+### Финальные автоматизированные доказательства
+
+- Backend: 144 теста, 810 assertions — PASS после обновления зависимостей.
+- Frontend: 22 теста — PASS; lint — exit 0 с одним существующим Fast Refresh warning в `brand.tsx`; production build — PASS, 435 modules; `npm audit --omit=dev` — 0 уязвимостей.
+- Bot: 29 тестов — PASS в Compose-образе.
+- Dependencies: OSV Scanner — 118 Composer-пакетов, `No issues found`; `composer install --dry-run` — PASS. Ограничение прямого Composer audit описано выше.
+- Deployment: `docker compose build backend frontend scheduler queue-worker` — PASS после dependency fix; образы установили Guzzle 7.15.2 и CommonMark 2.9.0. `docker compose config --quiet` — PASS.
+- Миграционный, dependency и deployment gate не выполняли push и не меняли production-инфраструктуру.
