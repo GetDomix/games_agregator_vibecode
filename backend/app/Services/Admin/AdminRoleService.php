@@ -23,6 +23,11 @@ class AdminRoleService
             if (! $lockedActor?->canManageAdminTeam()) {
                 throw new AuthorizationException('Доступ только для владельца');
             }
+            if (! in_array($newRole, [User::ROLE_USER, ...User::ADMIN_ROLES], true)) {
+                throw ValidationException::withMessages([
+                    'role' => ['Указана недопустимая административная роль'],
+                ]);
+            }
             if ($lockedTarget->isServerManagedOwner()) {
                 throw ValidationException::withMessages([
                     'role' => ['Этот владелец управляется серверной конфигурацией'],

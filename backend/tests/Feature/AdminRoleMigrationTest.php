@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -54,5 +55,38 @@ class AdminRoleMigrationTest extends TestCase
         $this->assertTrue($payload['can_access_admin']);
         $this->assertFalse($payload['can_manage_admin_team']);
         $this->assertArrayNotHasKey('is_admin', $payload);
+    }
+
+    public function test_postgresql_constraint_rejects_an_invalid_admin_role(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('Requires the PostgreSQL admin-role CHECK constraint.');
+        }
+
+        $this->expectException(QueryException::class);
+        DB::table('users')->insert([
+            'name' => 'Invalid Role',
+            'email' => 'invalid-role@example.com',
+            'password' => Hash::make('password'),
+            'admin_role' => 'superadmin',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function test_rollback_maps_stored_admin_and_owner_roles_to_the_legacy_boolean(): void
+    {
+        $adminId = User::factory()->create(['admin_role' => User::ROLE_ADMIN])->id;
+        $ownerId = User::factory()->create(['admin_role' => User::ROLE_OWNER])->id;
+        $migration = require database_path('migrations/2026_08_09_130000_replace_is_admin_with_admin_role.php');
+
+        $migration->down();
+        try {
+            $this->assertTrue(Schema::hasColumn('users', 'is_admin'));
+            $this->assertTrue((bool) DB::table('users')->where('id', $adminId)->value('is_admin'));
+            $this->assertTrue((bool) DB::table('users')->where('id', $ownerId)->value('is_admin'));
+        } finally {
+            $migration->up();
+        }
     }
 }

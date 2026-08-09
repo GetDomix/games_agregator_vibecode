@@ -12,6 +12,7 @@ use App\Services\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AdminController extends Controller
 {
@@ -41,8 +42,15 @@ class AdminController extends Controller
         GameRefreshRequestService $refreshes,
         AdminAuditService $audit,
     ): JsonResponse {
+        $unknownKeys = array_diff(array_keys($request->all()), ['sources']);
+        if ($unknownKeys !== []) {
+            throw ValidationException::withMessages([
+                'request' => ['Запрос содержит неподдерживаемые поля'],
+            ]);
+        }
+
         $data = $request->validate([
-            'sources' => ['nullable', 'array', 'min:1'],
+            'sources' => ['nullable', 'array', 'list', 'min:1'],
             'sources.*' => ['string', Rule::in(GameSourceState::SOURCES)],
         ]);
         $game = Game::query()->where('steam_appid', $appid)->firstOrFail();

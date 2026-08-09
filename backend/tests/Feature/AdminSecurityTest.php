@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RefreshGameSourceJob;
 use App\Models\AdminAuditLog;
+use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AdminSecurityTest extends TestCase
@@ -159,5 +164,124 @@ class AdminSecurityTest extends TestCase
 
         Sanctum::actingAs(User::factory()->create(['admin_role' => User::ROLE_USER]));
         $this->getJson('/api/admin/audit')->assertForbidden();
+    }
+
+    #[DataProvider('malformedRefreshPayloads')]
+    public function test_refresh_endpoint_rejects_malformed_or_extra_fields(array $payload): void
+    {
+        Queue::fake();
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
+        Game::query()->create([
+            'steam_appid' => 730,
+            'name' => 'Counter-Strike 2',
+            'release_status' => 'released',
+        ]);
+        $auditCount = (int) AdminAuditLog::query()->count();
+        Sanctum::actingAs($admin);
+
+        $this->postJson('/api/admin/games/730/refresh', $payload)
+            ->assertUnprocessable();
+
+        Queue::assertNothingPushed();
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount);
+    }
+
+    public static function malformedRefreshPayloads(): array
+    {
+        return [
+            'mass assignment' => [['sources' => ['steam'], 'admin_role' => User::ROLE_OWNER]],
+            'unknown field' => [['role' => User::ROLE_OWNER]],
+            'nested source' => [['sources' => [['steam']]]],
+            'unknown source' => [['sources' => ['internal']]],
+            'object instead of list' => [['sources' => ['source' => 'steam']]],
+        ];
+    }
+
+    #[DataProvider('adminWriteMethodVariants')]
+    public function test_admin_write_routes_reject_method_variants(
+        string $method,
+        string $uriTemplate,
+        array $payload,
+    ): void {
+        Queue::fake();
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        Game::query()->create([
+            'steam_appid' => 730,
+            'name' => 'Counter-Strike 2',
+            'release_status' => 'released',
+        ]);
+        $auditCount = (int) AdminAuditLog::query()->count();
+        Sanctum::actingAs($owner);
+        $uri = str_replace('{user}', (string) $target->id, $uriTemplate);
+
+        $this->json($method, $uri, $payload)->assertStatus(405);
+
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount);
+        Queue::assertNothingPushed();
+    }
+
+    public static function adminWriteMethodVariants(): array
+    {
+        return [
+            'team POST' => ['POST', '/api/admin/team/{user}', ['role' => User::ROLE_ADMIN]],
+            'team PUT' => ['PUT', '/api/admin/team/{user}', ['role' => User::ROLE_ADMIN]],
+            'team DELETE' => ['DELETE', '/api/admin/team/{user}', []],
+            'refresh PATCH' => ['PATCH', '/api/admin/games/730/refresh', ['sources' => ['steam']]],
+            'refresh PUT' => ['PUT', '/api/admin/games/730/refresh', ['sources' => ['steam']]],
+            'refresh DELETE' => ['DELETE', '/api/admin/games/730/refresh', []],
+        ];
+    }
+
+    public function test_admin_internal_errors_are_sanitized_even_when_debug_is_enabled(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('Requires a PostgreSQL CHECK constraint for fault injection.');
+        }
+
+        Queue::fake();
+        config([
+            'app.debug' => true,
+            'database.connections.pgsql.password' => 'database-password-sentinel',
+            'gpa.admin_emails' => 'hidden-owner-list@example.com',
+        ]);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create([
+            'email' => 'private-target@example.com',
+            'telegram_chat_id' => 'telegram-private-sentinel',
+        ]);
+        $token = $target->createToken('rollback-proof');
+        $auditCount = (int) AdminAuditLog::query()->count();
+        Sanctum::actingAs($owner);
+        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT task6_reject_role_audit_http CHECK (action <> 'admin.role_changed') NOT VALID");
+
+        try {
+            $response = $this->patchJson("/api/admin/team/{$target->id}", [
+                'role' => User::ROLE_ADMIN,
+                'current_password' => 'request-password-sentinel',
+            ]);
+        } finally {
+            DB::statement('ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS task6_reject_role_audit_http');
+        }
+
+        $response->assertStatus(500)->assertExactJson(['message' => 'Внутренняя ошибка сервера']);
+        foreach ([
+            'trace',
+            'exception',
+            'SQLSTATE',
+            'insert into',
+            'database-password-sentinel',
+            'hidden-owner-list@example.com',
+            'private-target@example.com',
+            'telegram-private-sentinel',
+            'request-password-sentinel',
+        ] as $forbidden) {
+            $this->assertStringNotContainsStringIgnoringCase($forbidden, $response->getContent());
+        }
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount);
+        Queue::assertNotPushed(RefreshGameSourceJob::class);
     }
 }

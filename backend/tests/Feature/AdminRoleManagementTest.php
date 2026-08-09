@@ -7,9 +7,13 @@ use App\Models\User;
 use App\Services\Admin\AdminAuditService;
 use App\Services\Admin\AdminRoleService;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
@@ -219,32 +223,96 @@ class AdminRoleManagementTest extends TestCase
         $this->assertSame(User::ROLE_OWNER, $root->fresh()->effectiveAdminRole());
     }
 
-    public function test_role_request_rejects_unknown_fields_before_changing_state(): void
+    #[DataProvider('malformedRolePayloads')]
+    public function test_role_endpoint_rejects_malformed_or_extra_fields(array $payload): void
     {
         $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
         $target = User::factory()->create();
         Sanctum::actingAs($owner);
 
-        $this->patchJson("/api/admin/team/{$target->id}", [
-            'role' => User::ROLE_ADMIN,
-            'password' => 'must-not-be-accepted',
-        ])->assertUnprocessable()->assertJsonValidationErrors('request');
+        $this->patchJson("/api/admin/team/{$target->id}", $payload)
+            ->assertUnprocessable();
 
         $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
         $this->assertDatabaseCount('admin_audit_logs', 0);
     }
 
-    public function test_role_request_rejects_unknown_roles(): void
+    public static function malformedRolePayloads(): array
+    {
+        return [
+            'unknown role' => [['role' => 'superadmin']],
+            'mass assignment' => [['role' => User::ROLE_ADMIN, 'email' => 'attacker@example.com']],
+            'nested role' => [['role' => [User::ROLE_OWNER]]],
+            'null role' => [['role' => null]],
+            'unknown password field' => [['role' => User::ROLE_ADMIN, 'password' => 'not-accepted']],
+        ];
+    }
+
+    public function test_role_service_rejects_unknown_roles_at_its_own_boundary(): void
     {
         $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
         $target = User::factory()->create();
-        Sanctum::actingAs($owner);
 
-        $this->patchJson("/api/admin/team/{$target->id}", ['role' => 'super-admin'])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('role');
+        try {
+            app(AdminRoleService::class)->changeRole($owner, $target, 'superadmin', null);
+            $this->fail('The role service must reject values outside the role domain.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('role', $exception->errors());
+        }
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', 0);
+    }
+
+    public function test_audit_insert_failure_rolls_back_role_write_and_token_deletion(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('Requires a PostgreSQL CHECK constraint for audit fault injection.');
+        }
+
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        $token = $target->createToken('rollback-proof');
+        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT task6_reject_role_audit CHECK (action <> 'admin.role_changed')");
+
+        try {
+            app(AdminRoleService::class)->changeRole($owner, $target, User::ROLE_ADMIN, null);
+            $this->fail('The injected audit failure must abort the role transaction.');
+        } catch (QueryException) {
+            // The real database failure is the injected fault; state assertions follow cleanup.
+        } finally {
+            DB::statement('ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS task6_reject_role_audit');
+        }
 
         $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertDatabaseCount('admin_audit_logs', 0);
+    }
+
+    public function test_unknown_user_id_does_not_modify_or_disclose_another_account(): void
+    {
+        config([
+            'app.debug' => true,
+            'gpa.admin_emails' => 'hidden-owner@example.com',
+        ]);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $bystander = User::factory()->create([
+            'email' => 'private-bystander@example.com',
+            'telegram_chat_id' => 'telegram-private-sentinel',
+        ]);
+        $auditCount = (int) AdminAuditLog::query()->count();
+        Sanctum::actingAs($owner);
+
+        $response = $this->patchJson('/api/admin/team/999999999', ['role' => User::ROLE_ADMIN])
+            ->assertNotFound();
+
+        $this->assertSame(['message' => 'Ресурс не найден'], $response->json());
+        $this->assertStringNotContainsStringIgnoringCase('trace', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('exception', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('hidden-owner@example.com', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('private-bystander@example.com', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('telegram-private-sentinel', $response->getContent());
+        $this->assertSame(User::ROLE_USER, $bystander->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount);
     }
 
     public function test_legacy_boolean_admin_endpoint_is_removed(): void
