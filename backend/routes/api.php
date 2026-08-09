@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminAuditController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AdminTeamController;
 use App\Http\Controllers\Api\AdsController;
@@ -74,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware(['admin-role', 'throttle:admin-read'])->group(function () {
         Route::get('/admin/overview', [AdminController::class, 'overview']);
         Route::get('/admin/users', [AdminController::class, 'users']);
+        Route::get('/admin/audit', AdminAuditController::class);
     });
     Route::get('/admin/team', [AdminTeamController::class, 'index'])
         ->middleware(['owner-role', 'throttle:admin-read']);

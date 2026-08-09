@@ -64,10 +64,29 @@ class AdminOperationsTest extends TestCase
 
         $this->getJson('/api/admin/users?q=player')
             ->assertOk()
-            ->assertJsonCount(1, 'items')
-            ->assertJsonPath('items.0.id', $target->id)
-            ->assertJsonStructure(['items' => [['favorites_count', 'searches_count', 'telegram_linked']]])
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $target->id)
+            ->assertJsonPath('meta.page', 1)
+            ->assertJsonPath('meta.per_page', 30)
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonStructure(['data' => [['favorites_count', 'searches_count', 'telegram_linked']]])
             ->assertJsonMissing(['password', 'remember_token']);
+    }
+
+    public function test_admin_user_directory_is_paginated(): void
+    {
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
+        User::factory()->count(31)->sequence(
+            fn ($sequence) => ['email' => "pagination-fixture-{$sequence->index}@example.com"],
+        )->create();
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/admin/users?q=pagination-fixture&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('meta.page', 2)
+            ->assertJsonPath('meta.per_page', 30)
+            ->assertJsonPath('meta.total', 31);
     }
 
     public function test_admin_can_queue_a_scoped_game_refresh_with_audit_log(): void
