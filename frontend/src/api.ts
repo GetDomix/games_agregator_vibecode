@@ -1,4 +1,5 @@
 import type { AlertPrefs } from './watchlist'
+import type { AdminRole } from './admin/types'
 
 const TOKEN_KEY = 'gpa_token'
 const USER_KEY = 'gpa_user'
@@ -7,9 +8,9 @@ export type User = {
   id: number
   email: string
   display_name: string
-  admin_role?: 'user' | 'admin' | 'owner'
-  can_access_admin?: boolean
-  can_manage_admin_team?: boolean
+  admin_role: AdminRole
+  can_access_admin: boolean
+  can_manage_admin_team: boolean
   telegram_linked?: boolean
   radar_enabled?: boolean
   created_at?: string
@@ -18,22 +19,22 @@ export type User = {
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return window.localStorage.getItem(TOKEN_KEY)
 }
 
 export function getStoredUser(): User | null {
   try {
-    return JSON.parse(localStorage.getItem(USER_KEY) || 'null')
+    return JSON.parse(window.localStorage.getItem(USER_KEY) || 'null')
   } catch {
     return null
   }
 }
 
 export function setSession(token: string | null, user: User | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
-  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
-  else localStorage.removeItem(USER_KEY)
+  if (token) window.localStorage.setItem(TOKEN_KEY, token)
+  else window.localStorage.removeItem(TOKEN_KEY)
+  if (user) window.localStorage.setItem(USER_KEY, JSON.stringify(user))
+  else window.localStorage.removeItem(USER_KEY)
 }
 
 export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {

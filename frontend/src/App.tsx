@@ -1419,7 +1419,7 @@ export default function App() {
           </section>
         )}
 
-        {view === 'admin' && loggedIn && user?.can_access_admin && <AdminPanel currentUserId={user.id} />}
+        {view === 'admin' && loggedIn && user?.can_access_admin && <AdminPanel currentUser={user} />}
 
         {view === 'cabinet' && loggedIn && (
           <section className="section page-enter cabinet">
