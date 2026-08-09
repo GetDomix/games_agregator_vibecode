@@ -48,6 +48,6 @@ class TelegramOidcBeginTest extends TestCase
         $public = $telegramUser->toPublicArray();
 
         $this->assertNull($public['email']);
-        $this->assertFalse($public['is_admin']);
+        $this->assertFalse($public['can_access_admin']);
     }
 }

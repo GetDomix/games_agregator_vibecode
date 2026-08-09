@@ -686,7 +686,7 @@ export default function App() {
               <IconRadar size={16} /> {tr('Радар', 'Radar')}
             </button>
             <LanguageCurrencyControls />
-            {user?.is_admin && (
+            {user?.can_access_admin && (
               <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
                 Admin
               </button>
@@ -1419,7 +1419,7 @@ export default function App() {
           </section>
         )}
 
-        {view === 'admin' && loggedIn && user?.is_admin && <AdminPanel currentUserId={user.id} />}
+        {view === 'admin' && loggedIn && user?.can_access_admin && <AdminPanel currentUserId={user.id} />}
 
         {view === 'cabinet' && loggedIn && (
           <section className="section page-enter cabinet">
@@ -1433,7 +1433,7 @@ export default function App() {
                   <h1>{user?.display_name || user?.email}</h1>
                   <p className="cabinet-email">{user?.email}</p>
                   <div className="cabinet-badges">
-                    {user?.is_admin && <span className="badge">{tr('админ', 'admin')}</span>}
+                    {user?.can_access_admin && <span className="badge">{user.admin_role === 'owner' ? tr('владелец', 'owner') : tr('админ', 'admin')}</span>}
                     {!tgStatus?.linked
                       ? <span className="badge warn">{tr('Telegram не привязан', 'Telegram not linked')}</span>
                       : tgStatus?.identity_linked
@@ -1445,7 +1445,7 @@ export default function App() {
                   <button type="button" className="btn ghost sm" onClick={() => setView('account')}>
                     <IconUser size={15} /> {tr('Настройки', 'Settings')}
                   </button>
-                  {user?.is_admin && (
+                  {user?.can_access_admin && (
                     <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
                       Админка
                     </button>

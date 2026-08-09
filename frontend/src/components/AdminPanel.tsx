@@ -48,7 +48,9 @@ type AdminUser = {
   id: number
   email: string
   display_name: string
-  is_admin: boolean
+  admin_role: 'user' | 'admin' | 'owner'
+  can_access_admin: boolean
+  can_manage_admin_team: boolean
   telegram_linked: boolean
   radar_enabled: boolean
   favorites_count: number
@@ -116,7 +118,7 @@ export function AdminPanel({ currentUserId }: { currentUserId?: number }) {
   }
 
   const changeAdmin = async (target: AdminUser) => {
-    const next = !target.is_admin
+    const next = !target.can_access_admin
     if (!window.confirm(`${next ? 'Назначить' : 'Снять'} администратора: ${target.display_name || target.email}?`)) return
     setBusy(true)
     setError('')
@@ -289,7 +291,7 @@ export function AdminPanel({ currentUserId }: { currentUserId?: number }) {
                   <td><b>{item.display_name || 'Без имени'}</b><span className="offer-meta">#{item.id} · {item.email}</span></td>
                   <td>{item.searches_count} поисков<span className="offer-meta">{item.favorites_count} в избранном · вход {dateTime(item.last_login_at)}</span></td>
                   <td>{item.telegram_linked ? 'Telegram' : '—'}{item.telegram_linked && <span className="offer-meta">Радар {item.radar_enabled ? 'включён' : 'выключен'}</span>}</td>
-                  <td><button type="button" className={`btn ghost sm ${item.is_admin ? 'danger' : ''}`} disabled={busy || item.id === currentUserId} onClick={() => void changeAdmin(item)}>{item.is_admin ? 'Снять права' : 'Назначить'}</button></td>
+                  <td><button type="button" className={`btn ghost sm ${item.can_access_admin ? 'danger' : ''}`} disabled={busy || item.id === currentUserId} onClick={() => void changeAdmin(item)}>{item.can_access_admin ? 'Снять права' : 'Назначить'}</button></td>
                 </tr>
               ))}
             </tbody>

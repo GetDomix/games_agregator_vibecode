@@ -20,7 +20,7 @@ class AdminOperationsTest extends TestCase
 
     public function test_admin_overview_reports_operational_health_without_user_details(): void
     {
-        $admin = User::factory()->create(['is_admin' => true]);
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
         $game = Game::query()->create(['steam_appid' => 730, 'name' => 'Counter-Strike 2', 'release_status' => 'released']);
         GameSourceState::query()->create([
             'game_id' => $game->id,
@@ -58,7 +58,7 @@ class AdminOperationsTest extends TestCase
 
     public function test_admin_can_search_users_and_change_role_with_audit_log(): void
     {
-        $admin = User::factory()->create(['is_admin' => true]);
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
         $target = User::factory()->create(['email' => 'player@example.com', 'display_name' => 'Player']);
         Sanctum::actingAs($admin);
 
@@ -70,7 +70,8 @@ class AdminOperationsTest extends TestCase
 
         $this->postJson("/api/admin/users/{$target->id}/admin", ['is_admin' => true])
             ->assertOk()
-            ->assertJsonPath('user.is_admin', true);
+            ->assertJsonPath('user.admin_role', User::ROLE_ADMIN)
+            ->assertJsonPath('user.can_access_admin', true);
 
         $this->assertDatabaseHas('admin_audit_logs', [
             'actor_id' => $admin->id,
@@ -82,7 +83,7 @@ class AdminOperationsTest extends TestCase
     public function test_admin_can_queue_a_scoped_game_refresh_with_audit_log(): void
     {
         Queue::fake();
-        $admin = User::factory()->create(['is_admin' => true]);
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
         Game::query()->create(['steam_appid' => 1091500, 'name' => 'Cyberpunk 2077', 'release_status' => 'released']);
         Sanctum::actingAs($admin);
 

@@ -167,14 +167,15 @@ class AdminController extends Controller
     public function setUserAdmin(Request $request, int $id): JsonResponse
     {
         $this->authorizeAdmin($request);
+        // Transitional compatibility for the existing boolean client contract; Task 3 replaces it with role input.
         $data = $request->validate(['is_admin' => ['required', 'boolean']]);
         $user = User::query()->findOrFail($id);
         if ($user->id === $request->user()->id && ! $data['is_admin']) {
             return response()->json(['detail' => 'Нельзя снять админа с себя'], 422);
         }
-        $user->is_admin = (bool) $data['is_admin'];
+        $user->admin_role = $data['is_admin'] ? User::ROLE_ADMIN : User::ROLE_USER;
         $user->save();
-        $this->audit($request, 'user.admin_changed', 'user', (string) $user->id, ['is_admin' => $user->is_admin]);
+        $this->audit($request, 'user.admin_changed', 'user', (string) $user->id, ['admin_role' => $user->admin_role]);
 
         return response()->json(['ok' => true, 'user' => $user->toPublicArray()]);
     }
@@ -208,7 +209,7 @@ class AdminController extends Controller
     private function authorizeAdmin(Request $request): void
     {
         $user = $request->user();
-        if (! $user || ! $user->isAdminUser()) {
+        if (! $user || ! $user->canAccessAdmin()) {
             throw new HttpResponseException(response()->json(['detail' => 'Доступ только для администратора'], 403));
         }
     }

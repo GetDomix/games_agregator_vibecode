@@ -7,7 +7,9 @@ export type User = {
   id: number
   email: string
   display_name: string
-  is_admin?: boolean
+  admin_role?: 'user' | 'admin' | 'owner'
+  can_access_admin?: boolean
+  can_manage_admin_team?: boolean
   telegram_linked?: boolean
   radar_enabled?: boolean
   created_at?: string

@@ -30,7 +30,7 @@ return [
     ],
     'display_currencies' => ['RUB', 'USD', 'EUR', 'KZT', 'TRY'],
     'price_refresh_backoff_minutes' => [1, 5, 15, 30, 60],
-    // Comma-separated admin emails (also users.is_admin flag)
+    // Comma-separated server-managed owner emails
     'admin_emails' => env('ADMIN_EMAILS', ''),
     'brand_name' => env('BRAND_NAME', 'Игроскан'),
 
