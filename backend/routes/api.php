@@ -1,17 +1,18 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AdminTeamController;
 use App\Http\Controllers\Api\AdsController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\CurrencyController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\GamePriceController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HistoryController;
-use App\Http\Controllers\Api\PriceController;
 use App\Http\Controllers\Api\PlatiRouletteController;
+use App\Http\Controllers\Api\PriceController;
 use App\Http\Controllers\Api\RegionController;
 use App\Http\Controllers\Api\SteamDealsController;
 use App\Http\Controllers\Api\SteamNewReleasesController;
@@ -74,8 +75,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/overview', [AdminController::class, 'overview']);
         Route::get('/admin/users', [AdminController::class, 'users']);
     });
-    Route::post('/admin/users/{id}/admin', [AdminController::class, 'setUserAdmin'])
-        ->middleware(['admin-role', 'throttle:admin-role']);
+    Route::get('/admin/team', [AdminTeamController::class, 'index'])
+        ->middleware(['owner-role', 'throttle:admin-read']);
+    Route::patch('/admin/team/{user}', [AdminTeamController::class, 'update'])
+        ->middleware(['owner-role', 'throttle:admin-role']);
     Route::post('/admin/games/{appid}/refresh', [AdminController::class, 'refreshGame'])
         ->whereNumber('appid')
         ->middleware(['admin-role', 'throttle:admin-action']);

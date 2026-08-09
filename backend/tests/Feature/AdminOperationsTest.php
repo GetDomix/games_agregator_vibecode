@@ -56,7 +56,7 @@ class AdminOperationsTest extends TestCase
         $this->postJson('/api/admin/games/730/refresh')->assertForbidden();
     }
 
-    public function test_admin_can_search_users_and_change_role_with_audit_log(): void
+    public function test_admin_can_search_users_without_private_details(): void
     {
         $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
         $target = User::factory()->create(['email' => 'player@example.com', 'display_name' => 'Player']);
@@ -66,18 +66,8 @@ class AdminOperationsTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'items')
             ->assertJsonPath('items.0.id', $target->id)
-            ->assertJsonStructure(['items' => [['favorites_count', 'searches_count', 'telegram_linked']]]);
-
-        $this->postJson("/api/admin/users/{$target->id}/admin", ['is_admin' => true])
-            ->assertOk()
-            ->assertJsonPath('user.admin_role', User::ROLE_ADMIN)
-            ->assertJsonPath('user.can_access_admin', true);
-
-        $this->assertDatabaseHas('admin_audit_logs', [
-            'actor_id' => $admin->id,
-            'action' => 'user.admin_changed',
-            'target_id' => (string) $target->id,
-        ]);
+            ->assertJsonStructure(['items' => [['favorites_count', 'searches_count', 'telegram_linked']]])
+            ->assertJsonMissing(['password', 'remember_token']);
     }
 
     public function test_admin_can_queue_a_scoped_game_refresh_with_audit_log(): void
@@ -93,6 +83,7 @@ class AdminOperationsTest extends TestCase
             ->assertJsonPath('sources.1', 'ggsel');
 
         Queue::assertPushed(RefreshGameSourceJob::class, 2);
-        $this->assertSame(['steam', 'ggsel'], AdminAuditLog::query()->firstOrFail()->context['sources']);
+        $audit = AdminAuditLog::query()->where('action', 'game.refresh_requested')->sole();
+        $this->assertSame(['steam', 'ggsel'], $audit->context['sources']);
     }
 }
