@@ -35,6 +35,25 @@ class ApiSmokeTest extends TestCase
             ->assertJsonPath('email', 'user@example.com');
     }
 
+    public function test_bearer_login_from_frontend_origin_does_not_require_csrf_cookie(): void
+    {
+        config()->set('sanctum.stateful', ['127.0.0.1:5173']);
+
+        User::factory()->create([
+            'email' => 'owner@example.com',
+            'password' => 'password1',
+        ]);
+
+        $this->withHeader('Origin', 'http://127.0.0.1:5173')
+            ->postJson('/api/auth/login', [
+                'email' => 'owner@example.com',
+                'password' => 'password1',
+            ])
+            ->assertOk()
+            ->assertJsonStructure(['access_token', 'user'])
+            ->assertJsonPath('user.email', 'owner@example.com');
+    }
+
     public function test_favorites_require_auth(): void
     {
         $this->getJson('/api/me/favorites')->assertUnauthorized();
