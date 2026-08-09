@@ -74,7 +74,9 @@ class Favorite extends Model
                     'status' => $state->status,
                     'last_success_at' => $state->last_success_at?->toIso8601String(),
                     'next_refresh_at' => $state->next_refresh_at?->toIso8601String(),
-                    'last_error' => $state->last_error,
+                    'last_error' => $state->last_error === null
+                        ? null
+                        : GameSourceState::ERROR_REFRESH_FAILED,
                 ])->values()
                 : [],
             'created_at' => $this->created_at?->toIso8601String(),

@@ -148,7 +148,7 @@ class GamePriceRefreshService
             'status' => GameSourceState::STATUS_FAILED,
             // Exception messages may contain URLs, credentials or upstream bodies.
             // Detailed diagnostics stay in protected logs; API-facing state stores a stable code.
-            'last_error' => 'source_refresh_failed',
+            'last_error' => GameSourceState::ERROR_REFRESH_FAILED,
             'consecutive_failures' => $failures,
         ])->save();
     }

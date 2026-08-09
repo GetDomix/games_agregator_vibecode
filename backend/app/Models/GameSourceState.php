@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GameSourceState extends Model
 {
+    public const ERROR_REFRESH_FAILED = 'source_refresh_failed';
+
     public const SOURCE_STEAM = 'steam';
 
     public const SOURCE_PLATI = 'plati';

@@ -4,7 +4,10 @@ namespace Tests\Feature;
 
 use App\Jobs\RefreshGameSourceJob;
 use App\Models\AdminAuditLog;
+use App\Models\ExternalIdentity;
+use App\Models\Favorite;
 use App\Models\Game;
+use App\Models\GameSourceState;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -256,7 +259,8 @@ class AdminSecurityTest extends TestCase
         $token = $target->createToken('rollback-proof');
         $auditCount = (int) AdminAuditLog::query()->count();
         Sanctum::actingAs($owner);
-        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT task6_reject_role_audit_http CHECK (action <> 'admin.role_changed') NOT VALID");
+        $constraint = 'task6_reject_role_audit_http_'.str_replace('-', '', (string) Str::uuid());
+        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT {$constraint} CHECK (action <> 'admin.role_changed') NOT VALID");
 
         try {
             $response = $this->patchJson("/api/admin/team/{$target->id}", [
@@ -264,7 +268,7 @@ class AdminSecurityTest extends TestCase
                 'current_password' => 'request-password-sentinel',
             ]);
         } finally {
-            DB::statement('ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS task6_reject_role_audit_http');
+            DB::statement("ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS {$constraint}");
         }
 
         $response->assertStatus(500)->assertExactJson(['message' => 'Внутренняя ошибка сервера']);
@@ -285,5 +289,60 @@ class AdminSecurityTest extends TestCase
         $this->assertDatabaseHas('personal_access_tokens', ['id' => $token->accessToken->id]);
         $this->assertDatabaseCount('admin_audit_logs', $auditCount);
         Queue::assertNotPushed(RefreshGameSourceJob::class);
+    }
+
+    public function test_browser_favorites_hide_historical_source_exception_messages(): void
+    {
+        [$user] = $this->favoriteWithHistoricalSourceError('browser-history-secret-sentinel');
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/me/favorites')
+            ->assertOk()
+            ->assertJsonPath('items.0.freshness.0.last_error', 'source_refresh_failed');
+
+        $this->assertStringNotContainsString('browser-history-secret-sentinel', $response->getContent());
+    }
+
+    public function test_internal_telegram_favorites_hide_historical_source_exception_messages(): void
+    {
+        config(['gpa.radar_service_token' => 'task6-radar-token']);
+        [$user] = $this->favoriteWithHistoricalSourceError('bot-history-secret-sentinel');
+        $user->forceFill(['telegram_chat_id' => '101'])->save();
+        ExternalIdentity::query()->create([
+            'user_id' => $user->id,
+            'provider' => 'telegram',
+            'provider_subject' => '101',
+        ]);
+
+        $response = $this->getJson('/api/internal/telegram/favorites?telegram_user_id=101', [
+            'X-Radar-Token' => 'task6-radar-token',
+        ])->assertOk()->assertJsonPath('items.0.freshness.0.last_error', 'source_refresh_failed');
+
+        $this->assertStringNotContainsString('bot-history-secret-sentinel', $response->getContent());
+    }
+
+    /** @return array{User, Favorite} */
+    private function favoriteWithHistoricalSourceError(string $sentinel): array
+    {
+        $user = User::factory()->create();
+        $game = Game::query()->create([
+            'steam_appid' => 987654,
+            'name' => 'Historical Error Game',
+            'release_status' => 'released',
+        ]);
+        GameSourceState::query()->create([
+            'game_id' => $game->id,
+            'source' => GameSourceState::SOURCE_STEAM,
+            'status' => GameSourceState::STATUS_FAILED,
+            'last_error' => "https://source.test/failure?token={$sentinel}",
+        ]);
+        $favorite = Favorite::query()->create([
+            'user_id' => $user->id,
+            'game_id' => $game->id,
+            'appid' => $game->steam_appid,
+            'game_name' => $game->name,
+        ]);
+
+        return [$user, $favorite];
     }
 }

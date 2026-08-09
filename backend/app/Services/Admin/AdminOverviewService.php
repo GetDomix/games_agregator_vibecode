@@ -107,7 +107,7 @@ class AdminOverviewService
                     'last_attempt_at' => $state->last_attempt_at?->toIso8601String(),
                     'consecutive_failures' => (int) $state->consecutive_failures,
                     // Historical rows may contain raw exception messages; never expose them via API.
-                    'error' => 'source_refresh_failed',
+                    'error' => GameSourceState::ERROR_REFRESH_FAILED,
                 ]),
             'popular_searches_7d' => $popularSearches,
             'problem_searches' => $problemSearches,
