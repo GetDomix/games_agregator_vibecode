@@ -9,8 +9,14 @@ export type FavoriteItem = {
 export type AlertEvent = { id: number; source: string; offer_kind: string; offer_price_rub: number; offer_title?: string | null; offer_url?: string | null; observed_at?: string | null; delivery?: { status: string; attempts: number; sent_at?: string | null; last_error?: string | null } | null }
 export type AlertItem = { id: number; status: 'active' | 'triggered'; target_value?: number | null; triggered_at?: string | null; favorite: { appid: number; game_name: string }; scopes: AlertScope[]; event?: AlertEvent | null }
 
-export const scopeLabel = (scope: AlertScope) => {
+export const scopeLabel = (scope: AlertScope, tr: (ru: string, en: string) => string = (ru) => ru) => {
   const source = scope.source === 'steam' ? 'Steam' : scope.source === 'plati' ? 'Plati' : 'GGsel'
-  const kind: Record<string, string> = { official: 'официально', key: 'ключ', gift: 'гифт', account: 'аккаунт', rent: 'аренда' }
+  const kind: Record<string, string> = {
+    official: tr('официально', 'official'),
+    key: tr('ключ', 'key'),
+    gift: tr('гифт', 'gift'),
+    account: tr('аккаунт', 'account'),
+    rent: tr('аренда', 'rent'),
+  }
   return `${source}: ${kind[scope.offer_kind] || scope.offer_kind}`
 }

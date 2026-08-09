@@ -9,7 +9,6 @@ use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
 use App\Models\User;
 use App\Services\AggregatorService;
-use App\Services\GamePriceRefreshService;
 use App\Services\GameRefreshRequestService;
 use App\Services\StoredPriceSearchService;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +20,6 @@ class PriceController extends Controller
     public function __construct(
         private readonly AggregatorService $aggregator,
         private readonly StoredPriceSearchService $stored,
-        private readonly GamePriceRefreshService $refreshService,
     ) {}
 
     public function search(Request $request): JsonResponse
@@ -56,8 +54,10 @@ class PriceController extends Controller
         $force = $request->boolean('force');
 
         $game = $appid ? Game::query()->where('steam_appid', $appid)->first() : null;
+        $queuedOnThisRequest = false;
         if (! $game && $appid) {
             $game = $refresh->requestUnknown($appid, $q);
+            $queuedOnThisRequest = true;
         }
         if (! $game) {
             $candidate = $this->stored->candidates($q, 1)[0] ?? null;
@@ -95,21 +95,18 @@ class PriceController extends Controller
             }
         }
 
-        if ($force) {
-            foreach (['steam', 'plati', 'ggsel'] as $source) {
-                try {
-                    $game = $game->fresh() ?? $game;
-                    $this->refreshService->refresh($game, $source);
-                } catch (\Throwable) {
-                }
-            }
-            $game = $game->fresh() ?? $game;
+        // A browser request must never wait for three external stores. Manual
+        // refresh only places work on the same background queue as first search.
+        if ($force && ! $queuedOnThisRequest) {
+            $refresh->request($game, \App\Models\GameSourceState::SOURCES);
         }
 
         $result = $this->stored->result($game, $q);
 
         if ($user) {
-            $result['saved_to_history'] = $this->saveHistory($user, $result);
+            if (! $request->boolean('background')) {
+                $result['saved_to_history'] = $this->saveHistory($user, $result);
+            }
             $steamAppid = $result['steam']['appid'] ?? $appid;
             $result['is_favorite'] = $steamAppid
                 ? Favorite::query()->where('user_id', $user->id)->where('appid', $steamAppid)->exists()

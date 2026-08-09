@@ -34,6 +34,7 @@ class CurrentGamePrice extends Model
         'offer_kind',
         'min_price_rub',
         'avg_price_rub',
+        'currency_prices',
         'offer_count',
         'cheapest_offer_title',
         'cheapest_offer_url',
@@ -51,6 +52,7 @@ class CurrentGamePrice extends Model
         return [
             'min_price_rub' => 'decimal:2',
             'avg_price_rub' => 'decimal:2',
+            'currency_prices' => 'array',
             'offer_count' => 'integer',
             'popular_offer_price_rub' => 'decimal:2',
             'popular_offer_sales' => 'integer',

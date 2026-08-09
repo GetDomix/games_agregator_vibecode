@@ -98,6 +98,7 @@ abstract class AbstractMarketplacePriceSourceAdapter
                 'kind' => $kind,
                 'min_price_rub' => round((float) min($prices), 2),
                 'avg_price_rub' => round(array_sum($prices) / count($prices), 2),
+                'currency_prices' => $this->currencyPrices($items),
                 'offer_count' => count($items),
                 'cheapest' => $cheapest,
                 'popular' => $popular,
@@ -105,5 +106,44 @@ abstract class AbstractMarketplacePriceSourceAdapter
         }
 
         return $result;
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function currencyPrices(array $items): array
+    {
+        $result = [];
+        foreach (['RUB', 'USD', 'EUR'] as $currency) {
+            $priced = array_values(array_filter($items, static fn (array $item): bool => isset($item['prices'][$currency]) && is_numeric($item['prices'][$currency])));
+            if ($priced === []) {
+                continue;
+            }
+            usort($priced, static fn (array $a, array $b): int => (float) $a['prices'][$currency] <=> (float) $b['prices'][$currency]);
+            $popular = $priced[0];
+            foreach ($priced as $item) {
+                if (($item['sales'] ?? 0) > ($popular['sales'] ?? 0)) {
+                    $popular = $item;
+                }
+            }
+            $values = array_map(static fn (array $item): float => (float) $item['prices'][$currency], $priced);
+            $result[$currency] = [
+                'min' => round(min($values), 2),
+                'avg' => round(array_sum($values) / count($values), 2),
+                'cheapest' => $this->currencyOffer($priced[0], $currency),
+                'popular' => $this->currencyOffer($popular, $currency),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function currencyOffer(array $offer, string $currency): array
+    {
+        return [
+            'title' => $offer['title'] ?? null,
+            'url' => $offer['url'] ?? null,
+            'price' => round((float) $offer['prices'][$currency], 2),
+            'price_rub' => round((float) $offer['price_rub'], 2),
+            'sales' => (int) ($offer['sales'] ?? 0),
+        ];
     }
 }

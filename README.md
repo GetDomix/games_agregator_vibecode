@@ -21,7 +21,12 @@ Production Compose запускает отдельные процессы `backe
 
 - Поле `users.is_admin` или env `ADMIN_EMAILS=you@mail.com`
 - UI: кабинет → «Админка» / кнопка Admin (desktop)
-- API: `GET /api/admin/overview`, `POST /api/admin/users/{id}/admin`
+- Операционный экран показывает здоровье источников, очередь, доставки алертов,
+  проблемные запросы, пользователей и журнал действий.
+- API: `GET /api/admin/overview`, `GET /api/admin/users`,
+  `POST /api/admin/users/{id}/admin`, `POST /api/admin/games/{appid}/refresh`
+- Ручное обновление принимает `sources: ["steam", "plati", "ggsel"]` и только
+  ставит штатные фоновые задачи в очередь; цены из админки не редактируются.
 
 Поиск бесплатен для гостей и зарегистрированных пользователей. Защита API от спама обеспечивается техническими rate limits.
 

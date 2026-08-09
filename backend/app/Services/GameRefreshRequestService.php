@@ -43,6 +43,9 @@ class GameRefreshRequestService
                 ['game_id' => $game->id, 'source' => $source],
                 ['status' => GameSourceState::STATUS_PENDING, 'next_refresh_at' => now()]
             );
+            if (! $state->wasRecentlyCreated && $state->status === GameSourceState::STATUS_PENDING) {
+                continue;
+            }
             $state->forceFill(['status' => GameSourceState::STATUS_PENDING, 'next_refresh_at' => now()])->save();
             RefreshGameSourceJob::dispatch($game->id, $source)->onQueue(config('gpa.price_refresh_queue'));
         }

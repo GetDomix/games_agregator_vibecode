@@ -60,6 +60,11 @@ class GgselService
                 'title' => $searchTitle !== '' ? "{$name} — {$searchTitle}" : $name,
                 'url' => $raw,
                 'price_rub' => round($price, 2),
+                'prices' => array_filter([
+                    'RUB' => round($price, 2),
+                    'USD' => $this->positivePrice($item['price_wmz'] ?? null),
+                    'EUR' => $this->positivePrice($item['price_wme'] ?? null),
+                ], static fn ($value): bool => $value !== null),
                 'sales' => (int) ($item['cnt_sell'] ?? 0),
                 'seller_name' => $item['seller_name'] ?? null,
                 'kind' => Classifier::ggsel($contentTypeId, $name, $searchTitle),
@@ -67,5 +72,10 @@ class GgselService
         }
 
         return [$offers, $total ?: count($offers), null];
+    }
+
+    private function positivePrice(mixed $value): ?float
+    {
+        return is_numeric($value) && (float) $value > 0 ? round((float) $value, 2) : null;
     }
 }

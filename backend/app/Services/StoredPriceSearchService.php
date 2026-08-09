@@ -79,6 +79,7 @@ class StoredPriceSearchService
         $groups = $prices->map(fn (CurrentGamePrice $p) => [
             'kind' => $p->offer_kind, 'label' => Classifier::label($p->offer_kind), 'count' => $p->offer_count,
             'min_price' => $p->min_price_rub, 'avg_price' => $p->avg_price_rub,
+            'currency_prices' => $p->currency_prices,
             'cheapest' => ['title' => $p->cheapest_offer_title, 'url' => $p->cheapest_offer_url, 'price_rub' => $p->min_price_rub],
             'popular' => ['title' => $p->popular_offer_title, 'url' => $p->popular_offer_url, 'price_rub' => $p->popular_offer_price_rub, 'sales' => $p->popular_offer_sales],
         ])->values()->all();

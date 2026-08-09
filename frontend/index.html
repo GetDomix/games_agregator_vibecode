@@ -14,6 +14,7 @@
       (function () {
         var t = localStorage.getItem('gpa_theme') || 'dark';
         document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.classList.add('reveal-ready');
       })();
     </script>
   </head>

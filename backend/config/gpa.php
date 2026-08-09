@@ -28,6 +28,7 @@ return [
         ['region' => 'TR', 'country' => 'tr', 'language' => 'english', 'currency' => 'TRY', 'label' => 'Турция'],
         ['region' => 'DE', 'country' => 'de', 'language' => 'english', 'currency' => 'EUR', 'label' => 'Европа'],
     ],
+    'display_currencies' => ['RUB', 'USD', 'EUR', 'KZT', 'TRY'],
     'price_refresh_backoff_minutes' => [1, 5, 15, 30, 60],
     // Comma-separated admin emails (also users.is_admin flag)
     'admin_emails' => env('ADMIN_EMAILS', ''),

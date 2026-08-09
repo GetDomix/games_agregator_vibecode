@@ -91,6 +91,20 @@ class CentralPriceRefreshTest extends TestCase
         $this->assertTrue($market->fresh()->next_refresh_at->isAfter(now()->addHours(23)));
     }
 
+    public function test_marketplace_waiting_for_steam_does_not_remain_pending(): void
+    {
+        $game = Game::query()->create(['steam_appid' => 33, 'name' => 'Unconfirmed Game']);
+
+        $this->refreshService(new PriceSourceResult('plati', []))->refresh($game, 'plati');
+
+        $state = GameSourceState::query()->where('game_id', $game->id)->where('source', 'plati')->firstOrFail();
+        $this->assertSame(GameSourceState::STATUS_STALE, $state->status);
+        $this->assertTrue($state->next_refresh_at->isAfter(now()->addHours(23)));
+        $this->getJson('/api/prices?q=Unconfirmed%20Game&appid=33')
+            ->assertOk()
+            ->assertJsonPath('refreshing', false);
+    }
+
     public function test_release_activates_existing_market_states(): void
     {
         $game = Game::query()->create(['steam_appid' => 4, 'name' => 'Launching', 'release_status' => 'announced']);
@@ -130,7 +144,10 @@ class CentralPriceRefreshTest extends TestCase
 
         CurrentGamePrice::query()->create(['game_id' => $game->id, 'source' => 'steam', 'offer_kind' => 'official', 'min_price_rub' => 100, 'observed_at' => now()]);
         GameSourceState::query()->updateOrCreate(['game_id' => $game->id, 'source' => 'steam'], ['status' => 'failed', 'next_refresh_at' => now()]);
-        $this->getJson('/api/games/5/prices')->assertOk()->assertJsonPath('game.name', 'Queued Game')->assertJsonPath('sources.0.has_error', true);
+        $this->getJson('/api/games/5/prices')
+            ->assertOk()
+            ->assertJsonPath('game.name', 'Queued Game')
+            ->assertJsonFragment(['source' => 'steam', 'has_error' => true]);
     }
 
     private function refreshService(PriceSourceResult|\Throwable $outcome): GamePriceRefreshService

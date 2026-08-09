@@ -22,7 +22,14 @@ class GamePriceRefreshService
     {
         $state = GameSourceState::query()->firstOrCreate(['game_id' => $game->id, 'source' => $source]);
         if ($source !== GameSourceState::SOURCE_STEAM && ! $game->isReleased()) {
-            $state->forceFill(['status' => GameSourceState::STATUS_PENDING, 'next_refresh_at' => now()->addHours(24)])->save();
+            // Это не выполняющаяся загрузка: маркетплейсы ждут, пока Steam
+            // подтвердит релиз. Pending здесь оставлял интерфейс со спиннером
+            // навсегда, хотя задание уже было завершено.
+            $state->forceFill([
+                'last_attempt_at' => now(),
+                'status' => GameSourceState::STATUS_STALE,
+                'next_refresh_at' => now()->addHours(24),
+            ])->save();
 
             return 0;
         }
@@ -76,6 +83,7 @@ class GamePriceRefreshService
                 $values = [
                     'min_price_rub' => $group['min_price_rub'],
                     'avg_price_rub' => $group['avg_price_rub'],
+                    'currency_prices' => $group['currency_prices'] ?? null,
                     'offer_count' => $group['offer_count'],
                     'cheapest_offer_title' => $cheapest['title'] ?? null,
                     'cheapest_offer_url' => $cheapest['url'] ?? null,

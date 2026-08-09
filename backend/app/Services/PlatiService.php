@@ -61,6 +61,11 @@ class PlatiService
                     'title' => $name,
                     'url' => $url,
                     'price_rub' => round($price, 2),
+                    'prices' => array_filter([
+                        'RUB' => round($price, 2),
+                        'USD' => $this->positivePrice($item['price_usd'] ?? null),
+                        'EUR' => $this->positivePrice($item['price_eur'] ?? null),
+                    ], static fn ($value): bool => $value !== null),
                     'sales' => (int) ($item['numsold'] ?? 0),
                     'seller_name' => $item['seller_name'] ?? null,
                     'kind' => Classifier::fromText($name, (string) ($item['description'] ?? '')),
@@ -73,5 +78,10 @@ class PlatiService
         }
 
         return [$offers, $offers ? $totalPages * $pageSize : 0, null];
+    }
+
+    private function positivePrice(mixed $value): ?float
+    {
+        return is_numeric($value) && (float) $value > 0 ? round((float) $value, 2) : null;
     }
 }

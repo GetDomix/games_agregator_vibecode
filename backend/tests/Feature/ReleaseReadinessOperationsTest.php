@@ -39,10 +39,10 @@ class ReleaseReadinessOperationsTest extends TestCase
             ]),
             'https://plati.market/api/search.ashx*' => Http::response([
                 'Totalpages' => 1,
-                'items' => [['id' => 1, 'name' => 'Counter-Strike 2 Steam key', 'price_rur' => 500, 'numsold' => 10]],
+                'items' => [['id' => 1, 'name' => 'Counter-Strike 2 Steam key', 'price_rur' => 500, 'price_usd' => 6.25, 'price_eur' => 5.75, 'numsold' => 10]],
             ]),
             'https://api.ggsel.com/elastic/goods/query' => Http::response([
-                'data' => [['id_goods' => 2, 'name' => 'Counter-Strike 2 gift', 'price_wmr' => 450, 'cnt_sell' => 5]],
+                'data' => [['id_goods' => 2, 'name' => 'Counter-Strike 2 gift', 'price_wmr' => 450, 'price_wmz' => 5.6, 'price_wme' => 5.1, 'cnt_sell' => 5]],
             ]),
         ]);
 
@@ -53,7 +53,11 @@ class ReleaseReadinessOperationsTest extends TestCase
         $this->assertSame(123.45, $steam['price_rub']);
         $this->assertSame('released', $steam['release_status']);
         $this->assertSame(500.0, $plati[0]['price_rub']);
+        $this->assertSame(6.25, $plati[0]['prices']['USD']);
+        $this->assertSame(5.75, $plati[0]['prices']['EUR']);
         $this->assertSame(450.0, $ggsel[0]['price_rub']);
+        $this->assertSame(5.6, $ggsel[0]['prices']['USD']);
+        $this->assertSame(5.1, $ggsel[0]['prices']['EUR']);
         Http::assertSentCount(3);
         Http::assertSent(fn (Request $request) => $request->url() === 'https://api.ggsel.com/elastic/goods/query'
             && $request['search_term'] === 'Counter-Strike 2');
