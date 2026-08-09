@@ -15,9 +15,9 @@ use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
-    public function overview(AdminOverviewService $overview): JsonResponse
+    public function overview(Request $request, AdminOverviewService $overview): JsonResponse
     {
-        return response()->json($overview->build());
+        return response()->json($overview->build($request->user()));
     }
 
     public function users(Request $request, AdminUserDirectoryService $directory): JsonResponse

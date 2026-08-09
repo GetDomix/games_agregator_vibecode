@@ -4,8 +4,10 @@ namespace App\Services\Admin;
 
 use App\Models\AdminAuditLog;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class AdminAuditService
@@ -34,13 +36,7 @@ class AdminAuditService
 
     public function paginateFor(User $viewer, int $perPage = 25): LengthAwarePaginator
     {
-        $logs = AdminAuditLog::query()
-            ->select(['id', 'request_id', 'actor_id', 'action', 'target_type', 'target_id', 'context', 'created_at'])
-            ->with('actor:id,email,display_name,name')
-            ->when(
-                ! $viewer->canManageAdminTeam(),
-                fn ($query) => $query->whereRaw('SUBSTRING(action, 1, 11) <> ?', ['admin.role_']),
-            )
+        $logs = $this->queryFor($viewer)
             ->latest()
             ->paginate($perPage);
 
@@ -49,6 +45,16 @@ class AdminAuditService
         ));
 
         return $logs;
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    public function recentFor(?User $viewer, int $limit = 12): Collection
+    {
+        return $this->queryFor($viewer)
+            ->latest()
+            ->limit($limit)
+            ->get()
+            ->map(fn (AdminAuditLog $log) => $this->toSafeArray($log));
     }
 
     public function toSafeArray(AdminAuditLog $log): array
@@ -63,5 +69,16 @@ class AdminAuditService
             'context' => Arr::only($log->context ?? [], self::CONTEXT_KEYS[$log->action] ?? []),
             'created_at' => $log->created_at?->toIso8601String(),
         ];
+    }
+
+    private function queryFor(?User $viewer): Builder
+    {
+        return AdminAuditLog::query()
+            ->select(['id', 'request_id', 'actor_id', 'action', 'target_type', 'target_id', 'context', 'created_at'])
+            ->with('actor:id,email,display_name,name')
+            ->when(
+                ! ($viewer?->canManageAdminTeam() ?? false),
+                fn ($query) => $query->whereRaw('SUBSTRING(action, 1, 11) <> ?', ['admin.role_']),
+            );
     }
 }

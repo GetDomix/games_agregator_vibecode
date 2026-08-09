@@ -2,7 +2,6 @@
 
 namespace App\Services\Admin;
 
-use App\Models\AdminAuditLog;
 use App\Models\AlertDelivery;
 use App\Models\AlertEvent;
 use App\Models\Game;
@@ -16,7 +15,7 @@ class AdminOverviewService
 {
     public function __construct(private readonly AdminAuditService $audit) {}
 
-    public function build(): array
+    public function build(?User $viewer = null): array
     {
         $since = now()->subDay();
 
@@ -111,13 +110,7 @@ class AdminOverviewService
                 ]),
             'popular_searches_7d' => $popularSearches,
             'problem_searches' => $problemSearches,
-            'recent_audit' => AdminAuditLog::query()
-                ->select(['id', 'request_id', 'actor_id', 'action', 'target_type', 'target_id', 'context', 'created_at'])
-                ->with('actor:id,email,display_name,name')
-                ->latest()
-                ->limit(12)
-                ->get()
-                ->map(fn (AdminAuditLog $log) => $this->audit->toSafeArray($log)),
+            'recent_audit' => $this->audit->recentFor($viewer),
         ];
     }
 }

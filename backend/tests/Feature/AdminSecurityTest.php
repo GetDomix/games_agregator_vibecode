@@ -109,6 +109,41 @@ class AdminSecurityTest extends TestCase
             ]);
     }
 
+    public function test_admin_overview_hides_role_change_audit_but_owner_overview_includes_it(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
+        $targetId = 'overview-security-test-'.Str::uuid();
+        AdminAuditLog::query()->create([
+            'actor_id' => $owner->id,
+            'action' => 'admin.role.changed',
+            'target_type' => 'user',
+            'target_id' => 'unrelated-action',
+            'request_id' => Str::uuid(),
+        ]);
+        AdminAuditLog::query()->create([
+            'actor_id' => $owner->id,
+            'action' => 'admin.role_changed',
+            'target_type' => 'user',
+            'target_id' => $targetId,
+            'request_id' => Str::uuid(),
+        ]);
+
+        Sanctum::actingAs($admin);
+        $this->getJson('/api/admin/overview')
+            ->assertOk()
+            ->assertJsonMissing(['target_id' => $targetId])
+            ->assertJsonFragment(['target_id' => 'unrelated-action']);
+
+        Sanctum::actingAs($owner);
+        $this->getJson('/api/admin/overview')
+            ->assertOk()
+            ->assertJsonFragment([
+                'action' => 'admin.role_changed',
+                'target_id' => $targetId,
+            ]);
+    }
+
     public function test_audit_pagination_is_capped_at_fifty(): void
     {
         Sanctum::actingAs(User::factory()->create(['admin_role' => User::ROLE_OWNER]));
