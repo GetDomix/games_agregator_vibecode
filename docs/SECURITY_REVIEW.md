@@ -33,6 +33,7 @@
 | Role-аудит был доступен обычному администратору через `overview.recent_audit`, несмотря на фильтр отдельного audit endpoint | Регрессия `test_admin_overview_hides_role_change_audit_but_owner_overview_includes_it` | Исправлено: overview и audit используют один viewer-aware scope |
 | Ошибка admin endpoint при `APP_DEBUG=true` могла зависеть от стандартного debug renderer | Fault-injection создаёт реальную ошибку PostgreSQL и проверяет отсутствие trace, SQL, паролей, email владельцев и Telegram ID | Усилено: admin API возвращает фиксированные JSON-сообщения и сохраняет HTTP status/headers |
 | Некорректные или дополнительные поля write-запросов могли создать неоднозначный контракт | Табличные тесты mass assignment, nested/null/unknown roles и malformed `sources` | Исправлено: строгий allowlist ключей, `array:list` и allowlist источников |
+| Сохранённый `GameSourceState.last_error` мог содержать URL, credentials или body внешнего исключения и возвращался через overview | Sentinel-регрессия для `recent_source_failures` и `recordFailure` | Исправлено: в API и состоянии хранится только стабильный код `source_refresh_failed`; класс ошибки остаётся в защищённом журнале worker |
 
 ### Low / defense in depth
 
@@ -60,10 +61,14 @@
 |---|---|---|
 | Кража bearer token или активной browser session | High | TLS, безопасное хранение cookies/tokens, короткие сессии, отзыв токенов при смене роли; добавить MFA и оповещения владельцев до публичного запуска |
 | Компрометация аккаунта или почты владельца из `ADMIN_EMAILS` | High | Минимальный allowlist, отдельный защищённый аккаунт, MFA у провайдера входа, регулярный пересмотр списка |
-| Новые уязвимости зависимостей после даты проверки | Medium | `composer audit` и `npm audit` в CI и перед каждым выпуском; обновления проверять как отдельные изменения |
+| Новые уязвимости зависимостей после даты проверки | Medium | `npm audit --omit=dev` завершён: 0 уязвимостей. Packagist advisory endpoint трижды завершил TLS timeout; успешный `composer audit` обязателен в CI или Task 7 до release approval |
 | Poisoning/некорректные данные внешних API цен | Medium | Валидация схемы и диапазонов, наблюдаемость источников, отсутствие прямого редактирования цены из admin UI |
 | Отсутствие внешнего penetration testing | Medium | Провести отдельный тест staging/production boundary перед публичным запуском; этот документ не является сертификатом |
 | Прямой доступ к origin в обход доверенного proxy | Medium | Firewall/Cloudflare Tunnel должен разрешать origin только доверенному proxy; проверить инфраструктуру при release readiness |
+
+## Открытый release blocker
+
+На момент этой записи `composer audit --locked --no-interaction` не завершён: `repo.packagist.org/packages.json` и `packagist.org/api/security-advisories/` недоступны из локальной среды по TLS timeout. Это не считается успешной проверкой и не означает отсутствие Composer-уязвимостей. Выпуск нельзя одобрить, пока та же команда не завершится успешно в Task 7 или CI и найденные advisories (если будут) не получат анализ воздействия и решение.
 
 ## Воспроизводимая проверка
 

@@ -146,7 +146,9 @@ class GamePriceRefreshService
             'last_attempt_at' => now(),
             'next_refresh_at' => now()->addMinutes(max(1, $minutes)),
             'status' => GameSourceState::STATUS_FAILED,
-            'last_error' => mb_substr($error->getMessage(), 0, 500),
+            // Exception messages may contain URLs, credentials or upstream bodies.
+            // Detailed diagnostics stay in protected logs; API-facing state stores a stable code.
+            'last_error' => 'source_refresh_failed',
             'consecutive_failures' => $failures,
         ])->save();
     }

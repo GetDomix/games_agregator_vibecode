@@ -106,7 +106,8 @@ class AdminOverviewService
                     'source' => $state->source,
                     'last_attempt_at' => $state->last_attempt_at?->toIso8601String(),
                     'consecutive_failures' => (int) $state->consecutive_failures,
-                    'error' => mb_substr((string) $state->last_error, 0, 300),
+                    // Historical rows may contain raw exception messages; never expose them via API.
+                    'error' => 'source_refresh_failed',
                 ]),
             'popular_searches_7d' => $popularSearches,
             'problem_searches' => $problemSearches,

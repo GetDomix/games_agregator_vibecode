@@ -27,7 +27,7 @@ class AdminOperationsTest extends TestCase
             'source' => 'steam',
             'status' => 'failed',
             'last_attempt_at' => now(),
-            'last_error' => 'temporary error',
+            'last_error' => 'https://source.test/failure?token=overview-secret-sentinel',
             'consecutive_failures' => 2,
         ]);
         SearchHistory::query()->create(['user_id' => $admin->id, 'query' => 'missing game']);
@@ -37,14 +37,16 @@ class AdminOperationsTest extends TestCase
         ]);
 
         Sanctum::actingAs($admin);
-        $this->getJson('/api/admin/overview')
+        $response = $this->getJson('/api/admin/overview')
             ->assertOk()
             ->assertJsonPath('operations.queue.pending', 1)
             ->assertJsonPath('operations.sources.0.source', 'steam')
             ->assertJsonPath('operations.sources.0.counts.failed', 1)
             ->assertJsonPath('recent_source_failures.0.appid', 730)
+            ->assertJsonPath('recent_source_failures.0.error', 'source_refresh_failed')
             ->assertJsonPath('problem_searches.0.query', 'missing game')
             ->assertJsonMissingPath('recent_users');
+        $this->assertStringNotContainsString('overview-secret-sentinel', $response->getContent());
     }
 
     public function test_non_admin_cannot_use_admin_endpoints(): void

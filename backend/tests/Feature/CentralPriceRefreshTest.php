@@ -55,6 +55,8 @@ class CentralPriceRefreshTest extends TestCase
         $this->assertDatabaseHas('current_game_prices', ['game_id' => $game->id, 'min_price_rub' => 500]);
         $state = GameSourceState::query()->where('game_id', $game->id)->firstOrFail();
         $this->assertSame('failed', $state->status);
+        $this->assertSame('source_refresh_failed', $state->last_error);
+        $this->assertStringNotContainsString('source offline', (string) $state->last_error);
         $this->assertSame(1, $state->consecutive_failures);
         $this->assertTrue($state->next_refresh_at->isAfter(now()->addSeconds(30)));
         $this->assertTrue($state->next_refresh_at->isBefore(now()->addMinutes(2)));

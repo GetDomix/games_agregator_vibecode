@@ -215,7 +215,9 @@ class AdminSecurityTest extends TestCase
         Sanctum::actingAs($owner);
         $uri = str_replace('{user}', (string) $target->id, $uriTemplate);
 
-        $this->json($method, $uri, $payload)->assertStatus(405);
+        $this->json($method, $uri, $payload)
+            ->assertStatus(405)
+            ->assertHeader('Allow');
 
         $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
         $this->assertDatabaseCount('admin_audit_logs', $auditCount);

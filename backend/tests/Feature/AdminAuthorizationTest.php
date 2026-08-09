@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RefreshGameSourceJob;
 use App\Models\AdminAuditLog;
 use App\Models\Game;
 use App\Models\User;
@@ -106,7 +107,32 @@ class AdminAuthorizationTest extends TestCase
         }
 
         $this->postJson('/api/admin/games/1091500/refresh', ['sources' => ['steam']])
-            ->assertTooManyRequests();
+            ->assertTooManyRequests()
+            ->assertHeader('Retry-After')
+            ->assertHeader('X-RateLimit-Limit', '20');
         $this->assertDatabaseCount('admin_audit_logs', $auditCount + 20);
+    }
+
+    public function test_owner_can_queue_an_operational_refresh_with_audit_side_effects(): void
+    {
+        Queue::fake();
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        Game::query()->create([
+            'steam_appid' => 570,
+            'name' => 'Dota 2',
+            'release_status' => 'released',
+        ]);
+        Sanctum::actingAs($owner);
+
+        $this->postJson('/api/admin/games/570/refresh', ['sources' => ['steam']])
+            ->assertStatus(202);
+
+        Queue::assertPushed(RefreshGameSourceJob::class, 1);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'actor_id' => $owner->id,
+            'action' => 'game.refresh_requested',
+            'target_type' => 'game',
+            'target_id' => '570',
+        ]);
     }
 }

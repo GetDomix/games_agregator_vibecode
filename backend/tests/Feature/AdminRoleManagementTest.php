@@ -272,15 +272,17 @@ class AdminRoleManagementTest extends TestCase
         $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
         $target = User::factory()->create();
         $token = $target->createToken('rollback-proof');
-        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT task6_reject_role_audit CHECK (action <> 'admin.role_changed')");
+        $constraint = 'task6_reject_role_audit_'.str_replace('-', '', (string) Str::uuid());
+        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT {$constraint} CHECK (action <> 'admin.role_changed')");
 
         try {
             app(AdminRoleService::class)->changeRole($owner, $target, User::ROLE_ADMIN, null);
             $this->fail('The injected audit failure must abort the role transaction.');
-        } catch (QueryException) {
-            // The real database failure is the injected fault; state assertions follow cleanup.
+        } catch (QueryException $exception) {
+            $this->assertSame('23514', (string) $exception->getCode());
+            $this->assertStringContainsString($constraint, $exception->getMessage());
         } finally {
-            DB::statement('ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS task6_reject_role_audit');
+            DB::statement("ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS {$constraint}");
         }
 
         $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
@@ -333,13 +335,19 @@ class AdminRoleManagementTest extends TestCase
         $target = User::factory()->create();
         Sanctum::actingAs($owner);
 
+        $auditCount = (int) AdminAuditLog::query()->count();
         for ($i = 0; $i < 5; $i++) {
-            $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_ADMIN])
+            $role = $i % 2 === 0 ? User::ROLE_ADMIN : User::ROLE_USER;
+            $this->patchJson("/api/admin/team/{$target->id}", ['role' => $role])
                 ->assertOk();
         }
 
-        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_ADMIN])
-            ->assertTooManyRequests();
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_USER])
+            ->assertTooManyRequests()
+            ->assertHeader('Retry-After')
+            ->assertHeader('X-RateLimit-Limit', '5');
+        $this->assertSame(User::ROLE_ADMIN, $target->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount + 5);
     }
 
     public function test_concurrent_demotions_cannot_remove_the_last_effective_owner(): void
