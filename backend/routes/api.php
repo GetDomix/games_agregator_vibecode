@@ -35,7 +35,7 @@ Route::get('/auth/telegram/callback', [TelegramController::class, 'oidcCallback'
 Route::get('/search', [PriceController::class, 'search'])
     ->middleware('throttle:api-search');
 Route::get('/prices', [PriceController::class, 'prices'])
-    ->middleware('throttle:api-read');
+    ->middleware('throttle:api-prices');
 Route::get('/games/{appid}/prices', [GamePriceController::class, 'show'])
     ->whereNumber('appid')
     ->middleware('throttle:api-read');
