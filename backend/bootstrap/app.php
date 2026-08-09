@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureAdminRole;
+use App\Http\Middleware\EnsureOwnerRole;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -18,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         // Caddy / Cloudflare Tunnel terminate TLS in front of the app
         $middleware->trustProxies(at: '*');
+        $middleware->alias([
+            'admin-role' => EnsureAdminRole::class,
+            'owner-role' => EnsureOwnerRole::class,
+        ]);
     })
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('prices:dispatch-due')->everyMinute()->withoutOverlapping()->onOneServer();

@@ -70,11 +70,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me/alerts/events', [AlertController::class, 'events']);
     Route::delete('/me/favorites/{appid}', [FavoriteController::class, 'destroy']);
 
-    Route::get('/admin/overview', [AdminController::class, 'overview']);
-    Route::get('/admin/users', [AdminController::class, 'users']);
-    Route::post('/admin/users/{id}/admin', [AdminController::class, 'setUserAdmin']);
+    Route::middleware(['admin-role', 'throttle:admin-read'])->group(function () {
+        Route::get('/admin/overview', [AdminController::class, 'overview']);
+        Route::get('/admin/users', [AdminController::class, 'users']);
+    });
+    Route::post('/admin/users/{id}/admin', [AdminController::class, 'setUserAdmin'])
+        ->middleware(['admin-role', 'throttle:admin-role']);
     Route::post('/admin/games/{appid}/refresh', [AdminController::class, 'refreshGame'])
-        ->whereNumber('appid');
+        ->whereNumber('appid')
+        ->middleware(['admin-role', 'throttle:admin-action']);
 
     Route::post('/telegram/link-code', [TelegramController::class, 'createLinkCode']);
     Route::post('/telegram/oidc/begin', [TelegramController::class, 'oidcBegin'])

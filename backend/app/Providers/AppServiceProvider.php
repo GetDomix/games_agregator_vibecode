@@ -40,5 +40,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api-deals', fn ($request) => Limit::perMinute(30)->by($request->ip()));
         RateLimiter::for('api-telegram', fn ($request) => Limit::perMinute(10)->by($request->ip()));
         RateLimiter::for('api-internal', fn ($request) => Limit::perMinute(60)->by($request->ip()));
+        RateLimiter::for('admin-read', fn ($request) => Limit::perMinute(120)->by('admin-read:'.($request->user()?->id ?: $request->ip())));
+        RateLimiter::for('admin-action', fn ($request) => Limit::perMinute(20)->by('admin-action:'.($request->user()?->id ?: $request->ip())));
+        RateLimiter::for('admin-role', fn ($request) => Limit::perMinute(5)->by('admin-role:'.($request->user()?->id ?: $request->ip())));
     }
 }

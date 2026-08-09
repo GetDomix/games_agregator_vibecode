@@ -12,7 +12,6 @@ use App\Models\PartnerClick;
 use App\Models\SearchHistory;
 use App\Models\User;
 use App\Services\GameRefreshRequestService;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +21,6 @@ class AdminController extends Controller
 {
     public function overview(Request $request): JsonResponse
     {
-        $this->authorizeAdmin($request);
         $since = now()->subDay();
 
         $sourceCounts = GameSourceState::query()
@@ -135,7 +133,6 @@ class AdminController extends Controller
 
     public function users(Request $request): JsonResponse
     {
-        $this->authorizeAdmin($request);
         $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
         $term = trim((string) ($data['q'] ?? ''));
         $users = User::query()
@@ -166,7 +163,6 @@ class AdminController extends Controller
 
     public function setUserAdmin(Request $request, int $id): JsonResponse
     {
-        $this->authorizeAdmin($request);
         // Transitional compatibility for the existing boolean client contract; Task 3 replaces it with role input.
         $data = $request->validate(['is_admin' => ['required', 'boolean']]);
         $user = User::query()->findOrFail($id);
@@ -182,7 +178,6 @@ class AdminController extends Controller
 
     public function refreshGame(Request $request, int $appid, GameRefreshRequestService $refreshes): JsonResponse
     {
-        $this->authorizeAdmin($request);
         $data = $request->validate([
             'sources' => ['nullable', 'array', 'min:1'],
             'sources.*' => ['string', Rule::in(GameSourceState::SOURCES)],
@@ -206,11 +201,4 @@ class AdminController extends Controller
         ]);
     }
 
-    private function authorizeAdmin(Request $request): void
-    {
-        $user = $request->user();
-        if (! $user || ! $user->canAccessAdmin()) {
-            throw new HttpResponseException(response()->json(['detail' => 'Доступ только для администратора'], 403));
-        }
-    }
 }
