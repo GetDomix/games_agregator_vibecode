@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureAdminRole;
 use App\Http\Middleware\EnsureOwnerRole;
+use App\Support\EnvironmentList;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -20,8 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Caddy / Cloudflare Tunnel terminate TLS in front of the app
-        $middleware->trustProxies(at: '*');
+        // Production must name the internal reverse-proxy networks explicitly.
+        $middleware->trustProxies(at: EnvironmentList::parse(
+            env('TRUSTED_PROXIES'),
+            ['127.0.0.1', '::1'],
+        ));
         $middleware->alias([
             'admin-role' => EnsureAdminRole::class,
             'owner-role' => EnsureOwnerRole::class,

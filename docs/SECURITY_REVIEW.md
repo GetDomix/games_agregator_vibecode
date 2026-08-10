@@ -72,7 +72,7 @@
 
 Исправление: точечное обновление до `guzzlehttp/guzzle` 7.15.2 и `league/commonmark` 2.9.0 без изменения остальных пакетов. Повторный официальный OSV Scanner проверил 118 пакетов и завершился с `No issues found`; Composer dry-run подтвердил воспроизводимость lock-файла, а production Docker build установил обе новые версии.
 
-`composer audit --locked --no-interaction` из этой локальной сети по-прежнему не получает ответ от Packagist API и был остановлен после повторного тайм-аута. Это не записано как успешный Composer audit. Кодовый blocker по известным advisories закрыт обновлением и независимым повторным OSV-сканированием; перед фактическим production deploy CI в сети с доступом к Packagist должен дополнительно успешно выполнить `composer audit --locked --no-interaction`.
+10 августа 2026 года после устранения блокировки Packagist со стороны локального VPN успешно выполнен `composer audit --locked --no-interaction`: exit code 0, известных advisories для зафиксированных зависимостей не найдено. Команда добавлена в backend CI gate и должна успешно завершаться перед каждым будущим production release.
 
 ## Воспроизводимая проверка
 

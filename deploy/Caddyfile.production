@@ -1,0 +1,32 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		Content-Security-Policy "base-uri 'self'; frame-ancestors 'none'; object-src 'none'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		-Server
+	}
+
+	reverse_proxy frontend:80 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto https
+		transport http {
+			read_timeout 180s
+			write_timeout 180s
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

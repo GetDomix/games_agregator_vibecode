@@ -54,9 +54,11 @@ Production Compose запускает отдельные процессы `backe
 
 ## Проверки и выпуск
 
-CI проверяет Laravel на PostgreSQL, frontend lint/build, изолированные тесты бота
-и сборку Compose-образов. Production deploy запускается только вручную через
-GitHub Actions и защищённое environment `production`.
+CI проверяет Laravel на PostgreSQL, locked Composer dependencies, frontend
+lint/build, изолированные тесты бота и оба Compose-конфига. Production deploy
+по умолчанию отключён и не запускается при push: в будущем понадобятся ручной
+workflow, отдельная repository variable и approval environment `production`.
 
 Инструкции: [`deploy/README.md`](deploy/README.md) и
-[`deploy/RELEASE_RUNBOOK.md`](deploy/RELEASE_RUNBOOK.md).
+[`deploy/RELEASE_RUNBOOK.md`](deploy/RELEASE_RUNBOOK.md). Политика резервного
+копирования: [`deploy/BACKUP_POLICY.md`](deploy/BACKUP_POLICY.md).

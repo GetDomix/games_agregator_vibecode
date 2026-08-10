@@ -53,6 +53,8 @@ jobs:
           php artisan key:generate --force
           composer dump-autoload -o
           php artisan package:discover --ansi
+      - name: Audit locked Composer dependencies
+        run: composer audit --locked --no-interaction
       - name: Configure env (PostgreSQL)
         run: |
           sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=pgsql/' .env
@@ -129,13 +131,18 @@ jobs:
         run: cp backend/.env.example .env
       - name: Validate Compose
         run: docker compose config --quiet
+      - name: Validate strict production template
+        run: PREFLIGHT_TEST_COMPOSE=1 ./deploy/tests/production-preflight-test.sh
       - name: Build application images
         run: docker compose build backend frontend scheduler queue-worker radar-bot
 
   deploy:
     name: 5 · Deploy VPS
     needs: [backend-test, frontend-build, bot-test, infrastructure-check]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_production == true &&
+      vars.PRODUCTION_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -167,149 +174,58 @@ jobs:
             -e "ssh -p $DEPLOY_PORT" \
             --exclude '.git/' --exclude 'node_modules/' --exclude 'backend/vendor/' \
             --exclude 'legacy/' --exclude '.venv/' --exclude 'data/' --exclude 'backups/' \
-            --exclude 'backend/.env' --exclude '.env' \
+            --exclude 'backend/.env' --exclude '.env' --exclude 'deploy/.env.production' \
             ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
-      - name: Compose up (Postgres + app)
+      - name: Strict preflight, backup and Compose up
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/gpa' }}
-          APP_KEY: ${{ secrets.APP_KEY }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
-          # Pass deploy vars into remote shell (quoted heredoc would drop them)
           ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            env \
-              DEPLOY_PATH="$DEPLOY_PATH" \
-              APP_KEY="${APP_KEY:-}" \
-              POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}" \
-              bash -s <<'EOS'
+            env DEPLOY_PATH="$DEPLOY_PATH" \
+            bash -s <<'EOS'
           set -euo pipefail
           cd "$DEPLOY_PATH"
+          production_env=deploy/.env.production
+          test -f "$production_env"
+          chmod 600 "$production_env"
+          ./deploy/preflight-production.sh "$production_env"
 
-          # Free host :80/:443 (system nginx / apache / host caddy from older stack)
-          for svc in nginx apache2 httpd caddy; do
-            if systemctl is-active --quiet "$svc" 2>/dev/null; then
-              systemctl stop "$svc" || true
-              systemctl disable "$svc" || true
-              echo "stopped host $svc to free ports"
-            fi
-          done
+          export PRODUCTION_ENV_FILE="$production_env"
+          compose=(docker compose --env-file "$production_env" -f docker-compose.yml -f compose.production.yml)
+          mkdir -p backups
 
-          # Legacy Python container name from previous compose service
-          docker rm -f gpa-web-1 2>/dev/null || true
-
-          # Free 80/443 only if something outside this compose stack holds them
-          docker rm -f gpa-web-1 2>/dev/null || true
-          for p in 80 443; do
-            if ss -tlnp 2>/dev/null | grep -qE ":${p} " \
-              && ! docker compose ps --status running 2>/dev/null | grep -q caddy; then
-              echo "port ${p} still in use — forcing free"
-              fuser -k "${p}/tcp" 2>/dev/null || true
-            fi
-          done
-          sleep 1
-
-          HOST_IP="$(hostname -I | awk '{print $1}')"
-          HTTPS_HOST="gpa.${HOST_IP}.sslip.io"
-          HTTPS_URL="https://${HTTPS_HOST}"
-
-          # Create .env once; never rotate POSTGRES_PASSWORD after volume init
-          if [ ! -f .env ]; then
-            APP_KEY_VAL="${APP_KEY:-}"
-            if [ -z "$APP_KEY_VAL" ]; then
-              APP_KEY_VAL="base64:$(openssl rand -base64 32 | tr -d '\n')"
-            fi
-            PG_PASS="${POSTGRES_PASSWORD:-}"
-            if [ -z "$PG_PASS" ]; then
-              PG_PASS="$(openssl rand -hex 16)"
-            fi
-            cat > .env <<EOF
-          APP_ENV=production
-          APP_DEBUG=false
-          APP_KEY=${APP_KEY_VAL}
-          APP_URL=${HTTPS_URL}
-          FRONTEND_URL=${HTTPS_URL}
-          POSTGRES_DB=gpa
-          POSTGRES_USER=gpa
-          POSTGRES_PASSWORD=${PG_PASS}
-          BACKEND_PORT=8080
-          DB_QUEUE_RETRY_AFTER=120
-          CORS_ORIGINS=*
-          SANCTUM_STATEFUL_DOMAINS=${HTTPS_HOST},${HOST_IP},localhost,127.0.0.1
-          EOF
-            sed -i 's/^[[:space:]]*//' .env
-            chmod 600 .env
-            echo "wrote compose .env"
-          else
-            grep -q '^POSTGRES_DB=' .env || echo 'POSTGRES_DB=gpa' >> .env
-            grep -q '^POSTGRES_USER=' .env || echo 'POSTGRES_USER=gpa' >> .env
-            grep -q '^BACKEND_PORT=' .env || echo 'BACKEND_PORT=8080' >> .env
-            grep -q '^DB_QUEUE_RETRY_AFTER=' .env || echo 'DB_QUEUE_RETRY_AFTER=120' >> .env
-            # Prefer free HTTPS hostname (sslip.io) for APP_URL
-            if grep -qE '^APP_URL=http://' .env; then
-              sed -i "s|^APP_URL=.*|APP_URL=${HTTPS_URL}|" .env
-              sed -i "s|^FRONTEND_URL=.*|FRONTEND_URL=${HTTPS_URL}|" .env
-            fi
-            if ! grep -qE '^POSTGRES_PASSWORD=.+' .env; then
-              PG_PASS="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
-              echo "POSTGRES_PASSWORD=${PG_PASS}" >> .env
-            fi
-            if ! grep -qE '^APP_KEY=base64:.+' .env; then
-              if [ -n "${APP_KEY:-}" ]; then
-                echo "APP_KEY=${APP_KEY}" >> .env
-              else
-                echo "APP_KEY=base64:$(openssl rand -base64 32 | tr -d '\n')" >> .env
-              fi
-            fi
-            echo "reusing existing compose .env"
+          if "${compose[@]}" ps --status running --services | grep -qx db; then
+            stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+            backup="backups/igroscan-${stamp}.dump"
+            umask 077
+            "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup"
+            test -s "$backup"
+            "${compose[@]}" exec -T db sh -c 'pg_restore --list' < "$backup" >/dev/null
           fi
 
-          # Empty shell vars from CI secrets must not override /opt/gpa/.env
-          if [ -z "${APP_KEY:-}" ]; then unset APP_KEY || true; fi
-          if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD || true; fi
+          "${compose[@]}" up -d --build --remove-orphans
+          "${compose[@]}" ps
 
-          docker compose up -d --build --remove-orphans
-          docker compose ps
-
-          for service in backend scheduler queue-worker radar-bot; do
-            docker compose ps --status running --services | grep -qx "$service" || {
+          for service in backend scheduler queue-worker frontend caddy; do
+            "${compose[@]}" ps --status running --services | grep -qx "$service" || {
               echo "service is not running: $service" >&2
               exit 1
             }
           done
-          docker compose exec -T backend php artisan schedule:list
-
-          # Wait for API via Caddy edge
-          echo "waiting for /api/health..."
-          for i in $(seq 1 50); do
-            if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1; then
-              curl -fsS http://127.0.0.1/api/health
-              echo
-              # Best-effort HTTPS (cert may take a few seconds on first boot)
-              curl -fsSk "${HTTPS_URL}/api/health" >/dev/null 2>&1 && echo "https ok: ${HTTPS_URL}" || echo "https pending: ${HTTPS_URL}"
-              docker logs --tail 15 gpa-tunnel-1 2>&1 | grep -oE 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' | tail -1 || true
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "health check failed; logs:" >&2
-          docker logs --tail 40 gpa-backend-1 >&2 || true
-          docker logs --tail 30 gpa-caddy-1 >&2 || true
-          docker logs --tail 20 gpa-frontend-1 >&2 || true
-          exit 1
+          "${compose[@]}" exec -T backend php artisan schedule:list
           EOS
-      - name: Health (public)
+      - name: HTTPS health check
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/gpa' }}
         run: |
-          for i in $(seq 1 30); do
-            if curl -fsS "http://${DEPLOY_HOST}/api/health"; then
-              echo
-              curl -fsSk "https://gpa.${DEPLOY_HOST}.sslip.io/api/health" && echo || true
-              exit 0
-            fi
-            sleep 4
-          done
-          exit 1
+          APP_DOMAIN="$(ssh -p "$DEPLOY_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "awk -F= '\$1 == \"APP_DOMAIN\" { print substr(\$0, index(\$0, \"=\") + 1) }' '${DEPLOY_PATH}/deploy/.env.production'")"
+          test -n "$APP_DOMAIN"
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            "https://${APP_DOMAIN}/api/health"
