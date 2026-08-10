@@ -654,6 +654,9 @@ export default function App() {
                   <div className="profile-menu" role="menu">
                     <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>{tr('Кабинет', 'Dashboard')}</button>
                     <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>{tr('Настройки', 'Settings')}</button>
+                    {user?.can_access_admin && (
+                      <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('admin') }}>{tr('Админка', 'Admin')}</button>
+                    )}
                     <div className="profile-menu-sep" />
                     <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>{tr('Выйти', 'Sign out')}</button>
                   </div>
@@ -686,11 +689,6 @@ export default function App() {
               <IconRadar size={16} /> {tr('Радар', 'Radar')}
             </button>
             <LanguageCurrencyControls />
-            {user?.can_access_admin && (
-              <button type="button" className="btn ghost sm" onClick={() => setView('admin')}>
-                Admin
-              </button>
-            )}
             {loggedIn ? (
               <div className="profile-cluster">
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
@@ -706,6 +704,9 @@ export default function App() {
                     <div className="profile-menu" role="menu">
                       <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('cabinet') }}>{tr('Кабинет', 'Dashboard')}</button>
                       <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('account') }}>{tr('Настройки', 'Settings')}</button>
+                      {user?.can_access_admin && (
+                        <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); setView('admin') }}>{tr('Админка', 'Admin')}</button>
+                      )}
                       <div className="profile-menu-sep" />
                       <button type="button" role="menuitem" className="danger" onClick={() => { setProfileOpen(false); logout() }}>{tr('Выйти', 'Sign out')}</button>
                     </div>

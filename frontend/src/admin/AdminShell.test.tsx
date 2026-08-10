@@ -70,6 +70,7 @@ describe('AdminShell role navigation', () => {
     render(<AdminShell currentUser={owner} />)
 
     expect(screen.getByRole('tab', { name: 'Команда' })).toBeInTheDocument()
+    expect(screen.getByText('Владелец сайта')).toBeInTheDocument()
   })
 
   it('supports arrow-key navigation between real tabs', async () => {

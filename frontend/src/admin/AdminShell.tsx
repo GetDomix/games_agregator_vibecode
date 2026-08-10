@@ -61,10 +61,10 @@ export function AdminShell({ currentUser }: { currentUser: User }) {
         <div>
           <p className="eyebrow">Операционный радар</p>
           <h2>Пульт Игроскана</h2>
-          <p className="muted">Контроль каталога, пользователей и фоновых процессов в одном защищённом контуре.</p>
+          <p className="muted">Контроль каталога, пользователей и фоновых процессов в защищённой админ-панели.</p>
         </div>
         <span className={`admin-role-chip ${currentUser.admin_role}`}>
-          {currentUser.admin_role === 'owner' ? 'Владелец контура' : 'Администратор'}
+          {currentUser.admin_role === 'owner' ? 'Владелец сайта' : 'Администратор'}
         </span>
       </header>
 
