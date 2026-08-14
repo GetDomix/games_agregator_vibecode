@@ -8,8 +8,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config.py api_client.py card_renderer.py ui.py main.py ./
 COPY api ./api
 COPY handlers ./handlers
+COPY keyboards ./keyboards
 COPY services ./services
 COPY states ./states
+COPY texts ./texts
 COPY utils ./utils
 COPY assets ./assets
 CMD ["python", "main.py"]

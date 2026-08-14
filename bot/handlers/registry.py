@@ -2,7 +2,22 @@ from aiogram import Dispatcher, F
 from aiogram.filters import Command, CommandStart
 
 from states import WatchSetup
-from ui import MENU_ALERTS, MENU_FAVORITES, MENU_HELP, MENU_HOME, MENU_SEARCH
+from keyboards import MENU_ALERTS, MENU_FAVORITES, MENU_HELP, MENU_HOME, MENU_SEARCH
+from .alerts import handlers as alert_handlers
+from .cards import show_card
+from .commands import handlers as command_handlers
+from .menu import handlers as menu_handlers
+from .menu import show_main_menu
+from .search import handlers as search_handlers
+from .watchlist import handlers as watchlist_handlers
+
+
+def make_handlers(api, show_card_fn=None):
+    show_card_fn = show_card_fn or show_card
+    commands = command_handlers(api, show_main_menu)
+    search = search_handlers(api, show_card_fn)
+    watchlist = watchlist_handlers(api, show_card_fn)
+    return {**commands, **search, **watchlist, **alert_handlers(api), **menu_handlers(api, commands["cmd_search"])}
 
 
 def register_handlers(dispatcher: Dispatcher, handlers: dict) -> None:
