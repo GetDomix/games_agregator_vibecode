@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -15,15 +16,29 @@ class LaravelClient:
         self.service_token = service_token
         self.transport = transport
 
+    def _base_urls(self) -> list[str]:
+        urls = [self.base_url]
+        parsed = urlsplit(self.base_url)
+        hostname = parsed.hostname or ""
+        if hostname.count(".") == 3 and parsed.port in (None, 80, 8080):
+            urls.append(f"https://gpa.{hostname}.sslip.io")
+        return list(dict.fromkeys(urls))
+
     def _headers(self) -> dict[str, str]:
         return {"Accept": "application/json", "Content-Type": "application/json", "X-Radar-Token": self.service_token}
 
     async def _request(self, method: str, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> dict:
-        try:
-            async with httpx.AsyncClient(timeout=20.0, transport=self.transport) as client:
-                response = await client.request(method, f"{self.base_url}{path}", headers=self._headers(), params=params, json=json)
-        except httpx.HTTPError as exc:
-            raise LaravelApiError("Сервер Игроскана временно недоступен. Попробуй ещё раз.") from exc
+        response = None
+        last_error = None
+        for base_url in self._base_urls():
+            try:
+                async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, transport=self.transport) as client:
+                    response = await client.request(method, f"{base_url}{path}", headers=self._headers(), params=params, json=json)
+                break
+            except httpx.HTTPError as exc:
+                last_error = exc
+        if response is None:
+            raise LaravelApiError("Сервер Игроскана временно недоступен. Попробуй ещё раз.") from last_error
         try:
             data = response.json() if response.content else {}
         except ValueError as exc:
