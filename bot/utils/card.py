@@ -4,7 +4,7 @@ from aiogram.types import BufferedInputFile, Message
 from api import LaravelApiError
 from keyboards.cards import card_keyboard
 from misc import api
-from services import render_card
+from card_renderer import render_card
 from ui import format_card_details
 from utils.telegram import actor
 
