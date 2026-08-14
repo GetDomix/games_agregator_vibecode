@@ -57,16 +57,29 @@ class Favorite extends Model
 
     public function toApiArray(): array
     {
+        $hasAlert = $this->relationLoaded('alert') && $this->alert !== null;
+        $isTargetAlert = $hasAlert && $this->alert->condition_type === 'target_price';
+        $hasValidTargetAlert = $isTargetAlert && $this->alert->target_value !== null;
+        $legacyTarget = $hasAlert ? ($hasValidTargetAlert ? (float) $this->alert->target_value : null) : $this->target_price_rub;
         return [
             'id' => $this->id,
             'appid' => (int) $this->appid,
             'game_name' => $this->game_name,
             'header_image' => $this->header_image,
             'notes' => $this->notes,
-            'target_price_rub' => $this->target_price_rub,
+            'target_price_rub' => $legacyTarget,
+            'suggested_target' => $this->getAttribute('suggested_target'),
+            'observed_lows' => $this->getAttribute('observed_lows') ?? [],
             'last_steam_price_rub' => $this->last_steam_price_rub,
-            'price_below_target' => $this->priceBelowTarget(),
-            'alert' => $this->relationLoaded('alert') && $this->alert ? ['condition_type' => $this->alert->condition_type, 'target_value' => $this->alert->target_value, 'status' => $this->alert->status, 'scopes' => $this->alert->relationLoaded('scopes') ? $this->alert->scopes->map(fn ($s) => ['source' => $s->source, 'offer_kind' => $s->offer_kind])->values() : []] : null,
+            'price_below_target' => $hasAlert
+                ? ($hasValidTargetAlert && $this->alert->status === 'triggered')
+                : $this->priceBelowTarget(),
+            'alert' => $hasAlert ? [
+                'condition_type' => $this->alert->condition_type,
+                'target_value' => $this->alert->target_value,
+                'status' => $this->alert->status,
+                'scopes' => $this->alert->relationLoaded('scopes') ? $this->alert->scopes->map(fn ($s) => ['source' => $s->source, 'offer_kind' => $s->offer_kind])->values() : [],
+            ] : null,
             'release_status' => $this->relationLoaded('game') ? $this->game?->release_status : null,
             'freshness' => $this->relationLoaded('game') && $this->game?->relationLoaded('sourceStates')
                 ? $this->game->sourceStates->map(fn ($state) => [

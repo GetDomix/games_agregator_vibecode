@@ -46,7 +46,7 @@ ANNOUNCED_STEAM_REFRESH_HOURS=24
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python main.py
+PYTHONPATH=src python -m igroscan_bot
 ```
 
 Расписание цен и проверку алертов запускает только Laravel scheduler. Бот — второй интерфейс того же аккаунта: ищет игры через Laravel, показывает карточку цен и управляет общим избранным/alert-ами. Он не хранит отдельную копию данных, не содержит scheduler и не запускает общий скан. `RADAR_SERVICE_TOKEN` используется только для аутентификации внутренних bot API.

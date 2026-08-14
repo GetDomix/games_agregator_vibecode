@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\CurrencyController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\GamePriceController;
+use App\Http\Controllers\Api\GamePriceHistoryController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\PlatiRouletteController;
@@ -41,6 +42,9 @@ Route::get('/prices', [PriceController::class, 'prices'])
 Route::get('/games/{appid}/prices', [GamePriceController::class, 'show'])
     ->whereNumber('appid')
     ->middleware('throttle:api-read');
+Route::get('/games/{appid}/price-history', [GamePriceHistoryController::class, 'show'])
+    ->whereNumber('appid')
+    ->middleware('throttle:api-read');
 Route::get('/ads/config', [AdsController::class, 'config']);
 Route::get('/trends/popular', [DashboardController::class, 'popular'])
     ->middleware('throttle:api-read');
@@ -59,6 +63,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/me/dashboard', [DashboardController::class, 'me']);
     Route::get('/me/history', [HistoryController::class, 'index']);
+    Route::get('/me/games/{appid}/price-history', [GamePriceHistoryController::class, 'authenticated'])
+        ->whereNumber('appid')
+        ->middleware('throttle:api-read');
     Route::delete('/me/history', [HistoryController::class, 'destroyAll']);
     Route::delete('/me/history/{id}', [HistoryController::class, 'destroy']);
 

@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CurrentGamePrice;
-use App\Services\SteamNewReleasesService;
-use App\Services\SteamWeeklyDealsService;
+use App\Services\Pricing\SteamNewReleasesService;
+use App\Services\Pricing\SteamWeeklyDealsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

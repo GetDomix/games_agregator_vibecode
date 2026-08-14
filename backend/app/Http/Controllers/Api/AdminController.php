@@ -8,7 +8,7 @@ use App\Models\GameSourceState;
 use App\Services\Admin\AdminAuditService;
 use App\Services\Admin\AdminOverviewService;
 use App\Services\Admin\AdminUserDirectoryService;
-use App\Services\GameRefreshRequestService;
+use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;

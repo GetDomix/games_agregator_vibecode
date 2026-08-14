@@ -30,6 +30,10 @@ return [
     ],
     'display_currencies' => ['RUB', 'USD', 'EUR', 'KZT', 'TRY'],
     'price_refresh_backoff_minutes' => [1, 5, 15, 30, 60],
+    // Positive catalog ids are stable; negative lookups are retried sooner because
+    // marketplace aliases/cards can appear after a Steam rename.
+    'catalog_id_ttl_days' => max(1, (int) env('CATALOG_ID_TTL_DAYS', 14)),
+    'catalog_negative_ttl_hours' => max(1, (int) env('CATALOG_NEGATIVE_TTL_HOURS', 1)),
     // Comma-separated server-managed owner emails
     'admin_emails' => env('ADMIN_EMAILS', ''),
     'brand_name' => env('BRAND_NAME', 'Игроскан'),

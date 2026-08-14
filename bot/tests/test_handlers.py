@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.enums import ChatType
 from aiogram.types import CallbackQuery, Message
 
-from api_client import LaravelApiError
-from main import WatchSetup, make_handlers, session, show_card
-from ui import MENU_FAVORITES, MENU_HOME, MENU_SEARCH
+from igroscan_bot.api.client import LaravelApiError
+from igroscan_bot.main import WatchSetup, make_handlers, session, show_card
+from igroscan_bot.presentation.ui import MENU_FAVORITES, MENU_HOME, MENU_SEARCH
 
 
 def make_message(*, text: str = "", chat_type: ChatType = ChatType.PRIVATE) -> Message:
@@ -171,7 +171,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
             scopes=[["steam", "official"], ["plati", "key"]],
         )
 
-        with patch("main.show_card", new_callable=AsyncMock) as show_card:
+        with patch("igroscan_bot.main.show_card", new_callable=AsyncMock) as show_card:
             await make_handlers(api)["target"](message, state)
 
         api.save_favorite.assert_awaited_once_with(
@@ -185,6 +185,19 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
         )
         state.clear.assert_awaited_once_with()
         show_card.assert_awaited_once_with(api, message, 12, 70)
+
+    async def test_dash_saves_plain_favorite_without_alert_payload(self):
+        api = MagicMock()
+        api.save_favorite = AsyncMock(return_value={"appid": 70})
+        message = make_message(text="-")
+        state = make_state(game={"appid": 70, "name": "Half-Life", "header_image": None}, scopes=[["steam", "official"]])
+
+        with patch("igroscan_bot.main.show_card", new_callable=AsyncMock):
+            await make_handlers(api)["target"](message, state)
+
+        api.save_favorite.assert_awaited_once_with(12, {"appid": 70, "name": "Half-Life", "header_image": None}, None, [{"source": "steam", "offer_kind": "official"}])
+        self.assertIn("без создания или изменения ценового сигнала", message.answer.await_args.args[0])
+        self.assertNotIn("Отслеживаем", message.answer.await_args.args[0])
 
     async def test_rearm_reports_api_error_as_callback_alert(self):
         api = MagicMock()

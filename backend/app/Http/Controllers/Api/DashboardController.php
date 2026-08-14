@@ -4,13 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Favorite;
+use App\Models\FavoriteAlert;
 use App\Models\SearchHistory;
+use App\Services\Alerts\SuggestedAlertTargetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function me(Request $request): JsonResponse
+    public function me(Request $request, SuggestedAlertTargetService $suggestions): JsonResponse
     {
         $user = $request->user();
         $recent = SearchHistory::query()
@@ -24,23 +26,49 @@ class DashboardController extends Controller
             ->where('user_id', $user->id)
             ->orderByDesc('updated_at')
             ->limit(12)
+            ->with(['alert.scopes', 'game.sourceStates'])
             ->get();
+        $suggestions->attach($favs);
         $favItems = $favs->map->toApiArray()->values();
         $favCount = Favorite::query()->where('user_id', $user->id)->count();
         $weekAgo = now()->subDays(7);
         $searchesTotal = SearchHistory::query()->where('user_id', $user->id)->count();
         $searchesWeek = SearchHistory::query()->where('user_id', $user->id)->where('created_at', '>=', $weekAgo)->count();
-        $priceHits = $favItems->filter(fn ($i) => $i['price_below_target'])->values();
-        $alerts = $priceHits->count();
+        $alertItems = FavoriteAlert::query()
+            ->whereHas('favorite', fn ($query) => $query->where('user_id', $user->id))
+            ->with(['favorite', 'event'])
+            ->latest('updated_at')
+            ->get();
+        $priceHits = $alertItems
+            ->filter(fn (FavoriteAlert $alert) => $alert->status === 'triggered' && $alert->event !== null)
+            ->map(function (FavoriteAlert $alert) {
+                $favorite = $alert->favorite;
+                $event = $alert->event;
+
+                return [
+                    'id' => $favorite->id,
+                    'appid' => (int) $favorite->appid,
+                    'game_name' => $favorite->game_name,
+                    'header_image' => $favorite->header_image,
+                    'condition_type' => $alert->condition_type,
+                    'target_value' => $alert->target_value,
+                    'target_price_rub' => $alert->condition_type === 'target_price' ? $alert->target_value : null,
+                    'hit_price_rub' => $event->offer_price_rub,
+                    'hit_source' => $event->source,
+                    'hit_offer_kind' => $event->offer_kind,
+                ];
+            })
+            ->values();
+        $alerts = $alertItems->count();
 
         $ctas = [];
         if ($favCount === 0) {
-            $ctas[] = 'Добавь игру в избранное и поставь целевую цену — вернёмся, когда станет дешевле.';
+            $ctas[] = 'Добавь игру в избранное и настрой ценовой сигнал — вернёмся, когда он сработает.';
         } elseif ($favCount < 3) {
             $ctas[] = 'Ещё '.(3 - $favCount).' в избранном — и кабинет заработает на полную.';
         }
-        if ($alerts) {
-            $ctas[] = "{$alerts} игр(а) уже на цели или ниже — загляни в «На цели».";
+        if ($priceHits->isNotEmpty()) {
+            $ctas[] = $priceHits->count().' ценовых сигналов уже сработало — загляни в «Сигналы».';
         }
         if ($ctas === []) {
             $ctas[] = 'Сравни цены перед покупкой — Steam, Plati и GGsel в одном окне.';
@@ -73,6 +101,7 @@ class DashboardController extends Controller
             ->get()
             ->map(function ($r) {
                 $appid = (int) $r->appid;
+
                 return [
                     'query' => $r->query,
                     'count' => (int) $r->cnt,
@@ -92,6 +121,7 @@ class DashboardController extends Controller
             ->get()
             ->map(function ($r) {
                 $appid = $r->appid ? (int) $r->appid : null;
+
                 return [
                     'query' => $r->query,
                     'count' => (int) $r->cnt,

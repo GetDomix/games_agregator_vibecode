@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Game;
-use App\Services\GameRefreshRequestService;
+use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Console\Command;
 
 /**

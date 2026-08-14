@@ -50,7 +50,7 @@ Production Compose запускает отдельные процессы `backe
 - Username (проверить в BotFather): **`@igroscan_radar_bot`**
 - Лого: `bot/assets/bot_logo.jpg`
 - Расписание: `php artisan schedule:work` в отдельном Compose-сервисе
-- Бот: `cd bot && pip install -r requirements.txt && python main.py`
+- Бот: `cd bot && pip install -r requirements.txt && PYTHONPATH=src python -m igroscan_bot`
 
 ## Проверки и выпуск
 

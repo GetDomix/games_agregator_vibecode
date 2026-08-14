@@ -7,13 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GamePriceObservation extends Model
 {
-    public const RETENTION_DAYS = 90;
-
     protected $fillable = [
         'game_id',
         'source',
         'offer_kind',
         'min_price_rub',
+        'discount_percent',
         'offer_title',
         'offer_url',
         'offer_sales',
@@ -24,6 +23,7 @@ class GamePriceObservation extends Model
     {
         return [
             'min_price_rub' => 'decimal:2',
+            'discount_percent' => 'integer',
             'offer_sales' => 'integer',
             'observed_at' => 'datetime',
         ];

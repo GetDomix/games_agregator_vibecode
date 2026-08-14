@@ -4,22 +4,23 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Favorite;
-use App\Services\FavoriteAlertSettingsService;
-use App\Services\GameRefreshRequestService;
+use App\Services\Alerts\FavoriteAlertSettingsService;
+use App\Services\Alerts\SuggestedAlertTargetService;
+use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class FavoriteController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, SuggestedAlertTargetService $suggestions): JsonResponse
     {
-        $items = Favorite::query()
+        $favorites = Favorite::query()
             ->where('user_id', $request->user()->id)
             ->orderByDesc('updated_at')
-            ->with(['alert.scopes', 'game.sourceStates'])->get()
-            ->map->toApiArray()
-            ->values();
+            ->with(['alert.scopes', 'game.sourceStates'])->get();
+        $suggestions->attach($favorites);
+        $items = $favorites->map->toApiArray()->values();
         $hits = $items->filter(fn ($i) => $i['price_below_target'])->values();
 
         return response()->json([
@@ -38,7 +39,7 @@ class FavoriteController extends Controller
             'notes' => ['nullable', 'string', 'max:500'],
             'target_price_rub' => ['nullable', 'numeric', 'min:0'],
             'last_steam_price_rub' => ['prohibited'],
-            'alert' => ['nullable', 'array'], 'alert.target_value' => ['nullable', 'numeric', 'min:0'], 'alert.condition_type' => ['nullable', 'in:target_price'], 'alert.scopes' => ['nullable', 'array', 'min:1'], 'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'], 'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
+            'alert' => ['sometimes', 'array'], 'alert.target_value' => ['nullable', 'numeric', 'min:0'], 'alert.condition_type' => ['nullable', 'in:target_price,discount_percent,new_low'], 'alert.scopes' => ['nullable', 'array', 'min:1'], 'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'], 'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
         ]);
         $name = trim($data['game_name']);
         if ($name === '') {
@@ -53,6 +54,17 @@ class FavoriteController extends Controller
         if (! $fav->exists && Favorite::query()->where('user_id', $request->user()->id)->count() >= 200) {
             return response()->json(['detail' => 'Лимит избранного: 200 игр'], 400);
         }
+        $shouldSaveAlert = array_key_exists('alert', $data) || (array_key_exists('target_price_rub', $data) && $data['target_price_rub'] !== null);
+        $alertData = $data['alert'] ?? [
+            'target_value' => array_key_exists('target_price_rub', $data) ? $data['target_price_rub'] : $fav->target_price_rub,
+        ];
+        if ($shouldSaveAlert) {
+            try {
+                $alerts->assertValid($alertData);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['detail' => $e->getMessage()], 422);
+            }
+        }
         $fav->fill([
             'game_name' => mb_substr($name, 0, 200),
             'header_image' => $data['header_image'] ?? $fav->header_image,
@@ -61,12 +73,8 @@ class FavoriteController extends Controller
         ]);
         $fav->save();
         $refresh->linkFavorite($fav);
-        if ($isNew || ! $fav->alert()->exists() || array_key_exists('alert', $data) || array_key_exists('target_price_rub', $data)) {
-            try {
-                $alerts->save($fav, $data['alert'] ?? ['target_value' => $fav->target_price_rub]);
-            } catch (\InvalidArgumentException $e) {
-                return response()->json(['detail' => $e->getMessage()], 422);
-            }
+        if ($shouldSaveAlert) {
+            $alerts->save($fav, $alertData);
         }
         $fav->load(['alert.scopes', 'game.sourceStates']);
 
@@ -86,16 +94,29 @@ class FavoriteController extends Controller
             'target_price_rub' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'last_steam_price_rub' => ['prohibited'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:500'],
-            'alert' => ['sometimes', 'array'], 'alert.target_value' => ['nullable', 'numeric', 'min:0'], 'alert.condition_type' => ['nullable', 'in:target_price'], 'alert.scopes' => ['nullable', 'array', 'min:1'], 'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'], 'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
+            'alert' => ['sometimes', 'array'], 'alert.target_value' => ['nullable', 'numeric', 'min:0'], 'alert.condition_type' => ['nullable', 'in:target_price,discount_percent,new_low'], 'alert.scopes' => ['nullable', 'array', 'min:1'], 'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'], 'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
         ]);
-        $fav->fill(collect($data)->except('alert')->all())->save();
-        try {
-            if (isset($data['alert'])) {
-                $alerts->save($fav, $data['alert']);
+        $shouldSaveAlert = array_key_exists('alert', $data) || (array_key_exists('target_price_rub', $data) && $data['target_price_rub'] !== null);
+        $alertData = $data['alert'] ?? [
+            'target_value' => array_key_exists('target_price_rub', $data) ? $data['target_price_rub'] : $fav->target_price_rub,
+        ];
+        if ($shouldSaveAlert) {
+            try {
+                $alerts->assertValid($alertData);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['detail' => $e->getMessage()], 422);
             }
-        } catch (\InvalidArgumentException $e) {
-            return response()->json(['detail' => $e->getMessage()], 422);
-        } $fav->load(['alert.scopes', 'game.sourceStates']);
+        }
+        $fav->fill(collect($data)->except('alert')->all())->save();
+        if ($shouldSaveAlert) {
+            $alerts->save($fav, $alertData);
+        } elseif (array_key_exists('target_price_rub', $data) && $data['target_price_rub'] === null) {
+            $currentAlert = $fav->alert()->first();
+            if ($currentAlert?->condition_type === 'target_price') {
+                $alerts->remove($fav);
+            }
+        }
+        $fav->load(['alert.scopes', 'game.sourceStates']);
 
         return response()->json($fav->toApiArray());
     }
@@ -150,7 +171,7 @@ class FavoriteController extends Controller
         $refreshed = [];
         foreach ($rows as $fav) {
             $game = $refresh->linkFavorite($fav);
-            $item = $fav->fresh()->toApiArray();
+            $item = $fav->fresh()->load(['alert.scopes', 'game.sourceStates'])->toApiArray();
             $refreshed[] = [
                 'appid' => $fav->appid,
                 'game_name' => $fav->game_name,

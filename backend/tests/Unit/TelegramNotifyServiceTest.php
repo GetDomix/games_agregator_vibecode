@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Services\TelegramNotifyService;
+use App\Services\Telegram\TelegramNotifyService;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;

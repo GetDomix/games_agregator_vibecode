@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalIdentity;
 use App\Models\TelegramLinkCode;
 use App\Models\User;
-use App\Services\TelegramAccountMergeService;
-use App\Services\TelegramOidcService;
+use App\Services\Telegram\TelegramAccountMergeService;
+use App\Services\Telegram\TelegramIdentityLock;
+use App\Services\Telegram\TelegramOidcService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,14 +127,16 @@ class TelegramController extends Controller
     {
         $u = $request->user();
         DB::transaction(function () use ($u): void {
-            ExternalIdentity::query()->where('user_id', $u->id)->where('provider', 'telegram')->delete();
-            TelegramLinkCode::query()->where('user_id', $u->id)->whereNull('used_at')->delete();
+            $u = User::query()->lockForUpdate()->findOrFail($u->id);
+            $identity = ExternalIdentity::query()->where('user_id', $u->id)->where('provider', 'telegram')->lockForUpdate()->first();
             $u->forceFill([
                 'telegram_chat_id' => null,
                 'telegram_username' => null,
                 'telegram_linked_at' => null,
                 'radar_enabled' => false,
             ])->save();
+            $identity?->delete();
+            TelegramLinkCode::query()->where('user_id', $u->id)->whereNull('used_at')->delete();
         });
 
         return response()->json(['linked' => false, 'identity_linked' => false]);
@@ -143,7 +146,7 @@ class TelegramController extends Controller
      * Internal: bot binds chat_id using link code.
      * Header: X-Radar-Token: RADAR_SERVICE_TOKEN
      */
-    public function bind(Request $request): JsonResponse
+    public function bind(Request $request, TelegramIdentityLock $identityLock): JsonResponse
     {
         $this->assertServiceToken($request);
         $data = $request->validate([
@@ -158,46 +161,41 @@ class TelegramController extends Controller
         }
 
         $code = strtoupper(trim($data['code']));
-        $row = TelegramLinkCode::query()
-            ->where('code', $code)
-            ->whereNull('used_at')
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (! $row) {
+        try {
+            $user = DB::transaction(function () use ($code, $data, $identityLock): User {
+                // Subject mutex is first: a failing bind must roll back without
+                // consuming the link code or racing another identity creator.
+                $identityLock->acquire($data['telegram_user_id']);
+                $row = TelegramLinkCode::query()
+                    ->where('code', $code)
+                    ->whereNull('used_at')
+                    ->where('expires_at', '>', now())
+                    ->lockForUpdate()
+                    ->first();
+                if (! $row) {
+                    throw new \OutOfBoundsException('Код недействителен или просрочен');
+                }
+                $user = User::query()->lockForUpdate()->findOrFail($row->user_id);
+                if (User::query()->where('telegram_chat_id', $data['chat_id'])->whereKeyNot($user->id)->exists()) {
+                    throw new \DomainException('Этот Telegram уже привязан к другому аккаунту');
+                }
+                $identity = ExternalIdentity::query()->where('provider', 'telegram')->where('provider_subject', $data['telegram_user_id'])->lockForUpdate()->first();
+                if ($identity && $identity->user_id !== $user->id) {
+                    throw new \DomainException('Этот Telegram уже привязан к другому аккаунту');
+                }
+                $user->forceFill(['telegram_chat_id' => (string) $data['chat_id'], 'telegram_username' => $data['telegram_username'] ?? null, 'telegram_linked_at' => now(), 'radar_enabled' => true])->save();
+                $identity
+                    ? $identity->update(['profile' => ['username' => $data['telegram_username'] ?? null]])
+                    : ExternalIdentity::query()->create(['provider' => 'telegram', 'provider_subject' => $data['telegram_user_id'], 'user_id' => $user->id, 'profile' => ['username' => $data['telegram_username'] ?? null]]);
+                $row->used_at = now();
+                $row->save();
+                return $user;
+            });
+        } catch (\OutOfBoundsException) {
             return response()->json(['detail' => 'Код недействителен или просрочен'], 404);
+        } catch (\DomainException $e) {
+            return response()->json(['detail' => $e->getMessage()], 409);
         }
-
-        $user = $row->user;
-        $otherUser = User::query()
-            ->where('telegram_chat_id', $data['chat_id'])
-            ->whereKeyNot($user->id)
-            ->exists();
-
-        if ($otherUser) {
-            return response()->json(['detail' => 'Этот Telegram уже привязан к другому аккаунту'], 409);
-        }
-
-        $identity = ExternalIdentity::query()
-            ->where('provider', 'telegram')
-            ->where('provider_subject', $data['telegram_user_id'])
-            ->first();
-        if ($identity && $identity->user_id !== $user->id) {
-            return response()->json(['detail' => 'Этот Telegram уже привязан к другому аккаунту'], 409);
-        }
-
-        $user->telegram_chat_id = (string) $data['chat_id'];
-        $user->telegram_username = $data['telegram_username'] ?? null;
-        $user->telegram_linked_at = now();
-        $user->radar_enabled = true;
-        $user->save();
-        ExternalIdentity::query()->updateOrCreate(
-            ['provider' => 'telegram', 'provider_subject' => $data['telegram_user_id']],
-            ['user_id' => $user->id, 'profile' => ['username' => $data['telegram_username'] ?? null]]
-        );
-
-        $row->used_at = now();
-        $row->save();
 
         return response()->json([
             'ok' => true,

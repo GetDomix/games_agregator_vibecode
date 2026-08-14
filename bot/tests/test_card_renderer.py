@@ -1,7 +1,7 @@
 import unittest
 from io import BytesIO
 
-from card_renderer import HEIGHT, PALETTE, WIDTH, _price_tone, render_card
+from igroscan_bot.presentation.card_renderer import HEIGHT, PALETTE, WIDTH, _price_tone, render_card
 from PIL import Image
 
 

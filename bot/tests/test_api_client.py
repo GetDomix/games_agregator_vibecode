@@ -3,7 +3,7 @@ import unittest
 
 import httpx
 
-from api_client import LaravelApiError, LaravelClient
+from igroscan_bot.api.client import LaravelApiError, LaravelClient
 
 
 class LaravelClientTest(unittest.IsolatedAsyncioTestCase):
@@ -72,6 +72,16 @@ class LaravelClientTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result, {"appid": 70})
+
+    async def test_save_plain_favorite_omits_alert_and_null_target(self):
+        async def handler(request: httpx.Request):
+            payload = json.loads(request.content)
+            self.assertNotIn("alert", payload)
+            self.assertNotIn("target_price_rub", payload)
+            return httpx.Response(200, json={"appid": 70})
+
+        client = LaravelClient("https://api.test", "secret", httpx.MockTransport(handler))
+        await client.save_favorite(12, {"appid": 70, "name": "Half-Life"}, None, [{"source": "steam", "offer_kind": "official"}])
 
     async def test_image_uses_injected_transport(self):
         requests = []

@@ -8,9 +8,9 @@ use App\Models\Game;
 use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
 use App\Models\User;
-use App\Services\AggregatorService;
-use App\Services\GameRefreshRequestService;
-use App\Services\StoredPriceSearchService;
+use App\Services\Catalog\AggregatorService;
+use App\Services\Catalog\StoredPriceSearchService;
+use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -28,14 +28,42 @@ class PriceController extends Controller
         if ($q === '') {
             return response()->json(['detail' => 'Пустой поисковый запрос'], 400);
         }
-        $candidates = $this->stored->candidates($q);
+        $suggestionLimit = 20;
+        $candidates = $this->stored->candidates($q, $suggestionLimit);
         $discovery = false;
-        if ($candidates === []) {
-            $candidates = $this->aggregator->searchCandidates($q);
+        if ($candidates === [] || ($request->boolean('discover') && count($candidates) < $suggestionLimit)) {
+            $discovered = $this->aggregator->searchCandidates($q, $suggestionLimit);
+            $candidates = $this->mergeSearchCandidates($candidates, $discovered, $suggestionLimit);
             $discovery = true;
         }
 
         return response()->json(['query' => $q, 'candidates' => $candidates, 'meta' => ['discovery_used' => $discovery]]);
+    }
+
+    private function mergeSearchCandidates(array $stored, array $discovered, int $limit): array
+    {
+        $merged = [];
+        foreach ($stored as $candidate) {
+            $merged[(int) $candidate['appid']] = $candidate;
+        }
+        foreach ($discovered as $candidate) {
+            $appid = (int) $candidate['appid'];
+            if (! isset($merged[$appid])) {
+                $merged[$appid] = $candidate;
+                continue;
+            }
+
+            $known = $merged[$appid];
+            // Store search owns the live price fields; the canonical catalog owns
+            // durable release/type metadata and its best full-size artwork.
+            $merged[$appid] = array_replace($known, $candidate, [
+                'release_status' => $known['release_status'] ?? $candidate['release_status'] ?? null,
+                'candidate_kind' => $known['candidate_kind'] ?? $candidate['candidate_kind'] ?? 'game',
+                'header_image' => $known['header_image'] ?? $candidate['header_image'] ?? null,
+            ]);
+        }
+
+        return array_slice(array_values($merged), 0, $limit);
     }
 
     public function prices(Request $request, GameRefreshRequestService $refresh): JsonResponse
@@ -59,39 +87,16 @@ class PriceController extends Controller
             $game = $refresh->requestUnknown($appid, $q);
             $queuedOnThisRequest = true;
         }
-        if (! $game) {
-            $candidate = $this->stored->candidates($q, 1)[0] ?? null;
-            if ($candidate) {
-                $game = Game::query()->where('steam_appid', $candidate['appid'])->first();
-                if (! $game && $force) {
-                    $game = Game::query()->firstOrCreate(
-                        ['steam_appid' => (int) $candidate['appid']],
-                        [
-                            'name' => mb_substr(trim($candidate['name'] ?? '') ?: "Steam app {$candidate['appid']}", 0, 200),
-                            'header_image' => $candidate['header_image'] ?? null,
-                        ]
-                    );
-                }
-            }
-        }
-        if (! $game) {
-            // Нет локальной игры: отдаём совпадения, чтобы пользователь выбрал из списка под поиском.
+        if (! $game && ! $appid) {
+            // A price request is intentionally exact: never turn an ambiguous name into
+            // a refresh, history row, or a silently selected game. Discovery remains /search.
             $matches = $this->stored->candidates($q);
-            if ($matches === []) {
-                $matches = array_slice($this->aggregator->searchCandidates($q), 0, 8);
-            }
-            if ($matches !== [] && $force) {
-                $top = $matches[0];
-                $game = Game::query()->firstOrCreate(
-                    ['steam_appid' => (int) $top['appid']],
-                    [
-                        'name' => mb_substr(trim($top['name'] ?? '') ?: "Steam app {$top['appid']}", 0, 200),
-                        'header_image' => $top['header_image'] ?? null,
-                    ]
-                );
+            $exact = $this->stored->exactCandidates($q);
+            if (count($exact) === 1) {
+                $game = Game::query()->where('steam_appid', $exact[0]['appid'])->first();
             }
             if (! $game) {
-                return response()->json(['query' => $q, 'steam' => null, 'candidates' => $matches, 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => [], 'refreshing' => false]);
+                return response()->json($this->ambiguousResult($q, $exact !== [] ? $exact : $matches));
             }
         }
 
@@ -177,5 +182,27 @@ class PriceController extends Controller
         }
 
         return $mins === [] ? null : min($mins);
+    }
+
+    private function ambiguousResult(string $query, array $candidates): array
+    {
+        $emptyMarket = fn (string $marketplace, string $label) => [
+            'marketplace' => $marketplace, 'label' => $label, 'total_offers' => 0,
+            'scanned_offers' => 0, 'by_kind' => [], 'error' => null,
+        ];
+
+        return [
+            'query' => $query,
+            'steam' => null,
+            'candidates' => $candidates,
+            'plati' => $emptyMarket('plati', 'Plati.Market'),
+            'ggsel' => $emptyMarket('ggsel', 'GGsel'),
+            'warnings' => [],
+            'saved_to_history' => false,
+            'is_favorite' => false,
+            'deal' => null,
+            'refreshing' => false,
+            'freshness' => [],
+        ];
     }
 }

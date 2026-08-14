@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\ExchangeRateService;
+use App\Services\Pricing\ExchangeRateService;
 use Illuminate\Http\JsonResponse;
 
 class CurrencyController extends Controller

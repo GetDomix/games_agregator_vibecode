@@ -10,11 +10,13 @@ use App\Models\Game;
 use App\Models\GameSourceState;
 use App\Models\SteamRegionalPrice;
 use App\Models\User;
-use App\Services\AlertEvaluationService;
-use App\Services\DueGameRefreshDispatcher;
-use App\Services\GamePriceRefreshService;
-use App\Services\PriceSourceRegistry;
+use App\Services\Alerts\AlertEvaluationService;
+use App\Services\Pricing\DueGameRefreshDispatcher;
+use App\Services\Pricing\GamePriceRefreshService;
+use App\Services\Pricing\PriceSourceRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use Mockery;
@@ -62,6 +64,71 @@ class CentralPriceRefreshTest extends TestCase
         $this->assertTrue($state->next_refresh_at->isBefore(now()->addMinutes(2)));
     }
 
+    public function test_partial_steam_region_transport_failure_preserves_the_last_complete_snapshot(): void
+    {
+        config(['gpa.steam_price_regions' => [
+            ['region' => 'RU', 'country' => 'ru', 'language' => 'russian', 'currency' => 'RUB', 'label' => 'Россия'],
+            ['region' => 'US', 'country' => 'us', 'language' => 'english', 'currency' => 'USD', 'label' => 'США'],
+        ]]);
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'www.cbr.ru')) {
+                return Http::response('<ValCurs><Valute><CharCode>USD</CharCode><Nominal>1</Nominal><Value>80,0000</Value></Valute></ValCurs>');
+            }
+
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            if (($query['cc'] ?? null) === 'ru') {
+                return Http::response('', 500);
+            }
+
+            return Http::response([
+                '1091500' => ['success' => true, 'data' => [
+                    'name' => 'Cyberpunk 2077',
+                    'is_free' => false,
+                    'price_overview' => ['currency' => 'USD', 'final' => 5999],
+                    'release_date' => ['coming_soon' => false],
+                ]],
+            ]);
+        });
+
+        $game = Game::query()->create(['steam_appid' => 1091500, 'name' => 'Cyberpunk 2077', 'release_status' => 'released']);
+        foreach ([
+            ['region' => 'RU', 'currency' => 'RUB', 'price_amount' => 2999, 'price_rub' => 2999],
+            ['region' => 'US', 'currency' => 'USD', 'price_amount' => 49.99, 'price_rub' => 3999.2],
+        ] as $regional) {
+            SteamRegionalPrice::query()->create([
+                'game_id' => $game->id,
+                ...$regional,
+                'observed_at' => now()->subHour(),
+            ]);
+        }
+
+        $service = app(GamePriceRefreshService::class);
+        $error = null;
+        try {
+            $service->refresh($game, GameSourceState::SOURCE_STEAM);
+        } catch (\Throwable $caught) {
+            $error = $caught;
+        }
+        $this->assertInstanceOf(\RuntimeException::class, $error);
+        $service->recordFailure($game, GameSourceState::SOURCE_STEAM, $error);
+
+        $this->assertDatabaseHas('steam_regional_prices', [
+            'game_id' => $game->id,
+            'region' => 'RU',
+            'price_amount' => 2999,
+            'price_rub' => 2999,
+        ]);
+        $this->assertDatabaseHas('steam_regional_prices', [
+            'game_id' => $game->id,
+            'region' => 'US',
+            'price_amount' => 49.99,
+            'price_rub' => 3999.2,
+        ]);
+        $state = GameSourceState::query()->where('game_id', $game->id)->where('source', 'steam')->firstOrFail();
+        $this->assertSame(GameSourceState::STATUS_FAILED, $state->status);
+        $this->assertSame(GameSourceState::ERROR_REFRESH_FAILED, $state->last_error);
+    }
+
     public function test_steam_refresh_persists_regional_prices_without_mislabeling_them_as_rubles(): void
     {
         $game = Game::query()->create(['steam_appid' => 1091500, 'name' => 'Cyberpunk 2077']);
@@ -91,6 +158,12 @@ class CentralPriceRefreshTest extends TestCase
         Queue::assertPushed(RefreshGameSourceJob::class, fn ($job) => $job->gameId === $game->id && $job->source === 'steam');
         Queue::assertNotPushed(RefreshGameSourceJob::class, fn ($job) => $job->source === 'plati');
         $this->assertTrue($market->fresh()->next_refresh_at->isAfter(now()->addHours(23)));
+        $this->assertSame(GameSourceState::STATUS_STALE, $market->fresh()->status);
+
+        $game->sourceStates()->where('source', 'steam')->update(['status' => GameSourceState::STATUS_FRESH]);
+        $this->getJson('/api/prices?q=Announced&appid=3')
+            ->assertOk()
+            ->assertJsonPath('refreshing', false);
     }
 
     public function test_marketplace_waiting_for_steam_does_not_remain_pending(): void

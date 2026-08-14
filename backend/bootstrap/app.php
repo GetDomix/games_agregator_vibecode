@@ -34,7 +34,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('prices:dispatch-due')->everyMinute()->withoutOverlapping()->onOneServer();
         $schedule->command('prices:refresh-rates')->dailyAt('03:10')->withoutOverlapping()->onOneServer();
-        $schedule->command('prices:prune-history')->daily()->withoutOverlapping()->onOneServer();
         $schedule->command('ops:snapshot --hours=24')->hourly()->withoutOverlapping()->onOneServer();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
