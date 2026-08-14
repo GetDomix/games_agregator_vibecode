@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from api.laravel import LaravelApiError
+from decorators.session import session
 from keyboards.cards import scopes_keyboard
 from misc import api
 from utils.card import show_card
@@ -15,6 +16,7 @@ router = Router()
 
 
 @router.callback_query(F.data.startswith("watch:"))
+@session
 async def begin_watch(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     appid = int(callback.data.split(":")[1])
@@ -33,6 +35,7 @@ async def begin_watch(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("scope:"))
+@session
 async def toggle_scope(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     if not data.get("game"):
@@ -51,6 +54,7 @@ async def toggle_scope(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("scope_done:"))
+@session
 async def finish_scope(callback: CallbackQuery, state: FSMContext):
     if not (await state.get_data()).get("scopes"):
         await callback.answer("Выбери хотя бы один вариант.", show_alert=True)
@@ -61,6 +65,7 @@ async def finish_scope(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(WatchSetup.entering_target)
+@session
 async def save_target(message, state: FSMContext):
     data = await state.get_data()
     raw = (message.text or "").replace(" ", "").replace(",", ".")

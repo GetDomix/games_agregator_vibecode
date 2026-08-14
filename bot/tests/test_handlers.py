@@ -191,6 +191,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_rearm_reports_api_error_as_callback_alert(self):
         api = MagicMock()
+        api.session = AsyncMock(return_value={})
         api.rearm = AsyncMock(side_effect=LaravelApiError("Алерт не найден"))
         callback = make_callback(make_message(), "rearm:70")
 
