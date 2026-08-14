@@ -45,3 +45,15 @@ async def search_command(message: Message, state: FSMContext):
     if await session(api, message):
         await state.clear()
         await message.answer("Напиши название игры. Например: <i>Hades</i>")
+
+
+@router.message(Command("favorites"))
+async def favorites_command(message: Message):
+    from handlers.alerts.reply_messages import show_favorites
+    await show_favorites(message)
+
+
+@router.message(Command("alerts"))
+async def alerts_command(message: Message):
+    from handlers.alerts.reply_messages import show_alerts
+    await show_alerts(message)
