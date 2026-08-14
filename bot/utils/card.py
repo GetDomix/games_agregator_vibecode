@@ -1,7 +1,7 @@
 from aiogram.enums import ChatAction
 from aiogram.types import BufferedInputFile, Message
 
-from api import LaravelApiError
+from api.laravel import LaravelApiError
 from keyboards.cards import card_keyboard
 from misc import api
 from card_renderer import render_card

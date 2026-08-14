@@ -5,7 +5,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from api import LaravelApiError
+from api.laravel import LaravelApiError
 from keyboards.menu import main_menu_keyboard
 from misc import api
 from utils.telegram import private, session

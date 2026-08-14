@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from api import LaravelApiError
+from api.laravel import LaravelApiError
 from keyboards.cards import scopes_keyboard
 from misc import api
 from utils.card import show_card

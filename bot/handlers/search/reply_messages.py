@@ -3,7 +3,7 @@ from aiogram.enums import ChatAction
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from api import LaravelApiError
+from api.laravel import LaravelApiError
 from keyboards.cards import candidates_keyboard
 from misc import api
 from utils.telegram import actor, private, session

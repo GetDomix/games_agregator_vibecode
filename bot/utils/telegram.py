@@ -1,7 +1,7 @@
 from aiogram.enums import ChatType
 from aiogram.types import CallbackQuery, Message
 
-from api import LaravelApiError, LaravelClient
+from api.laravel import LaravelApiError, LaravelClient
 
 
 def message_of(update: Message | CallbackQuery) -> Message:
