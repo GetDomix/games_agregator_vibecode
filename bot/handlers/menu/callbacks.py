@@ -17,7 +17,7 @@ async def help_menu(callback: CallbackQuery):
 
 Выбери действие в меню.
 '''
-    await callback.message.answer(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu_home")
@@ -29,4 +29,4 @@ async def home_menu(callback: CallbackQuery):
 
 Выбери действие в меню.
 '''
-        await callback.message.answer(text, reply_markup=main_menu_keyboard())
+        await callback.message.edit_text(text, reply_markup=main_menu_keyboard())

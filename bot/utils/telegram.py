@@ -9,7 +9,10 @@ def message_of(update: Message | CallbackQuery) -> Message:
 
 
 def private(update: Message | CallbackQuery) -> bool:
-    return message_of(update).chat.type == ChatType.PRIVATE and update.from_user is not None
+    chat_type = message_of(update).chat.type
+    if hasattr(chat_type, "value"):
+        chat_type = chat_type.value
+    return chat_type == ChatType.PRIVATE.value and update.from_user is not None
 
 
 def actor(update: Message | CallbackQuery) -> int:

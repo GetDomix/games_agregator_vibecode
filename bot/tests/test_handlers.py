@@ -18,6 +18,7 @@ def make_message(*, text: str = "", chat_type: ChatType = ChatType.PRIVATE) -> M
     message.from_user = SimpleNamespace(id=12, username="player", full_name="Test Player")
     message.text = text
     message.answer = AsyncMock()
+    message.edit_text = AsyncMock()
     message.answer_photo = AsyncMock()
     message.bot = SimpleNamespace(send_chat_action=AsyncMock())
     return message
@@ -62,7 +63,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
         await make_handlers(api)["menu_search"](message, state)
 
         state.clear.assert_awaited_once_with()
-        self.assertIn("Напиши название игры", message.answer.await_args.args[0])
+        self.assertIn("Напиши название игры", message.edit_text.await_args.args[0])
 
     async def test_menu_favorites_opens_shared_favorites(self):
         api = MagicMock()
@@ -73,7 +74,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
         await make_handlers(api)["menu_favorites"](message)
 
         api.favorites.assert_awaited_once_with(12)
-        self.assertIn("В избранном пока пусто", message.answer.await_args.args[0])
+        self.assertIn("В избранном пока пусто", message.edit_text.await_args.args[0])
 
     async def test_menu_home_keeps_reply_menu_available(self):
         api = MagicMock()
@@ -82,7 +83,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
 
         await make_handlers(api)["menu_home"](message)
 
-        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0].text, MENU_SEARCH)
+        self.assertEqual(message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard[0][0].text, MENU_SEARCH)
 
     async def test_show_card_sends_one_photo_with_caption_and_actions(self):
         api = MagicMock()

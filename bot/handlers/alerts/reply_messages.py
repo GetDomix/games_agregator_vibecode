@@ -10,16 +10,26 @@ from utils.telegram import actor, session
 router = Router()
 
 
-async def show_favorites(message: Message):
+async def show_favorites(message: Message, edit: bool = False):
     if not await session(api, message):
         return
     data = await api.favorites(actor(message))
     items = data.get("items") or []
-    await message.answer(format_favorites(items), reply_markup=favorites_keyboard(items) if items else None)
+    text = format_favorites(items)
+    markup = favorites_keyboard(items) if items else None
+    if edit:
+        await message.edit_text(text, reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)
 
 
-async def show_alerts(message: Message, status: str = "active"):
+async def show_alerts(message: Message, status: str = "active", edit: bool = False):
     if not await session(api, message):
         return
     data = await api.alerts(actor(message), status)
-    await message.answer(format_alerts(data.get("items") or [], status), reply_markup=alerts_keyboard(data.get("items") or [], status))
+    text = format_alerts(data.get("items") or [], status)
+    markup = alerts_keyboard(data.get("items") or [], status)
+    if edit:
+        await message.edit_text(text, reply_markup=markup)
+    else:
+        await message.answer(text, reply_markup=markup)

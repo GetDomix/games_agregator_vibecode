@@ -12,25 +12,25 @@ router = Router()
 @router.callback_query(F.data == "menu_favorites")
 async def favorites_menu(callback: CallbackQuery):
     await callback.answer()
-    await show_favorites(callback.message)
+    await show_favorites(callback.message, edit=True)
 
 
 @router.callback_query(F.data == "menu_alerts")
 async def alerts_menu(callback: CallbackQuery):
     await callback.answer()
-    await show_alerts(callback.message)
+    await show_alerts(callback.message, edit=True)
 
 
 @router.callback_query(F.data == "favorites")
 async def favorites_callback(callback: CallbackQuery):
     await callback.answer()
-    await show_favorites(callback.message)
+    await show_favorites(callback.message, edit=True)
 
 
 @router.callback_query(F.data.startswith("alerts:"))
 async def alerts_callback(callback: CallbackQuery):
     await callback.answer()
-    await show_alerts(callback.message, callback.data.split(":")[1])
+    await show_alerts(callback.message, callback.data.split(":")[1], edit=True)
 
 
 @router.callback_query(F.data.startswith("rearm:"))
@@ -38,7 +38,7 @@ async def rearm_alert(callback: CallbackQuery):
     try:
         await api.rearm(actor(callback), int(callback.data.split(":")[1]))
         await callback.answer("Alert снова активен")
-        await show_alerts(callback.message, "triggered")
+        await show_alerts(callback.message, "triggered", edit=True)
     except LaravelApiError as exc:
         await callback.answer(str(exc), show_alert=True)
 

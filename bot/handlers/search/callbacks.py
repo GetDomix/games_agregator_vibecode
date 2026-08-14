@@ -19,7 +19,7 @@ async def search_menu(callback: CallbackQuery, state: FSMContext):
 Напиши название игры.
 Например: <i>Hades</i>
 '''
-        await callback.message.answer(text, reply_markup=main_menu_keyboard())
+        await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
 
 
 @router.callback_query(F.data.startswith("pick:"))
