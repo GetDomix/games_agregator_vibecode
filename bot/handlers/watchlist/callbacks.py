@@ -80,5 +80,9 @@ async def save_target(message, state: FSMContext):
         await message.answer(str(exc))
         return
     await state.clear()
-    await message.answer(f"✅ Сохранено. Цель: <b>{value if value is not None else 'не задана'}</b>")
+    text = f'''
+✅ Сохранено.
+Цель: <b>{value if value is not None else 'не задана'}</b>
+'''
+    await message.answer(text)
     await show_card(message, favorite["appid"])

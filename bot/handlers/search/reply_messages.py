@@ -15,7 +15,11 @@ router = Router()
 async def search_menu(message: Message, state: FSMContext):
     if await session(api, message):
         await state.clear()
-        await message.answer("Напиши название игры. Например: <i>Hades</i>")
+        text = '''
+Напиши название игры.
+Например: <i>Hades</i>
+'''
+        await message.answer(text)
 
 
 @router.message(F.text)

@@ -26,25 +26,44 @@ async def start(message: Message, command: CommandObject):
         try:
             data = await api.bind_telegram(code, message.from_user.id, message.chat.id, message.from_user.username)
             await api.session(message.from_user.id, message.chat.id, message.from_user.username, message.from_user.full_name)
-            await message.answer(f"✅ Привязка готова, <b>{data.get('display_name') or 'игрок'}</b>. Данные сайта и бота теперь общие.")
+            text = f'''
+✅ Привязка готова, <b>{data.get('display_name') or 'игрок'}</b>.
+
+Данные сайта и бота теперь общие.
+'''
+            await message.answer(text)
         except LaravelApiError as exc:
             await message.answer(f"Не вышло привязать: {exc}")
             return
     elif not await session(api, message):
         return
-    await message.answer("👋 <b>Игроскан</b>\n\nВыбери действие кнопкой или напиши название игры.", reply_markup=main_menu_keyboard())
+    text = '''
+👋 <b>Игроскан</b>
+
+Выбери действие кнопкой или напиши название игры.
+'''
+    await message.answer(text, reply_markup=main_menu_keyboard())
 
 
 @router.message(Command("help"))
 async def help_command(message: Message):
-    await message.answer("<b>Как пользоваться</b>\n\nВыбери «Найти игру» и напиши название.", reply_markup=main_menu_keyboard())
+    text = '''
+<b>Как пользоваться</b>
+
+Выбери «Найти игру» и напиши название.
+'''
+    await message.answer(text, reply_markup=main_menu_keyboard())
 
 
 @router.message(Command("search"))
 async def search_command(message: Message, state: FSMContext):
     if await session(api, message):
         await state.clear()
-        await message.answer("Напиши название игры. Например: <i>Hades</i>")
+        text = '''
+Напиши название игры.
+Например: <i>Hades</i>
+'''
+        await message.answer(text)
 
 
 @router.message(Command("favorites"))
