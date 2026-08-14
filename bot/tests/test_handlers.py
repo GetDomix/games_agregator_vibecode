@@ -6,7 +6,9 @@ from aiogram.enums import ChatType
 from aiogram.types import CallbackQuery, Message
 
 from api_client import LaravelApiError
-from main import WatchSetup, make_handlers, session, show_card
+from compat import make_handlers, show_card
+from states.watch_setup import WatchSetup
+from utils.telegram import session
 from ui import MENU_FAVORITES, MENU_HOME, MENU_SEARCH
 
 
@@ -48,7 +50,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
 
         await make_handlers(api)["cmd_start"](message, SimpleNamespace(args=None))
 
-        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].keyboard[0][0].text, MENU_SEARCH)
+        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0].text, MENU_SEARCH)
         self.assertNotIn("/search", message.answer.await_args.args[0])
 
     async def test_menu_search_reuses_the_normal_search_flow(self):
@@ -80,7 +82,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
 
         await make_handlers(api)["menu_home"](message)
 
-        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].keyboard[0][0].text, MENU_SEARCH)
+        self.assertEqual(message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0].text, MENU_SEARCH)
 
     async def test_show_card_sends_one_photo_with_caption_and_actions(self):
         api = MagicMock()
@@ -171,7 +173,7 @@ class HandlerTest(unittest.IsolatedAsyncioTestCase):
             scopes=[["steam", "official"], ["plati", "key"]],
         )
 
-        with patch("main.show_card", new_callable=AsyncMock) as show_card:
+        with patch("compat.show_card", new_callable=AsyncMock) as show_card:
             await make_handlers(api)["target"](message, state)
 
         api.save_favorite.assert_awaited_once_with(

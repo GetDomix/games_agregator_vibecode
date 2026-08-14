@@ -1,6 +1,7 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
+from api.laravel import LaravelApiError
 from misc import api
 from utils.telegram import actor
 from .reply_messages import show_alerts, show_favorites
@@ -34,9 +35,12 @@ async def alerts_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("rearm:"))
 async def rearm_alert(callback: CallbackQuery):
-    await api.rearm(actor(callback), int(callback.data.split(":")[1]))
-    await callback.answer("Alert снова активен")
-    await show_alerts(callback.message, "triggered")
+    try:
+        await api.rearm(actor(callback), int(callback.data.split(":")[1]))
+        await callback.answer("Alert снова активен")
+        await show_alerts(callback.message, "triggered")
+    except LaravelApiError as exc:
+        await callback.answer(str(exc), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("remove:"))
