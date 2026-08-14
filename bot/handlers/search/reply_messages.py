@@ -11,17 +11,6 @@ from utils.telegram import actor, private, session
 router = Router()
 
 
-@router.message(F.text == "🔎 Найти игру")
-async def search_menu(message: Message, state: FSMContext):
-    if await session(api, message):
-        await state.clear()
-        text = '''
-Напиши название игры.
-Например: <i>Hades</i>
-'''
-        await message.answer(text)
-
-
 @router.message(F.text)
 async def search_game(message: Message, state: FSMContext):
     if not private(message) or not message.text or message.text.startswith("/") or not await session(api, message):

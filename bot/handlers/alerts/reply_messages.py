@@ -1,4 +1,4 @@
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.types import Message
 
 from keyboards.alerts import alerts_keyboard
@@ -23,13 +23,3 @@ async def show_alerts(message: Message, status: str = "active"):
         return
     data = await api.alerts(actor(message), status)
     await message.answer(format_alerts(data.get("items") or [], status), reply_markup=alerts_keyboard(data.get("items") or [], status))
-
-
-@router.message(F.text == "📚 Избранное")
-async def favorites_menu(message: Message):
-    await show_favorites(message)
-
-
-@router.message(F.text == "🔔 Алерты")
-async def alerts_menu(message: Message):
-    await show_alerts(message)

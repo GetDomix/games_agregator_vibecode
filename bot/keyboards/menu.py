@@ -1,10 +1,16 @@
-from aiogram.types import KeyboardButton
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 def main_menu_keyboard():
-    builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="🔎 Найти игру"))
-    builder.row(KeyboardButton(text="📚 Избранное"), KeyboardButton(text="🔔 Алерты"))
-    builder.row(KeyboardButton(text="❔ Помощь"), KeyboardButton(text="🏠 Главное меню"))
-    return builder.as_markup(resize_keyboard=True, input_field_placeholder="Напиши название игры или выбери действие")
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🔎 Найти игру", callback_data="menu_search"))
+    builder.row(
+        InlineKeyboardButton(text="📚 Избранное", callback_data="menu_favorites"),
+        InlineKeyboardButton(text="🔔 Алерты", callback_data="menu_alerts"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="❔ Помощь", callback_data="menu_help"),
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu_home"),
+    )
+    return builder.as_markup()

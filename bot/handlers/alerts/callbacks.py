@@ -8,6 +8,18 @@ from .reply_messages import show_alerts, show_favorites
 router = Router()
 
 
+@router.callback_query(F.data == "menu_favorites")
+async def favorites_menu(callback: CallbackQuery):
+    await callback.answer()
+    await show_favorites(callback.message)
+
+
+@router.callback_query(F.data == "menu_alerts")
+async def alerts_menu(callback: CallbackQuery):
+    await callback.answer()
+    await show_alerts(callback.message)
+
+
 @router.callback_query(F.data == "favorites")
 async def favorites_callback(callback: CallbackQuery):
     await callback.answer()
