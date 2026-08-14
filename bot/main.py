@@ -7,54 +7,26 @@ import logging
 import re
 from decimal import Decimal, InvalidOperation
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ChatAction, ChatType
-from aiogram.filters import Command, CommandObject, CommandStart
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ChatAction
+from aiogram.filters import CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
-from api_client import LaravelApiError, LaravelClient
-from card_renderer import render_card
+from api import LaravelApiError, LaravelClient
 from config import get_settings
+from handlers.registry import register_handlers
+from services import render_card
+from states import WatchSetup
 from ui import (MENU_ALERTS, MENU_FAVORITES, MENU_HELP, MENU_HOME, MENU_SEARCH,
                 SCOPE_LABELS, alerts_keyboard, candidates_keyboard, card_keyboard,
                 favorites_keyboard, format_alerts, format_card_details, format_favorites,
                 main_menu_keyboard, scopes_keyboard)
+from utils.telegram import actor, private, session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("igroscan-bot")
 CODE_RE = re.compile(r"^[A-Za-z0-9]{6,16}$")
-
-
-class WatchSetup(StatesGroup):
-    choosing_scopes = State()
-    entering_target = State()
-
-
-def message_of(update: Message | CallbackQuery) -> Message:
-    return update.message if isinstance(update, CallbackQuery) else update
-
-
-def private(update: Message | CallbackQuery) -> bool:
-    return message_of(update).chat.type == ChatType.PRIVATE and update.from_user is not None
-
-
-async def session(api: LaravelClient, update: Message | CallbackQuery) -> bool:
-    message = message_of(update)
-    if not private(update):
-        await message.answer("Для безопасности открой Игроскан в личном чате с ботом.")
-        return False
-    try:
-        await api.session(update.from_user.id, message.chat.id, update.from_user.username, update.from_user.full_name)
-        return True
-    except LaravelApiError as exc:
-        await message.answer(str(exc))
-        return False
-
-
-def actor(update: Message | CallbackQuery) -> int:
-    return update.from_user.id
 
 
 async def show_main_menu(message: Message) -> None:
@@ -289,27 +261,7 @@ async def main() -> None:
     settings = get_settings()
     bot, dp, api = Bot(token=settings.bot_token), Dispatcher(), LaravelClient(settings.api_base_url, settings.radar_service_token)
     handlers = make_handlers(api)
-    dp.message.register(handlers["cmd_start"], CommandStart())
-    dp.message.register(handlers["cmd_help"], Command("help"))
-    dp.message.register(handlers["cmd_search"], Command("search"))
-    dp.message.register(handlers["cmd_favorites"], Command("favorites"))
-    dp.message.register(handlers["cmd_alerts"], Command("alerts"))
-    dp.message.register(handlers["menu_search"], F.text == MENU_SEARCH)
-    dp.message.register(handlers["menu_favorites"], F.text == MENU_FAVORITES)
-    dp.message.register(handlers["menu_alerts"], F.text == MENU_ALERTS)
-    dp.message.register(handlers["menu_help"], F.text == MENU_HELP)
-    dp.message.register(handlers["menu_home"], F.text == MENU_HOME)
-    dp.callback_query.register(handlers["pick"], F.data.startswith("pick:"))
-    dp.callback_query.register(handlers["refresh_card"], F.data.startswith("card:"))
-    dp.callback_query.register(handlers["begin_watch"], F.data.startswith("watch:"))
-    dp.callback_query.register(handlers["toggle_scope"], F.data.startswith("scope:"))
-    dp.callback_query.register(handlers["scope_done"], F.data.startswith("scope_done:"))
-    dp.callback_query.register(handlers["favorites"], F.data == "favorites")
-    dp.callback_query.register(handlers["callback_alerts"], F.data.startswith("alerts:"))
-    dp.callback_query.register(handlers["rearm"], F.data.startswith("rearm:"))
-    dp.callback_query.register(handlers["remove"], F.data.startswith("remove:"))
-    dp.message.register(handlers["target"], WatchSetup.entering_target)
-    dp.message.register(handlers["text_search"], F.text)
+    register_handlers(dp, handlers)
     log.info("Bot @%s starting", settings.bot_username)
     await dp.start_polling(bot)
 
