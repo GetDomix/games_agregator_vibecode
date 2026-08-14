@@ -2,16 +2,14 @@ from decimal import Decimal, InvalidOperation
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery
 
 from api import LaravelApiError
-from handlers.cards import show_card
-from keyboards import scopes_keyboard
+from keyboards.cards import scopes_keyboard
 from misc import api
-from states import WatchSetup
-from texts import SCOPE_LABELS
+from utils.card import show_card
 from utils.telegram import actor
-
+from .states import WatchSetup
 
 router = Router()
 
@@ -31,7 +29,7 @@ async def begin_watch(callback: CallbackQuery, state: FSMContext):
         selected.add((item["source"], item["offer_kind"]))
     await state.set_state(WatchSetup.choosing_scopes)
     await state.set_data(game={"appid": appid, "name": steam.get("name") or "Игра", "header_image": steam.get("header_image")}, scopes=[list(item) for item in selected])
-    await callback.message.answer("Выбери площадки и виды предложений. Аккаунты и аренда выключены по умолчанию.", reply_markup=scopes_keyboard(appid, selected))
+    await callback.message.answer("Выбери площадки и виды предложений.", reply_markup=scopes_keyboard(appid, selected))
 
 
 @router.callback_query(F.data.startswith("scope:"))
@@ -59,11 +57,11 @@ async def finish_scope(callback: CallbackQuery, state: FSMContext):
         return
     await state.set_state(WatchSetup.entering_target)
     await callback.answer()
-    await callback.message.answer("Введи целевую цену в рублях. Например: <code>999</code>\nИли отправь <code>-</code>, чтобы сохранить только отслеживание.")
+    await callback.message.answer("Введи целевую цену в рублях или отправь «-» без цели.")
 
 
 @router.message(WatchSetup.entering_target)
-async def save_target(message: Message, state: FSMContext):
+async def save_target(message, state: FSMContext):
     data = await state.get_data()
     raw = (message.text or "").replace(" ", "").replace(",", ".")
     value = None
@@ -73,7 +71,7 @@ async def save_target(message: Message, state: FSMContext):
             if value < 0 or value > 10_000_000:
                 raise InvalidOperation
         except (InvalidOperation, ValueError):
-            await message.answer("Введи цену числом, например 999, или «-» без цели.")
+            await message.answer("Введи цену числом или отправь «-» без цели.")
             return
     scopes = [{"source": source, "offer_kind": kind} for source, kind in data.get("scopes", [])]
     try:
@@ -82,6 +80,5 @@ async def save_target(message: Message, state: FSMContext):
         await message.answer(str(exc))
         return
     await state.clear()
-    labels = ", ".join(SCOPE_LABELS[item["source"], item["offer_kind"]] for item in scopes)
-    await message.answer(f"✅ Сохранено. Цель: <b>{value if value is not None else 'не задана'}</b>\nОтслеживаем: {labels}")
+    await message.answer(f"✅ Сохранено. Цель: <b>{value if value is not None else 'не задана'}</b>")
     await show_card(message, favorite["appid"])

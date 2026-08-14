@@ -1,19 +1,17 @@
 from aiogram import F, Router
 from aiogram.enums import ChatAction
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 
 from api import LaravelApiError
-from handlers.cards import show_card
-from keyboards import candidates_keyboard, MENU_SEARCH
+from keyboards.cards import candidates_keyboard
 from misc import api
 from utils.telegram import actor, private, session
-
 
 router = Router()
 
 
-@router.message(F.text == MENU_SEARCH)
+@router.message(F.text == "🔎 Найти игру")
 async def search_menu(message: Message, state: FSMContext):
     if await session(api, message):
         await state.clear()
@@ -40,17 +38,3 @@ async def search_game(message: Message, state: FSMContext):
         return
     await state.update_data(query=query)
     await message.answer("Выбери игру:", reply_markup=candidates_keyboard(candidates))
-
-
-@router.callback_query(F.data.startswith("pick:"))
-async def pick_game(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    data = await state.get_data()
-    await show_card(callback.message, int(callback.data.split(":")[1]), data.get("query"))
-
-
-@router.callback_query(F.data.startswith("card:"))
-async def refresh_card(callback: CallbackQuery, state: FSMContext):
-    await callback.answer("Собираю сохранённые цены…")
-    data = await state.get_data()
-    await show_card(callback.message, int(callback.data.split(":")[1]), data.get("query"))

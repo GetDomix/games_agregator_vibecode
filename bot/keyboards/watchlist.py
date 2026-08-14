@@ -1,13 +1,9 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-def favorites_keyboard(items: list[dict]) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"🎮 {item['game_name']}", callback_data=f"card:{item['appid']}")] for item in items[:20]])
-
-
-def alerts_keyboard(items: list[dict], status: str) -> InlineKeyboardMarkup:
-    rows = []
-    if status == "triggered":
-        rows.extend([[InlineKeyboardButton(text=f"↻ {item['favorite']['game_name']}", callback_data=f"rearm:{item['favorite']['appid']}")] for item in items[:20]])
-    rows.append([InlineKeyboardButton(text="🟢 Активные", callback_data="alerts:active"), InlineKeyboardButton(text="🔔 Сработавшие", callback_data="alerts:triggered")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+def favorites_keyboard(items: list[dict]):
+    builder = InlineKeyboardBuilder()
+    for item in items[:20]:
+        builder.row(InlineKeyboardButton(text=f"🎮 {item['game_name']}", callback_data=f"card:{item['appid']}"))
+    return builder.as_markup()
