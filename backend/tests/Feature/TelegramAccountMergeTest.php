@@ -16,6 +16,7 @@ use App\Services\Telegram\TelegramAccountMergeService;
 use App\Services\Alerts\FavoriteAlertSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class TelegramAccountMergeTest extends TestCase
@@ -233,6 +234,7 @@ class TelegramAccountMergeTest extends TestCase
 
     public function test_active_target_alert_reserves_an_unoccupied_cycle_after_importing_history(): void
     {
+        Queue::fake();
         $site = User::factory()->create();
         $telegram = User::factory()->create(['telegram_chat_id' => '445']);
         $game = Game::query()->create(['steam_appid' => 445, 'name' => 'Collision safe', 'release_status' => 'released']);
