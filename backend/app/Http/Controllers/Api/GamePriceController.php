@@ -38,6 +38,7 @@ class GamePriceController extends Controller
                 'offer_kind' => $price->offer_kind,
                 'min_price_rub' => $price->min_price_rub,
                 'avg_price_rub' => $price->avg_price_rub,
+                'currency_prices' => $price->currency_prices,
                 'offer_count' => $price->offer_count,
                 'cheapest_offer_title' => $price->cheapest_offer_title,
                 'cheapest_offer_url' => $price->cheapest_offer_url,

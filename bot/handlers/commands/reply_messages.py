@@ -6,9 +6,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from api.laravel import LaravelApiError
+from decorators.session import session
 from keyboards.menu import main_menu_keyboard
 from misc import api
-from utils.telegram import private, session
+from utils.telegram import private, session as ensure_session
 
 router = Router()
 
@@ -35,7 +36,7 @@ async def start(message: Message, command: CommandObject):
         except LaravelApiError as exc:
             await message.answer(f"Не вышло привязать: {exc}")
             return
-    elif not await session(api, message):
+    elif not await ensure_session(api, message):
         return
     text = '''
 👋 <b>Игроскан</b>
@@ -56,23 +57,25 @@ async def help_command(message: Message):
 
 
 @router.message(Command("search"))
+@session
 async def search_command(message: Message, state: FSMContext):
-    if await session(api, message):
-        await state.clear()
-        text = '''
+    await state.clear()
+    text = '''
 Напиши название игры.
 Например: <i>Hades</i>
 '''
-        await message.answer(text)
+    await message.answer(text)
 
 
 @router.message(Command("favorites"))
+@session
 async def favorites_command(message: Message):
     from handlers.alerts.reply_messages import show_favorites
     await show_favorites(message)
 
 
 @router.message(Command("alerts"))
+@session
 async def alerts_command(message: Message):
     from handlers.alerts.reply_messages import show_alerts
     await show_alerts(message)

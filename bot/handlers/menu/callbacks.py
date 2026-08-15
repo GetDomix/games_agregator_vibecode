@@ -1,15 +1,14 @@
 from aiogram import F, Router
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from decorators.session import session
 from keyboards.menu import main_menu_keyboard
-from misc import api
-from utils.telegram import session
 
 router = Router()
 
 
 @router.callback_query(F.data == "menu_help")
+@session
 async def help_menu(callback: CallbackQuery):
     await callback.answer()
     text = '''
@@ -17,16 +16,16 @@ async def help_menu(callback: CallbackQuery):
 
 Выбери действие в меню.
 '''
-    await callback.message.answer(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())
 
 
 @router.callback_query(F.data == "menu_home")
+@session
 async def home_menu(callback: CallbackQuery):
     await callback.answer()
-    if await session(api, callback):
-        text = '''
+    text = '''
 👋 <b>Игроскан</b>
 
 Выбери действие в меню.
 '''
-        await callback.message.answer(text, reply_markup=main_menu_keyboard())
+    await callback.message.edit_text(text, reply_markup=main_menu_keyboard())

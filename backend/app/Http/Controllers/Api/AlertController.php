@@ -18,7 +18,8 @@ class AlertController extends Controller
             ->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->with(['favorite', 'scopes', 'event.delivery'])
             ->latest('updated_at')
-            ->get()
+            ->get();
+        $alerts = $alerts
             ->map(fn (FavoriteAlert $alert) => $this->alertArray($alert))
             ->values();
 

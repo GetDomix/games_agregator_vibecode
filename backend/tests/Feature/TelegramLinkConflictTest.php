@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\TelegramLinkCode;
 use App\Models\User;
+use App\Models\ExternalIdentity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -32,5 +33,34 @@ class TelegramLinkConflictTest extends TestCase
 
         $this->assertDatabaseHas('users', ['id' => $target->id, 'telegram_chat_id' => null]);
         $this->assertDatabaseHas('telegram_link_codes', ['code' => 'SAFE-LINK', 'used_at' => null]);
+    }
+
+    public function test_link_code_is_consumed_once_inside_the_subject_locked_transaction(): void
+    {
+        config()->set('gpa.radar_service_token', 'test-service-token');
+        $target = User::factory()->create();
+        TelegramLinkCode::query()->create([
+            'user_id' => $target->id,
+            'code' => 'ONCE-ONLY',
+            'expires_at' => now()->addMinutes(20),
+        ]);
+
+        $payload = [
+            'code' => 'ONCE-ONLY',
+            'telegram_user_id' => '778',
+            'chat_id' => '778',
+            'telegram_username' => 'first',
+        ];
+        $headers = ['X-Radar-Token' => 'test-service-token'];
+
+        $this->postJson('/api/internal/telegram/bind', $payload, $headers)->assertOk();
+        $this->postJson('/api/internal/telegram/bind', [
+            ...$payload,
+            'telegram_username' => 'second-attempt',
+        ], $headers)->assertNotFound();
+
+        $this->assertNotNull(TelegramLinkCode::query()->where('code', 'ONCE-ONLY')->value('used_at'));
+        $this->assertDatabaseHas('users', ['id' => $target->id, 'telegram_chat_id' => '778', 'telegram_username' => 'first']);
+        $this->assertSame(1, ExternalIdentity::query()->where('provider', 'telegram')->where('provider_subject', '778')->count());
     }
 }

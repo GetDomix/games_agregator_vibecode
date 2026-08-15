@@ -9,9 +9,9 @@ use App\Models\FavoriteAlert;
 use App\Models\Game;
 use App\Models\GameSourceState;
 use App\Models\User;
-use App\Services\GgselService;
-use App\Services\PlatiService;
-use App\Services\SteamService;
+use App\Services\Pricing\GgselService;
+use App\Services\Pricing\PlatiService;
+use App\Services\Pricing\SteamService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -37,12 +37,39 @@ class ReleaseReadinessOperationsTest extends TestCase
                     'release_date' => ['coming_soon' => false, 'date' => 'Aug 21, 2012'],
                 ]],
             ]),
-            'https://plati.market/api/search.ashx*' => Http::response([
-                'Totalpages' => 1,
-                'items' => [['id' => 1, 'name' => 'Counter-Strike 2 Steam key', 'price_rur' => 500, 'numsold' => 10]],
+            'https://plati.market/api/suggest.ashx*' => Http::response([
+                ['name' => 'Counter-Strike 2', 'type' => 'Игры', 'link' => '/games/counter-strike-2/730/'],
             ]),
-            'https://api.ggsel.com/elastic/goods/query' => Http::response([
-                'data' => [['id_goods' => 2, 'name' => 'Counter-Strike 2 gift', 'price_wmr' => 450, 'cnt_sell' => 5]],
+            'https://plati.market/asp/block_goods_category_2.asp*' => Http::response(
+                '1|500|500|<a href="/itm/cs2-key/1" title="Counter-Strike 2 Steam key" product_id="1">'
+                .'<span class="title-bold color-text-title">500&nbsp;₽</span></a>'
+            ),
+            'https://api.ggsel.com/elastic/goods/query-categories' => Http::response([
+                'data' => [
+                    ['name' => 'Counter-Strike 2', 'url' => 'cs2-730'],
+                ],
+            ]),
+            'https://api.ggsel.com/categories/cs2-730' => Http::response([
+                'data' => [
+                    'id' => 730,
+                    'name' => 'Counter-Strike 2',
+                    'url' => 'cs2-730',
+                    'digi_catalog' => 7300,
+                ],
+            ]),
+            'https://api.ggsel.com/elastic/goods/categories' => Http::response([
+                'data' => [
+                    'items' => [[
+                        'id_goods' => 2,
+                        'name' => 'Counter-Strike 2 gift',
+                        'search_title' => 'Counter-Strike 2 ключи Steam',
+                        'price_wmr' => 450,
+                        'price_wmz' => 5.6,
+                        'price_wme' => 5.1,
+                        'cnt_sell' => 5,
+                    ]],
+                    'total' => 1,
+                ],
             ]),
         ]);
 
@@ -54,9 +81,12 @@ class ReleaseReadinessOperationsTest extends TestCase
         $this->assertSame('released', $steam['release_status']);
         $this->assertSame(500.0, $plati[0]['price_rub']);
         $this->assertSame(450.0, $ggsel[0]['price_rub']);
-        Http::assertSentCount(3);
-        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.ggsel.com/elastic/goods/query'
+        $this->assertSame(5.6, $ggsel[0]['prices']['USD']);
+        $this->assertSame(5.1, $ggsel[0]['prices']['EUR']);
+        Http::assertSent(fn (Request $request) => str_contains($request->url(), 'api.ggsel.com/elastic/goods/query-categories')
             && $request['search_term'] === 'Counter-Strike 2');
+        Http::assertSent(fn (Request $request) => str_contains($request->url(), 'api.ggsel.com/elastic/goods/categories')
+            && $request['digi_catalog'] === 7300);
     }
 
     public function test_steam_keeps_an_official_foreign_price_and_converts_it_to_rubles(): void
@@ -94,6 +124,7 @@ class ReleaseReadinessOperationsTest extends TestCase
         $this->assertSame(1, substr_count($schedule, 'prices:dispatch-due'));
         $this->assertSame(1, substr_count($schedule, 'prices:refresh-rates'));
         $this->assertSame(1, substr_count($schedule, 'ops:snapshot --hours=24'));
+        $this->assertStringNotContainsString('prices:prune-history', $schedule);
         $this->assertStringNotContainsString('radar:scan', $schedule);
     }
 

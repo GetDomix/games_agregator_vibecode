@@ -8,6 +8,7 @@ from handlers.menu import callbacks as menu_callbacks
 from handlers.search import callbacks as search_callbacks
 from handlers.search import reply_messages as search_messages
 from handlers.watchlist import callbacks as watchlist_callbacks
+import misc
 from states import watch_setup
 from utils import card as card_utils
 
@@ -25,6 +26,9 @@ async def show_card(api, message, telegram_user_id, appid, query=None):
 
 
 def make_handlers(api):
+    misc.api = api
+    if not isinstance(api.session, AsyncMock):
+        api.session = AsyncMock(return_value={})
     modules = (alerts_callbacks, alerts_messages, commands, menu_callbacks, search_callbacks, search_messages, watchlist_callbacks)
     previous_apis = {module: getattr(module, "api", None) for module in modules}
     for module in modules:

@@ -8,16 +8,19 @@ use App\Models\Game;
 use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
 use App\Models\User;
-use App\Services\AggregatorService;
-use App\Services\GameRefreshRequestService;
-use App\Services\StoredPriceSearchService;
+use App\Services\Catalog\AggregatorService;
+use App\Services\Catalog\StoredPriceSearchService;
+use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class PriceController extends Controller
 {
-    public function __construct(private readonly AggregatorService $aggregator, private readonly StoredPriceSearchService $stored) {}
+    public function __construct(
+        private readonly AggregatorService $aggregator,
+        private readonly StoredPriceSearchService $stored,
+    ) {}
 
     public function search(Request $request): JsonResponse
     {
@@ -25,14 +28,42 @@ class PriceController extends Controller
         if ($q === '') {
             return response()->json(['detail' => 'Пустой поисковый запрос'], 400);
         }
-        $candidates = $this->stored->candidates($q);
+        $suggestionLimit = 20;
+        $candidates = $this->stored->candidates($q, $suggestionLimit);
         $discovery = false;
-        if ($candidates === []) {
-            $candidates = $this->aggregator->searchCandidates($q);
+        if ($candidates === [] || ($request->boolean('discover') && count($candidates) < $suggestionLimit)) {
+            $discovered = $this->aggregator->searchCandidates($q, $suggestionLimit);
+            $candidates = $this->mergeSearchCandidates($candidates, $discovered, $suggestionLimit);
             $discovery = true;
         }
 
         return response()->json(['query' => $q, 'candidates' => $candidates, 'meta' => ['discovery_used' => $discovery]]);
+    }
+
+    private function mergeSearchCandidates(array $stored, array $discovered, int $limit): array
+    {
+        $merged = [];
+        foreach ($stored as $candidate) {
+            $merged[(int) $candidate['appid']] = $candidate;
+        }
+        foreach ($discovered as $candidate) {
+            $appid = (int) $candidate['appid'];
+            if (! isset($merged[$appid])) {
+                $merged[$appid] = $candidate;
+                continue;
+            }
+
+            $known = $merged[$appid];
+            // Store search owns the live price fields; the canonical catalog owns
+            // durable release/type metadata and its best full-size artwork.
+            $merged[$appid] = array_replace($known, $candidate, [
+                'release_status' => $known['release_status'] ?? $candidate['release_status'] ?? null,
+                'candidate_kind' => $known['candidate_kind'] ?? $candidate['candidate_kind'] ?? 'game',
+                'header_image' => $known['header_image'] ?? $candidate['header_image'] ?? null,
+            ]);
+        }
+
+        return array_slice(array_values($merged), 0, $limit);
     }
 
     public function prices(Request $request, GameRefreshRequestService $refresh): JsonResponse
@@ -48,24 +79,39 @@ class PriceController extends Controller
         }
 
         $user = Auth::guard('sanctum')->user();
+        $force = $request->boolean('force');
 
         $game = $appid ? Game::query()->where('steam_appid', $appid)->first() : null;
+        $queuedOnThisRequest = false;
         if (! $game && $appid) {
             $game = $refresh->requestUnknown($appid, $q);
+            $queuedOnThisRequest = true;
         }
-        if (! $game) {
-            $candidate = $this->stored->candidates($q, 1)[0] ?? null;
-            if ($candidate) {
-                $game = Game::query()->where('steam_appid', $candidate['appid'])->first();
+        if (! $game && ! $appid) {
+            // A price request is intentionally exact: never turn an ambiguous name into
+            // a refresh, history row, or a silently selected game. Discovery remains /search.
+            $matches = $this->stored->candidates($q);
+            $exact = $this->stored->exactCandidates($q);
+            if (count($exact) === 1) {
+                $game = Game::query()->where('steam_appid', $exact[0]['appid'])->first();
+            }
+            if (! $game) {
+                return response()->json($this->ambiguousResult($q, $exact !== [] ? $exact : $matches));
             }
         }
-        if (! $game) {
-            return response()->json(['query' => $q, 'steam' => null, 'candidates' => [], 'plati' => ['marketplace' => 'plati', 'label' => 'Plati.Market', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'ggsel' => ['marketplace' => 'ggsel', 'label' => 'GGsel', 'total_offers' => 0, 'scanned_offers' => 0, 'by_kind' => []], 'warnings' => ['Игра не найдена в локальном каталоге. Выберите её из подсказок Steam.'], 'refreshing' => false]);
+
+        // A browser request must never wait for three external stores. Manual
+        // refresh only places work on the same background queue as first search.
+        if ($force && ! $queuedOnThisRequest) {
+            $refresh->request($game, \App\Models\GameSourceState::SOURCES);
         }
+
         $result = $this->stored->result($game, $q);
 
         if ($user) {
-            $result['saved_to_history'] = $this->saveHistory($user, $result);
+            if (! $request->boolean('background')) {
+                $result['saved_to_history'] = $this->saveHistory($user, $result);
+            }
             $steamAppid = $result['steam']['appid'] ?? $appid;
             $result['is_favorite'] = $steamAppid
                 ? Favorite::query()->where('user_id', $user->id)->where('appid', $steamAppid)->exists()
@@ -136,5 +182,27 @@ class PriceController extends Controller
         }
 
         return $mins === [] ? null : min($mins);
+    }
+
+    private function ambiguousResult(string $query, array $candidates): array
+    {
+        $emptyMarket = fn (string $marketplace, string $label) => [
+            'marketplace' => $marketplace, 'label' => $label, 'total_offers' => 0,
+            'scanned_offers' => 0, 'by_kind' => [], 'error' => null,
+        ];
+
+        return [
+            'query' => $query,
+            'steam' => null,
+            'candidates' => $candidates,
+            'plati' => $emptyMarket('plati', 'Plati.Market'),
+            'ggsel' => $emptyMarket('ggsel', 'GGsel'),
+            'warnings' => [],
+            'saved_to_history' => false,
+            'is_favorite' => false,
+            'deal' => null,
+            'refreshing' => false,
+            'freshness' => [],
+        ];
     }
 }

@@ -3,17 +3,19 @@ from aiogram.enums import ChatAction
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from decorators.session import session
 from api.laravel import LaravelApiError
 from keyboards.cards import candidates_keyboard
 from misc import api
-from utils.telegram import actor, private, session
+from utils.telegram import actor, private
 
 router = Router()
 
 
 @router.message(F.text)
+@session
 async def search_game(message: Message, state: FSMContext):
-    if not private(message) or not message.text or message.text.startswith("/") or not await session(api, message):
+    if not private(message) or not message.text or message.text.startswith("/"):
         return
     query = message.text.strip()
     if len(query) < 2:

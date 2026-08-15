@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Services\DealScoreService;
+use App\Services\Catalog\DealScoreService;
 use PHPUnit\Framework\TestCase;
 
 class DealScoreTest extends TestCase

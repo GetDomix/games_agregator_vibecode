@@ -1,110 +1,89 @@
-# Release runbook
+# Production release runbook
 
-This procedure is intentionally manual. Commands are run from `/opt/gpa` on the
-VPS unless stated otherwise.
+Документ применяется только после отдельного разрешения на deployment. Сейчас
+он является проверяемой заготовкой; перечисленные команды не запускаются
+автоматически.
 
-## 1. Preflight
+## 1. Approval и preflight
 
-Record the revision being released and a known-good rollback revision. Confirm
-that the GitHub Pipeline is green for Laravel/PostgreSQL, frontend, bot and
-Compose jobs. Check that the production environment has an approver.
+Зафиксировать release revision и rollback revision. Проверить зелёный CI,
+успешный `composer audit --locked --no-interaction`, наличие ответственного за
+релиз и окна наблюдения.
 
-On the server:
+На будущем сервере:
 
 ```bash
 cd /opt/gpa
-docker compose config --quiet
-docker compose ps
-df -h
+test -f deploy/.env.production
+chmod 600 deploy/.env.production
+./deploy/preflight-production.sh deploy/.env.production
+```
+
+Остановиться при любой ошибке. Не подставлять wildcard и временный HTTP URL
+ради прохождения проверки.
+
+## 2. Обязательный backup перед миграцией
+
+```bash
+cd /opt/gpa
+production_env=deploy/.env.production
+export PRODUCTION_ENV_FILE="$production_env"
+compose=(docker compose --env-file "$production_env" -f docker-compose.yml -f compose.production.yml)
 mkdir -p backups
-```
-
-Do not continue if PostgreSQL is unhealthy, disk space is low, or scheduler and
-queue-worker are already crash-looping.
-
-## 2. PostgreSQL backup
-
-Create a timestamped custom-format backup before syncing code or running a
-migration:
-
-```bash
-cd /opt/gpa
+chmod 700 backups
+umask 077
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "backups/gpa-${stamp}.dump"
-test -s "backups/gpa-${stamp}.dump"
-docker compose exec -T db sh -c 'pg_restore --list' < "backups/gpa-${stamp}.dump" | head
-```
-
-Copy the backup off the VPS according to the project retention policy. Record
-its path next to the release revision.
-
-## 3. Deploy and migrate
-
-In GitHub Actions run Pipeline manually for the verified revision with
-`deploy_production=true`, then approve environment `production`. The workflow
-syncs the revision and starts Compose. Only the `backend` service has
-`RUN_MIGRATIONS=true`; scheduler and queue-worker wait until backend is healthy.
-
-Do not run `php artisan migrate` concurrently in another shell.
-
-## 4. Smoke checks
-
-```bash
-cd /opt/gpa
-docker compose ps
-curl -fsS http://127.0.0.1/api/health
-docker compose exec -T backend php artisan migrate:status
-docker compose exec -T backend php artisan schedule:list
-docker compose exec -T backend php artisan ops:snapshot --hours=24
-docker compose exec -T backend php artisan queue:failed
-docker compose logs --since=10m --tail=200 backend scheduler queue-worker radar-bot
-```
-
-Confirm all four application services are running, `/api/health` reports an
-available database, the two expected Laravel schedule entries exist, and no new
-failed jobs or repeated source/Telegram errors appeared. Perform one website
-search and one private-chat bot command without invoking real alert delivery as
-a test fixture.
-
-## 5. Monitoring after release
-
-For at least one full refresh interval monitor:
-
-```bash
-docker compose logs --since=30m -f scheduler queue-worker backend
-docker compose exec -T backend php artisan queue:failed
-```
-
-Review the structured `ops:snapshot` output for source freshness and failures,
-processed games, created alert events and sent/failed deliveries. Escalate if
-freshness stops advancing, failed jobs grow, or a service restarts repeatedly.
-
-## 6. Code rollback
-
-If migrations are backward-compatible, revert the faulty release on `main` or
-`master` to the recorded known-good code, let CI pass, then rerun the manual
-Pipeline with `deploy_production=true`. Approve the production environment again
-and repeat all smoke checks.
-
-Do not use `php artisan migrate:rollback` blindly. Some migrations remove data
-and their `down()` method can recreate structure only.
-
-## 7. Database restore
-
-Use restore only when the release changed data incompatibly or a destructive
-migration must be reversed. This discards database writes made after the backup.
-Obtain explicit incident approval and announce the maintenance window first.
-
-```bash
-cd /opt/gpa
-backup="backups/gpa-YYYYMMDDTHHMMSSZ.dump"
+backup="backups/igroscan-${stamp}.dump"
+"${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup"
 test -s "$backup"
-docker compose stop frontend caddy tunnel radar-bot scheduler queue-worker backend
-docker compose exec -T db sh -c 'dropdb --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
-docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exit-on-error' < "$backup"
-docker compose up -d backend
-docker compose up -d scheduler queue-worker frontend caddy tunnel radar-bot
+"${compose[@]}" exec -T db sh -c 'pg_restore --list' < "$backup" >/dev/null
+sha256sum "$backup" > "${backup}.sha256"
 ```
 
-Run the smoke checks again and record the restored backup, rollback revision,
-incident owner and timestamps.
+До миграции копия должна быть зашифрованно передана во внешнее backup-хранилище
+согласно `BACKUP_POLICY.md`. Файл на том же VPS не считается полноценным
+backup.
+
+## 3. Будущий ручной запуск
+
+Только после approval:
+
+```bash
+"${compose[@]}" up -d --build --remove-orphans
+"${compose[@]}" ps
+```
+
+Только backend имеет `RUN_MIGRATIONS=true`; параллельно запускать
+`php artisan migrate` запрещено. Profiles `manual-tunnel` и `telegram` не
+включать без отдельной проверки их секретов и сетевой необходимости.
+
+## 4. HTTPS smoke checks
+
+```bash
+domain="$(awk -F= '$1 == "APP_DOMAIN" { print substr($0, index($0, "=") + 1) }' deploy/.env.production)"
+curl --fail --silent --show-error "https://${domain}/api/health"
+"${compose[@]}" exec -T backend php artisan migrate:status
+"${compose[@]}" exec -T backend php artisan schedule:list
+"${compose[@]}" exec -T backend php artisan queue:failed
+"${compose[@]}" logs --since=10m --tail=200 backend scheduler queue-worker caddy
+```
+
+Дополнительно проверить с внешней машины:
+
+- HTTP перенаправляется на HTTPS;
+- сертификат валиден без `-k`;
+- `5432` и `8080` недоступны извне;
+- неизвестный Host/IP не отдаёт приложение;
+- cookie содержит `Secure`, `HttpOnly`, `SameSite=Lax`;
+- чужой `Origin` не получает CORS allow headers.
+
+## 5. Monitoring и rollback
+
+Наблюдать как минимум один полный цикл обновления цен. При ошибке откатить
+только код на заранее зафиксированную revision, если миграции
+backward-compatible. Не выполнять `migrate:rollback` вслепую.
+
+Восстановление БД уничтожает записи после выбранной точки. Оно требует
+отдельного incident approval, maintenance window и подтверждённого off-host
+backup. Процедура восстановления и регулярность её тестирования описаны в
+`BACKUP_POLICY.md`.
