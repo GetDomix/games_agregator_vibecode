@@ -3,76 +3,61 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\PartnerClick;
-use App\Models\SearchHistory;
-use App\Models\User;
-use Illuminate\Http\Exceptions\HttpResponseException;
+use App\Models\Game;
+use App\Models\GameSourceState;
+use App\Services\Admin\AdminAuditService;
+use App\Services\Admin\AdminOverviewService;
+use App\Services\Admin\AdminUserDirectoryService;
+use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AdminController extends Controller
 {
-    public function overview(Request $request): JsonResponse
+    public function overview(Request $request, AdminOverviewService $overview): JsonResponse
     {
-        $this->authorizeAdmin($request);
+        return response()->json($overview->build($request->user()));
+    }
 
-        $usersTotal = User::query()->count();
-        $historyTotal = SearchHistory::query()->count();
-        $clicks7d = PartnerClick::query()->where('created_at', '>=', now()->subDays(7))->count();
-        $clicksByMp = PartnerClick::query()
-            ->select('marketplace', DB::raw('count(*) as c'))
-            ->where('created_at', '>=', now()->subDays(7))
-            ->groupBy('marketplace')
-            ->pluck('c', 'marketplace');
-
-        $recentUsers = User::query()
-            ->orderByDesc('id')
-            ->limit(15)
-            ->get()
-            ->map(fn (User $u) => [
-                'id' => $u->id,
-                'email' => $u->email,
-                'display_name' => $u->display_name ?: $u->name,
-                'is_admin' => (bool) $u->is_admin,
-                'created_at' => $u->created_at?->toIso8601String(),
-                'last_login_at' => $u->last_login_at?->toIso8601String(),
-            ]);
+    public function users(Request $request, AdminUserDirectoryService $directory): JsonResponse
+    {
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
+        $users = $directory->search((string) ($data['q'] ?? ''));
 
         return response()->json([
-            'stats' => [
-                'users_total' => $usersTotal,
-                'history_total' => $historyTotal,
-                'partner_clicks_7d' => $clicks7d,
-                'partner_clicks_by_marketplace' => $clicksByMp,
+            'data' => $users->items(),
+            'meta' => [
+                'page' => $users->currentPage(),
+                'per_page' => $users->perPage(),
+                'total' => $users->total(),
             ],
-            'recent_users' => $recentUsers,
         ]);
     }
 
-    public function setUserAdmin(Request $request, int $id): JsonResponse
-    {
-        $this->authorizeAdmin($request);
+    public function refreshGame(
+        Request $request,
+        int $appid,
+        GameRefreshRequestService $refreshes,
+        AdminAuditService $audit,
+    ): JsonResponse {
+        $unknownKeys = array_diff(array_keys($request->all()), ['sources']);
+        if ($unknownKeys !== []) {
+            throw ValidationException::withMessages([
+                'request' => ['Запрос содержит неподдерживаемые поля'],
+            ]);
+        }
+
         $data = $request->validate([
-            'is_admin' => ['required', 'boolean'],
+            'sources' => ['nullable', 'array', 'list', 'min:1'],
+            'sources.*' => ['string', Rule::in(GameSourceState::SOURCES)],
         ]);
-        $user = User::query()->findOrFail($id);
-        if ($user->id === $request->user()->id && ! $data['is_admin']) {
-            return response()->json(['detail' => 'Нельзя снять админа с себя'], 422);
-        }
-        $user->is_admin = (bool) $data['is_admin'];
-        $user->save();
+        $game = Game::query()->where('steam_appid', $appid)->firstOrFail();
+        $sources = array_values(array_unique($data['sources'] ?? GameSourceState::SOURCES));
+        $refreshes->request($game, $sources);
+        $audit->record($request->user(), 'game.refresh_requested', 'game', (string) $appid, ['sources' => $sources]);
 
-        return response()->json(['ok' => true, 'user' => array_merge($user->toPublicArray(), ['is_admin' => $user->is_admin])]);
-    }
-
-    private function authorizeAdmin(Request $request): void
-    {
-        $user = $request->user();
-        if (! $user || ! $user->isAdminUser()) {
-            throw new HttpResponseException(
-                response()->json(['detail' => 'Доступ только для администратора'], 403)
-            );
-        }
+        return response()->json(['ok' => true, 'appid' => $appid, 'sources' => $sources], 202);
     }
 }

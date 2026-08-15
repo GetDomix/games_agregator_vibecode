@@ -25,6 +25,13 @@ class Game extends Model
         'header_image',
         'release_status',
         'release_date',
+        'plati_id_cb',
+        'plati_catalog_name',
+        'plati_catalog_resolved_at',
+        'ggsel_category_slug',
+        'ggsel_digi_catalog_id',
+        'ggsel_category_name',
+        'ggsel_catalog_resolved_at',
     ];
 
     protected function casts(): array
@@ -32,7 +39,25 @@ class Game extends Model
         return [
             'steam_appid' => 'integer',
             'release_date' => 'date',
+            'plati_id_cb' => 'integer',
+            'plati_catalog_resolved_at' => 'datetime',
+            'ggsel_digi_catalog_id' => 'integer',
+            'ggsel_catalog_resolved_at' => 'datetime',
         ];
+    }
+
+    /** Drop cached Plati/GGsel catalog pointers so the next market refresh re-resolves. */
+    public function invalidateMarketplaceCatalogCache(): void
+    {
+        $this->forceFill([
+            'plati_id_cb' => null,
+            'plati_catalog_name' => null,
+            'plati_catalog_resolved_at' => null,
+            'ggsel_category_slug' => null,
+            'ggsel_digi_catalog_id' => null,
+            'ggsel_category_name' => null,
+            'ggsel_catalog_resolved_at' => null,
+        ])->save();
     }
 
     public function favorites(): HasMany

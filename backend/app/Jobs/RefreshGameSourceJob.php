@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Game;
-use App\Services\GamePriceRefreshService;
+use App\Services\Pricing\GamePriceRefreshService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;

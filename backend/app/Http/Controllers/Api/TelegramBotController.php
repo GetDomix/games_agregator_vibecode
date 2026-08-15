@@ -3,15 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\AlertEvent;
 use App\Models\Favorite;
 use App\Models\FavoriteAlert;
 use App\Models\Game;
-use App\Services\AggregatorService;
-use App\Services\FavoriteAlertSettingsService;
-use App\Services\GameRefreshRequestService;
-use App\Services\StoredPriceSearchService;
-use App\Services\TelegramBotUserService;
+use App\Services\Alerts\FavoriteAlertSettingsService;
+use App\Services\Catalog\AggregatorService;
+use App\Services\Catalog\StoredPriceSearchService;
+use App\Services\Pricing\GameRefreshRequestService;
+use App\Services\Telegram\TelegramBotUserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -90,16 +89,25 @@ class TelegramBotController extends Controller
         if (! $favorite->exists && Favorite::query()->where('user_id', $user->id)->count() >= 200) {
             return response()->json(['detail' => 'Лимит избранного: 200 игр'], 400);
         }
+        $shouldSaveAlert = array_key_exists('alert', $data) || (array_key_exists('target_price_rub', $data) && $data['target_price_rub'] !== null);
+        $alertData = $data['alert'] ?? [
+            'target_value' => array_key_exists('target_price_rub', $data) ? $data['target_price_rub'] : $favorite->target_price_rub,
+        ];
+        if ($shouldSaveAlert) {
+            try {
+                $alerts->assertValid($alertData);
+            } catch (\InvalidArgumentException $exception) {
+                return response()->json(['detail' => $exception->getMessage()], 422);
+            }
+        }
         $favorite->fill([
             'game_name' => mb_substr(trim($data['game_name']), 0, 200),
             'header_image' => $data['header_image'] ?? $favorite->header_image,
             'target_price_rub' => $data['target_price_rub'] ?? $favorite->target_price_rub,
         ])->save();
         $refresh->linkFavorite($favorite);
-        try {
-            $alerts->save($favorite, $data['alert'] ?? ['target_value' => $favorite->target_price_rub]);
-        } catch (\InvalidArgumentException $exception) {
-            return response()->json(['detail' => $exception->getMessage()], 422);
+        if ($shouldSaveAlert) {
+            $alerts->save($favorite, $alertData);
         }
 
         return response()->json($favorite->fresh()->load(['alert.scopes', 'game.sourceStates'])->toApiArray(), $favorite->wasRecentlyCreated ? 201 : 200);
@@ -146,9 +154,9 @@ class TelegramBotController extends Controller
             'game_name' => ['required', 'string', 'max:200'],
             'header_image' => ['nullable', 'string', 'max:500', 'regex:/^https?:\/\//i'],
             'target_price_rub' => ['nullable', 'numeric', 'min:0'],
-            'alert' => ['nullable', 'array'],
+            'alert' => ['sometimes', 'array'],
             'alert.target_value' => ['nullable', 'numeric', 'min:0'],
-            'alert.condition_type' => ['nullable', 'in:target_price'],
+            'alert.condition_type' => ['nullable', 'in:target_price,discount_percent,new_low'],
             'alert.scopes' => ['nullable', 'array', 'min:1'],
             'alert.scopes.*.source' => ['required_with:alert.scopes', 'string'],
             'alert.scopes.*.offer_kind' => ['required_with:alert.scopes', 'string'],
@@ -162,6 +170,7 @@ class TelegramBotController extends Controller
         return [
             'id' => $alert->id,
             'status' => $alert->status,
+            'condition_type' => $alert->condition_type,
             'target_value' => $alert->target_value,
             'triggered_at' => $alert->triggered_at?->toIso8601String(),
             'favorite' => ['appid' => $alert->favorite->appid, 'game_name' => $alert->favorite->game_name],

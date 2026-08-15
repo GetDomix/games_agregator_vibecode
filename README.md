@@ -19,9 +19,26 @@ Production Compose запускает отдельные процессы `backe
 
 ## Админка
 
-- Поле `users.is_admin` или env `ADMIN_EMAILS=you@mail.com`
-- UI: кабинет → «Админка» / кнопка Admin (desktop)
-- API: `GET /api/admin/overview`, `POST /api/admin/users/{id}/admin`
+- Укажите свой email в `ADMIN_EMAILS=you@example.com`, перезапустите backend
+  (при кэшированной конфигурации выполните `php artisan config:clear`) и войдите
+  на сайт под аккаунтом с тем же email. Этот allowlist создаёт неотзываемую
+  эффективную роль `owner` для аварийного серверного доступа.
+- Откройте кабинет → «Админка». Рабочее пространство содержит «Обзор»,
+  «Каталог», «Пользователи», «Команда» и «Аудит»; вкладка «Команда» видна
+  только владельцам.
+- Владелец назначает другим зарегистрированным пользователям роли `admin` или
+  `owner` во вкладке «Команда». Переход в `owner` или из него требует текущий
+  пароль. Последнего и server-managed владельца понизить нельзя.
+- Любая смена роли отзывает активные API-сессии целевого пользователя. Обычный
+  `admin` управляет операционными задачами, но не ролями и не видит role-аудит.
+- API: `GET /api/admin/overview`, `GET /api/admin/users`,
+  `GET /api/admin/audit`, `GET /api/admin/team`,
+  `PATCH /api/admin/team/{user}`, `POST /api/admin/games/{appid}/refresh`.
+- Ручное обновление принимает `sources: ["steam", "plati", "ggsel"]` и только
+  ставит штатные фоновые задачи в очередь; цены из админки не редактируются.
+
+Модель угроз, результаты и повторяемые команды находятся в
+[`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
 
 Поиск бесплатен для гостей и зарегистрированных пользователей. Защита API от спама обеспечивается техническими rate limits.
 
@@ -33,13 +50,15 @@ Production Compose запускает отдельные процессы `backe
 - Username (проверить в BotFather): **`@igroscan_radar_bot`**
 - Лого: `bot/assets/bot_logo.jpg`
 - Расписание: `php artisan schedule:work` в отдельном Compose-сервисе
-- Бот: `cd bot && pip install -r requirements.txt && python main.py`
+- Бот: `cd bot && pip install -r requirements.txt && PYTHONPATH=src python -m igroscan_bot`
 
 ## Проверки и выпуск
 
-CI проверяет Laravel на PostgreSQL, frontend lint/build, изолированные тесты бота
-и сборку Compose-образов. Production deploy запускается только вручную через
-GitHub Actions и защищённое environment `production`.
+CI проверяет Laravel на PostgreSQL, locked Composer dependencies, frontend
+lint/build, изолированные тесты бота и оба Compose-конфига. Production deploy
+по умолчанию отключён и не запускается при push: в будущем понадобятся ручной
+workflow, отдельная repository variable и approval environment `production`.
 
 Инструкции: [`deploy/README.md`](deploy/README.md) и
-[`deploy/RELEASE_RUNBOOK.md`](deploy/RELEASE_RUNBOOK.md).
+[`deploy/RELEASE_RUNBOOK.md`](deploy/RELEASE_RUNBOOK.md). Политика резервного
+копирования: [`deploy/BACKUP_POLICY.md`](deploy/BACKUP_POLICY.md).

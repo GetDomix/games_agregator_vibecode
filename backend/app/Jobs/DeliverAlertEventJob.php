@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\AlertDelivery;
 use App\Models\AlertEvent;
-use App\Services\TelegramNotifyService;
+use App\Services\Telegram\TelegramNotifyService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -38,7 +38,7 @@ class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
 
     public function handle(TelegramNotifyService $telegram): void
     {
-        $event = AlertEvent::query()->with(['delivery', 'user', 'game'])->findOrFail($this->eventId);
+        $event = AlertEvent::query()->with(['delivery', 'user', 'game', 'alert'])->findOrFail($this->eventId);
         $delivery = $event->delivery;
 
         if (! $delivery || in_array($delivery->status, [AlertDelivery::STATUS_SENT, AlertDelivery::STATUS_SKIPPED], true)) {
@@ -58,6 +58,17 @@ class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
                 'delivery_id' => $delivery->id,
                 'attempts' => $delivery->attempts,
                 'reason' => 'telegram_chat_not_linked',
+            ]);
+
+            return;
+        }
+        if (! $event->user->radar_enabled) {
+            $delivery->update(['status' => AlertDelivery::STATUS_SKIPPED, 'last_error' => 'Telegram radar is disabled']);
+            Log::warning('alert_delivery_skipped', [
+                'event_id' => $event->id,
+                'delivery_id' => $delivery->id,
+                'attempts' => $delivery->attempts,
+                'reason' => 'telegram_radar_disabled',
             ]);
 
             return;
@@ -109,6 +120,12 @@ class DeliverAlertEventJob implements ShouldBeUnique, ShouldQueue
         $price = number_format($event->offer_price_rub, 0, '.', ' ');
         $link = $event->offer_url ? '<a href="'.htmlspecialchars($event->offer_url, ENT_QUOTES | ENT_HTML5, 'UTF-8').'">Открыть предложение</a>' : '';
 
-        return "🎯 <b>Цель достигнута</b>\n{$name}\n{$source} · {$kind}: <b>{$price} ₽</b>\n{$link}";
+        $headline = $event->alert?->cycle !== $event->alert_cycle ? 'Ценовой сигнал сработал' : match ($event->alert?->condition_type) {
+            'discount_percent' => 'Скидка Steam достигла '.(int) ($event->alert?->target_value ?? 0).'%',
+            'new_low' => 'Новый минимум с начала наблюдений',
+            default => 'Цель цены достигнута',
+        };
+
+        return "🎯 <b>{$headline}</b>\n{$name}\n{$source} · {$kind}: <b>{$price} ₽</b>\n{$link}";
     }
 }

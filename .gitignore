@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .env
+deploy/.env.production
 .venv/
 venv/
 .idea/
@@ -26,8 +27,10 @@ backend/storage/framework/cache/*
 backend/storage/framework/sessions/*
 backend/storage/framework/views/*
 frontend/dist/
+backups/
+*.dump
+*.dump.sha256
 legacy/.venv/
 
 bot/.env
 .radar_svc_token.tmp
-

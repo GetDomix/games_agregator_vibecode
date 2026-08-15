@@ -62,7 +62,6 @@ class CanonicalGamePriceModelTest extends TestCase
         );
         $this->assertSame('0.00', $game->fresh()->currentPrices()->firstOrFail()->min_price_rub);
         $this->assertTrue($game->isReleased());
-        $this->assertSame(90, GamePriceObservation::RETENTION_DAYS);
     }
 
     public function test_database_rejects_duplicate_games(): void

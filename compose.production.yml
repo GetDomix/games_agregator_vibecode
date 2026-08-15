@@ -1,0 +1,64 @@
+# Strict production overlay. It is inert until explicitly selected together
+# with docker-compose.yml and a completed deploy/.env.production file.
+services:
+  db:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+    env_file: !override
+      - ${PRODUCTION_ENV_FILE:-deploy/.env.production}
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      FRONTEND_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      CORS_ORIGINS: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      CORS_SUPPORTS_CREDENTIALS: "true"
+      SANCTUM_STATEFUL_DOMAINS: ${APP_DOMAIN:?APP_DOMAIN is required}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?TRUSTED_PROXIES is required}
+      SESSION_SECURE_COOKIE: "true"
+      SESSION_HTTP_ONLY: "true"
+      SESSION_SAME_SITE: lax
+      SESSION_ENCRYPT: "true"
+      SESSION_DOMAIN: ""
+
+  scheduler:
+    env_file: !override
+      - ${PRODUCTION_ENV_FILE:-deploy/.env.production}
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      FRONTEND_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?TRUSTED_PROXIES is required}
+
+  queue-worker:
+    env_file: !override
+      - ${PRODUCTION_ENV_FILE:-deploy/.env.production}
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      FRONTEND_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?TRUSTED_PROXIES is required}
+
+  caddy:
+    profiles: !reset []
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    volumes: !override
+      - ./deploy/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  tunnel:
+    profiles: !override [manual-tunnel]
+
+  radar-bot:
+    profiles: !override [telegram]

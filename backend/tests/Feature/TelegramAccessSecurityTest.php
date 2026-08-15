@@ -29,6 +29,38 @@ class TelegramAccessSecurityTest extends TestCase
         $this->assertSame(1, User::query()->where('telegram_chat_id', '101')->count());
     }
 
+    public function test_existing_bot_session_preserves_the_users_radar_toggle(): void
+    {
+        $disabled = User::factory()->create([
+            'telegram_chat_id' => '102',
+            'radar_enabled' => false,
+        ]);
+        ExternalIdentity::query()->create([
+            'user_id' => $disabled->id,
+            'provider' => 'telegram',
+            'provider_subject' => '102',
+        ]);
+        $enabled = User::factory()->create([
+            'telegram_chat_id' => '103',
+            'radar_enabled' => true,
+        ]);
+        ExternalIdentity::query()->create([
+            'user_id' => $enabled->id,
+            'provider' => 'telegram',
+            'provider_subject' => '103',
+        ]);
+
+        foreach (['102', '103'] as $telegramUserId) {
+            $this->postJson('/api/internal/telegram/session', [
+                'telegram_user_id' => $telegramUserId,
+                'chat_id' => $telegramUserId,
+            ], $this->headers)->assertOk();
+        }
+
+        $this->assertFalse((bool) $disabled->fresh()->radar_enabled);
+        $this->assertTrue((bool) $enabled->fresh()->radar_enabled);
+    }
+
     public function test_oidc_not_ready_is_a_safe_service_unavailable_response(): void
     {
         config()->set('gpa.telegram_oidc_client_id', '');

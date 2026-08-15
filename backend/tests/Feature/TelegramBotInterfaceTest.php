@@ -72,6 +72,50 @@ class TelegramBotInterfaceTest extends TestCase
             ->assertOk()->assertJsonPath('alert.status', 'active');
     }
 
+    public function test_invalid_bot_alert_does_not_create_a_favorite_or_refresh_jobs(): void
+    {
+        Queue::fake();
+        $user = $this->botUser();
+
+        $this->putJson('/api/internal/telegram/favorites', [
+            'telegram_user_id' => '101',
+            'appid' => 781,
+            'game_name' => 'Invalid scope',
+            'alert' => ['scopes' => [['source' => 'plati', 'offer_kind' => 'other']]],
+        ], $this->headers)->assertUnprocessable();
+
+        $this->assertDatabaseMissing('favorites', ['user_id' => $user->id, 'appid' => 781]);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_bot_can_save_a_plain_favorite_without_creating_an_alert(): void
+    {
+        Queue::fake();
+        $user = $this->botUser();
+
+        $this->putJson('/api/internal/telegram/favorites', [
+            'telegram_user_id' => '101', 'appid' => 782, 'game_name' => 'Plain bot favorite',
+        ], $this->headers)->assertCreated()->assertJsonPath('alert', null);
+
+        $favorite = Favorite::query()->where('user_id', $user->id)->where('appid', 782)->firstOrFail();
+        $this->assertDatabaseMissing('favorite_alerts', ['favorite_id' => $favorite->id]);
+    }
+
+    public function test_plain_bot_payload_leaves_an_existing_price_signal_unchanged(): void
+    {
+        $user = $this->botUser();
+        $favorite = Favorite::query()->create(['user_id' => $user->id, 'appid' => 783, 'game_name' => 'Existing signal']);
+        $alert = $favorite->alert()->create(['condition_type' => 'target_price', 'target_value' => 777, 'status' => 'triggered', 'cycle' => 4, 'triggered_at' => now()]);
+
+        $this->putJson('/api/internal/telegram/favorites', [
+            'telegram_user_id' => '101', 'appid' => 783, 'game_name' => 'Existing signal',
+        ], $this->headers)->assertOk();
+
+        $this->assertDatabaseHas('favorite_alerts', [
+            'id' => $alert->id, 'condition_type' => 'target_price', 'target_value' => 777, 'status' => 'triggered', 'cycle' => 4,
+        ]);
+    }
+
     private function botUser(): User
     {
         $user = User::factory()->create(['telegram_chat_id' => '101']);

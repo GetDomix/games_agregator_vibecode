@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Services\DueGameRefreshDispatcher;
+use App\Services\Pricing\DueGameRefreshDispatcher;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 

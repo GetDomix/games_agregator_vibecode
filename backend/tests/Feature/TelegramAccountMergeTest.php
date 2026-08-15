@@ -9,8 +9,11 @@ use App\Models\Favorite;
 use App\Models\FavoriteAlert;
 use App\Models\FavoriteAlertScope;
 use App\Models\Game;
+use App\Models\GamePriceObservation;
+use App\Services\Alerts\AlertEvaluationService;
 use App\Models\User;
-use App\Services\TelegramAccountMergeService;
+use App\Services\Telegram\TelegramAccountMergeService;
+use App\Services\Alerts\FavoriteAlertSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -77,7 +80,7 @@ class TelegramAccountMergeTest extends TestCase
             'target_price_rub' => 300,
         ]);
         $this->assertDatabaseHas('favorites', ['id' => $uniqueFavorite->id, 'user_id' => $site->id]);
-        $this->assertDatabaseHas('favorite_alert_scopes', [
+        $this->assertDatabaseMissing('favorite_alert_scopes', [
             'favorite_alert_id' => $websiteAlert->id,
             'source' => 'plati',
             'offer_kind' => 'gift',
@@ -187,21 +190,102 @@ class TelegramAccountMergeTest extends TestCase
         $this->assertDatabaseHas('alert_events', [
             'id' => $websiteEvent->id,
             'favorite_alert_id' => $websiteAlert->id,
-            'alert_cycle' => 1,
+            'alert_cycle' => 2,
             'user_id' => $site->id,
             'favorite_id' => $websiteFavorite->id,
         ]);
         $this->assertDatabaseHas('alert_events', [
             'id' => $telegramEvent->id,
             'favorite_alert_id' => $websiteAlert->id,
-            'alert_cycle' => 2,
+            'alert_cycle' => 0,
             'user_id' => $site->id,
             'favorite_id' => $websiteFavorite->id,
         ]);
         $this->assertDatabaseHas('alert_deliveries', ['id' => $websiteDelivery->id, 'alert_event_id' => $websiteEvent->id]);
         $this->assertDatabaseHas('alert_deliveries', ['id' => $telegramDelivery->id, 'alert_event_id' => $telegramEvent->id, 'status' => 'failed']);
-        $this->assertDatabaseHas('favorite_alerts', ['id' => $websiteAlert->id, 'cycle' => 2]);
+        $this->assertDatabaseHas('favorite_alerts', ['id' => $websiteAlert->id, 'cycle' => 2, 'status' => 'triggered', 'triggered_at' => null, 'condition_type' => 'target_price', 'target_value' => 500]);
+        app(FavoriteAlertSettingsService::class)->rearm($websiteFavorite->fresh());
+        $this->assertDatabaseHas('favorite_alerts', ['id' => $websiteAlert->id, 'cycle' => 3, 'status' => 'active']);
+        $this->alertEvent($websiteAlert->fresh(), $site, $websiteFavorite, $game, 3, 200);
+        $this->assertDatabaseHas('alert_events', ['favorite_alert_id' => $websiteAlert->id, 'alert_cycle' => 3]);
         $this->assertDatabaseMissing('favorite_alerts', ['id' => $telegramAlert->id]);
+    }
+
+    public function test_existing_condition_aware_alert_wins_without_mixing_source_settings(): void
+    {
+        foreach ([['discount_percent', 35], ['new_low', null]] as [$condition, $target]) {
+            $site = User::factory()->create();
+            $telegram = User::factory()->create(['telegram_chat_id' => (string) random_int(900000, 999999)]);
+            $siteFavorite = Favorite::query()->create(['user_id' => $site->id, 'appid' => random_int(100000, 199999), 'game_name' => 'Same']);
+            $sourceFavorite = Favorite::query()->create(['user_id' => $telegram->id, 'appid' => $siteFavorite->appid, 'game_name' => 'Same', 'target_price_rub' => 400]);
+            $siteAlert = $siteFavorite->alert()->create(['condition_type' => $condition, 'target_value' => $target, 'status' => 'active', 'cycle' => 7]);
+            $sourceAlert = $sourceFavorite->alert()->create(['condition_type' => 'target_price', 'target_value' => 400, 'status' => 'triggered', 'cycle' => 2]);
+            FavoriteAlertScope::query()->create(['favorite_alert_id' => $siteAlert->id, 'source' => 'steam', 'offer_kind' => 'official']);
+            FavoriteAlertScope::query()->create(['favorite_alert_id' => $sourceAlert->id, 'source' => 'plati', 'offer_kind' => 'gift']);
+
+            app(TelegramAccountMergeService::class)->merge($site, $telegram);
+
+            $this->assertDatabaseHas('favorite_alerts', ['id' => $siteAlert->id, 'condition_type' => $condition, 'target_value' => $target, 'status' => 'active', 'cycle' => 7]);
+            $this->assertDatabaseHas('favorites', ['id' => $siteFavorite->id, 'target_price_rub' => null]);
+            $this->assertDatabaseMissing('favorite_alert_scopes', ['favorite_alert_id' => $siteAlert->id, 'source' => 'plati', 'offer_kind' => 'gift']);
+        }
+    }
+
+    public function test_active_target_alert_reserves_an_unoccupied_cycle_after_importing_history(): void
+    {
+        $site = User::factory()->create();
+        $telegram = User::factory()->create(['telegram_chat_id' => '445']);
+        $game = Game::query()->create(['steam_appid' => 445, 'name' => 'Collision safe', 'release_status' => 'released']);
+        $target = Favorite::query()->create(['user_id' => $site->id, 'game_id' => $game->id, 'appid' => 445, 'game_name' => $game->name]);
+        $source = Favorite::query()->create(['user_id' => $telegram->id, 'game_id' => $game->id, 'appid' => 445, 'game_name' => $game->name]);
+        $targetAlert = $target->alert()->create(['condition_type' => 'target_price', 'target_value' => 100, 'status' => 'active', 'cycle' => 0]);
+        $sourceAlert = $source->alert()->create(['condition_type' => 'target_price', 'target_value' => 80, 'status' => 'triggered', 'cycle' => 0]);
+        FavoriteAlertScope::query()->create(['favorite_alert_id' => $targetAlert->id, 'source' => 'steam', 'offer_kind' => 'official']);
+        // Simulate the old merge bug: active current cycle is already occupied.
+        $this->alertEvent($targetAlert, $site, $target, $game, 0, 100);
+        $sourceEvent = $this->alertEvent($sourceAlert, $telegram, $source, $game, 0, 80);
+        AlertDelivery::query()->create(['alert_event_id' => $sourceEvent->id, 'status' => AlertDelivery::STATUS_SENT]);
+
+        app(TelegramAccountMergeService::class)->merge($site, $telegram);
+
+        $this->assertDatabaseHas('favorite_alerts', ['id' => $targetAlert->id, 'status' => 'active', 'cycle' => 2, 'condition_type' => 'target_price', 'target_value' => 100]);
+        $this->assertDatabaseHas('alert_events', ['id' => $sourceEvent->id, 'favorite_alert_id' => $targetAlert->id, 'alert_cycle' => 0]);
+        $fresh = GamePriceObservation::query()->create(['game_id' => $game->id, 'source' => 'steam', 'offer_kind' => 'official', 'min_price_rub' => 99, 'observed_at' => now()]);
+        $this->assertSame(1, app(AlertEvaluationService::class)->evaluate($game, 'steam', [$fresh->id]));
+        $this->assertDatabaseHas('alert_events', ['favorite_alert_id' => $targetAlert->id, 'alert_cycle' => 2, 'offer_price_rub' => 99]);
+    }
+
+    public function test_source_alert_transfers_whole_when_duplicate_target_has_no_alert(): void
+    {
+        $site = User::factory()->create();
+        $telegram = User::factory()->create(['telegram_chat_id' => '777777']);
+        $target = Favorite::query()->create(['user_id' => $site->id, 'appid' => 777, 'game_name' => 'Transfer']);
+        $source = Favorite::query()->create(['user_id' => $telegram->id, 'appid' => 777, 'game_name' => 'Transfer']);
+        $sourceAlert = $source->alert()->create(['condition_type' => 'new_low', 'target_value' => null, 'status' => 'active', 'cycle' => 4]);
+        FavoriteAlertScope::query()->create(['favorite_alert_id' => $sourceAlert->id, 'source' => 'plati', 'offer_kind' => 'gift']);
+
+        app(TelegramAccountMergeService::class)->merge($site, $telegram);
+
+        $targetAlert = FavoriteAlert::query()->where('favorite_id', $target->id)->firstOrFail();
+        $this->assertSame('new_low', $targetAlert->condition_type);
+        $this->assertNull($targetAlert->target_value);
+        $this->assertSame(4, $targetAlert->cycle);
+        $this->assertDatabaseHas('favorite_alert_scopes', ['favorite_alert_id' => $targetAlert->id, 'source' => 'plati', 'offer_kind' => 'gift']);
+        $this->assertDatabaseHas('favorites', ['id' => $target->id, 'target_price_rub' => null]);
+    }
+
+    public function test_transferred_target_price_alert_synchronizes_legacy_projection(): void
+    {
+        $site = User::factory()->create();
+        $telegram = User::factory()->create(['telegram_chat_id' => '888888']);
+        $target = Favorite::query()->create(['user_id' => $site->id, 'appid' => 888, 'game_name' => 'Projection', 'target_price_rub' => 500]);
+        $source = Favorite::query()->create(['user_id' => $telegram->id, 'appid' => 888, 'game_name' => 'Projection']);
+        $source->alert()->create(['condition_type' => 'target_price', 'target_value' => 300, 'status' => 'active']);
+
+        app(TelegramAccountMergeService::class)->merge($site, $telegram);
+
+        $this->assertDatabaseHas('favorites', ['id' => $target->id, 'target_price_rub' => 300]);
+        $this->assertDatabaseHas('favorite_alerts', ['favorite_id' => $target->id, 'condition_type' => 'target_price', 'target_value' => 300]);
     }
 
     private function alertEvent(

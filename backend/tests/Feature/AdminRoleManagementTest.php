@@ -1,0 +1,451 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\AdminAuditLog;
+use App\Models\User;
+use App\Services\Admin\AdminAuditService;
+use App\Services\Admin\AdminRoleService;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\Process\Process;
+use Tests\TestCase;
+
+class AdminRoleManagementTest extends TestCase
+{
+    use DatabaseTruncation;
+
+    protected function beforeTruncatingDatabase(): void
+    {
+        $this->artisan('migrate', ['--force' => true]);
+    }
+
+    public function test_admin_cannot_change_roles(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['admin_role' => User::ROLE_ADMIN]));
+        $target = User::factory()->create();
+
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_ADMIN])
+            ->assertForbidden();
+
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+    }
+
+    public function test_role_service_rejects_an_admin_without_http_middleware(): void
+    {
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
+        $target = User::factory()->create();
+
+        try {
+            app(AdminRoleService::class)->changeRole($admin, $target, User::ROLE_ADMIN, null);
+            $this->fail('An admin must not be able to call the role service directly.');
+        } catch (AuthorizationException) {
+            $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+            $this->assertDatabaseCount('admin_audit_logs', 0);
+        }
+    }
+
+    public function test_only_owner_can_list_the_complete_admin_team(): void
+    {
+        $admin = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
+        User::factory()->count(34)->create(['admin_role' => User::ROLE_ADMIN]);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        User::factory()->create();
+
+        Sanctum::actingAs($admin);
+        $this->getJson('/api/admin/team')->assertForbidden();
+
+        Sanctum::actingAs($owner);
+        $this->getJson('/api/admin/team')
+            ->assertOk()
+            ->assertJsonCount(36, 'items')
+            ->assertJsonMissing(['password']);
+    }
+
+    public function test_configured_owner_is_included_in_the_complete_team_list(): void
+    {
+        config(['gpa.admin_emails' => 'ROOT@example.com']);
+        $root = User::factory()->create(['email' => 'root@example.com']);
+
+        Sanctum::actingAs($root);
+
+        $response = $this->getJson('/api/admin/team')->assertOk();
+        $rootItem = collect($response->json('items'))->firstWhere('id', $root->id);
+        $this->assertSame(User::ROLE_OWNER, $rootItem['admin_role']);
+        $this->assertTrue($rootItem['is_server_managed_owner']);
+
+        $this->getJson('/api/auth/me')
+            ->assertOk()
+            ->assertJsonMissingPath('is_server_managed_owner');
+
+        $this->assertArrayNotHasKey('is_server_managed_owner', $root->toPublicArray());
+    }
+
+    public function test_database_owner_is_not_marked_as_server_managed_in_team_response(): void
+    {
+        config(['gpa.admin_emails' => 'root@example.com']);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        Sanctum::actingAs($owner);
+
+        $response = $this->getJson('/api/admin/team')->assertOk();
+        $ownerItem = collect($response->json('items'))->firstWhere('id', $owner->id);
+        $this->assertFalse($ownerItem['is_server_managed_owner']);
+    }
+
+    public function test_owner_can_promote_admin_and_target_tokens_are_revoked(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        $token = $target->createToken('web');
+        Sanctum::actingAs($owner);
+
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_ADMIN])
+            ->assertOk()
+            ->assertJsonPath('user.admin_role', User::ROLE_ADMIN)
+            ->assertJsonMissing(['password', 'remember_token']);
+
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'actor_id' => $owner->id,
+            'action' => 'admin.role_changed',
+            'target_id' => (string) $target->id,
+        ]);
+
+        $audit = AdminAuditLog::query()->sole();
+        $this->assertTrue(Str::isUuid($audit->request_id));
+        $this->assertSame([
+            'old_role' => User::ROLE_USER,
+            'new_role' => User::ROLE_ADMIN,
+        ], $audit->context);
+    }
+
+    public function test_owner_can_revoke_an_admin_role(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create(['admin_role' => User::ROLE_ADMIN]);
+        Sanctum::actingAs($owner);
+
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_USER])
+            ->assertOk()
+            ->assertJsonPath('user.admin_role', User::ROLE_USER);
+    }
+
+    public function test_owner_transition_requires_correct_current_password(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_OWNER])
+            ->assertUnprocessable();
+        $this->patchJson("/api/admin/team/{$target->id}", [
+            'role' => User::ROLE_OWNER,
+            'current_password' => 'wrong',
+        ])->assertUnprocessable();
+        $this->patchJson("/api/admin/team/{$target->id}", [
+            'role' => User::ROLE_OWNER,
+            'current_password' => 'password',
+        ])->assertOk();
+    }
+
+    public function test_demoting_an_owner_requires_correct_current_password(): void
+    {
+        $actor = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        Sanctum::actingAs($actor);
+
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_ADMIN])
+            ->assertUnprocessable();
+        $this->patchJson("/api/admin/team/{$target->id}", [
+            'role' => User::ROLE_ADMIN,
+            'current_password' => 'wrong',
+        ])->assertUnprocessable();
+        $this->patchJson("/api/admin/team/{$target->id}", [
+            'role' => User::ROLE_ADMIN,
+            'current_password' => 'password',
+        ])->assertOk();
+    }
+
+    public function test_audit_service_discards_context_keys_not_allowlisted_for_the_action(): void
+    {
+        $actor = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+
+        $audit = app(AdminAuditService::class)->record(
+            $actor,
+            'admin.role_changed',
+            'user',
+            '42',
+            [
+                'old_role' => User::ROLE_USER,
+                'new_role' => User::ROLE_ADMIN,
+                'current_password' => 'must-never-be-stored',
+                'unexpected' => 'must-never-be-stored',
+            ],
+        );
+
+        $this->assertSame([
+            'old_role' => User::ROLE_USER,
+            'new_role' => User::ROLE_ADMIN,
+        ], $audit->context);
+    }
+
+    public function test_last_effective_owner_cannot_be_demoted(): void
+    {
+        config(['gpa.admin_emails' => '']);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        Sanctum::actingAs($owner);
+
+        $this->patchJson("/api/admin/team/{$owner->id}", [
+            'role' => User::ROLE_ADMIN,
+            'current_password' => 'password',
+        ])->assertUnprocessable();
+
+        $this->assertSame(User::ROLE_OWNER, $owner->fresh()->admin_role);
+    }
+
+    public function test_server_managed_owner_cannot_be_demoted(): void
+    {
+        config(['gpa.admin_emails' => 'root@example.com']);
+        $root = User::factory()->create(['email' => 'root@example.com']);
+        Sanctum::actingAs($root);
+
+        $this->patchJson("/api/admin/team/{$root->id}", [
+            'role' => User::ROLE_USER,
+            'current_password' => 'password',
+        ])->assertUnprocessable();
+
+        $this->assertSame(User::ROLE_OWNER, $root->fresh()->effectiveAdminRole());
+    }
+
+    #[DataProvider('malformedRolePayloads')]
+    public function test_role_endpoint_rejects_malformed_or_extra_fields(array $payload): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $this->patchJson("/api/admin/team/{$target->id}", $payload)
+            ->assertUnprocessable();
+
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', 0);
+    }
+
+    public static function malformedRolePayloads(): array
+    {
+        return [
+            'unknown role' => [['role' => 'superadmin']],
+            'mass assignment' => [['role' => User::ROLE_ADMIN, 'email' => 'attacker@example.com']],
+            'nested role' => [['role' => [User::ROLE_OWNER]]],
+            'null role' => [['role' => null]],
+            'unknown password field' => [['role' => User::ROLE_ADMIN, 'password' => 'not-accepted']],
+        ];
+    }
+
+    public function test_role_service_rejects_unknown_roles_at_its_own_boundary(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+
+        try {
+            app(AdminRoleService::class)->changeRole($owner, $target, 'superadmin', null);
+            $this->fail('The role service must reject values outside the role domain.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('role', $exception->errors());
+        }
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', 0);
+    }
+
+    public function test_audit_insert_failure_rolls_back_role_write_and_token_deletion(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('Requires a PostgreSQL CHECK constraint for audit fault injection.');
+        }
+
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        $token = $target->createToken('rollback-proof');
+        $constraint = 'task6_reject_role_audit_'.str_replace('-', '', (string) Str::uuid());
+        DB::statement("ALTER TABLE admin_audit_logs ADD CONSTRAINT {$constraint} CHECK (action <> 'admin.role_changed')");
+
+        try {
+            app(AdminRoleService::class)->changeRole($owner, $target, User::ROLE_ADMIN, null);
+            $this->fail('The injected audit failure must abort the role transaction.');
+        } catch (QueryException $exception) {
+            $this->assertSame('23514', (string) $exception->getCode());
+            $this->assertStringContainsString($constraint, $exception->getMessage());
+        } finally {
+            DB::statement("ALTER TABLE admin_audit_logs DROP CONSTRAINT IF EXISTS {$constraint}");
+        }
+
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $token->accessToken->id]);
+        $this->assertDatabaseCount('admin_audit_logs', 0);
+    }
+
+    public function test_unknown_user_id_does_not_modify_or_disclose_another_account(): void
+    {
+        config([
+            'app.debug' => true,
+            'gpa.admin_emails' => 'hidden-owner@example.com',
+        ]);
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $bystander = User::factory()->create([
+            'email' => 'private-bystander@example.com',
+            'telegram_chat_id' => 'telegram-private-sentinel',
+        ]);
+        $auditCount = (int) AdminAuditLog::query()->count();
+        Sanctum::actingAs($owner);
+
+        $response = $this->patchJson('/api/admin/team/999999999', ['role' => User::ROLE_ADMIN])
+            ->assertNotFound();
+
+        $this->assertSame(['message' => 'Ресурс не найден'], $response->json());
+        $this->assertStringNotContainsStringIgnoringCase('trace', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('exception', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('hidden-owner@example.com', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('private-bystander@example.com', $response->getContent());
+        $this->assertStringNotContainsStringIgnoringCase('telegram-private-sentinel', $response->getContent());
+        $this->assertSame(User::ROLE_USER, $bystander->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount);
+    }
+
+    public function test_legacy_boolean_admin_endpoint_is_removed(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $this->postJson("/api/admin/users/{$target->id}/admin", ['is_admin' => true])
+            ->assertNotFound();
+
+        $this->assertSame(User::ROLE_USER, $target->fresh()->admin_role);
+    }
+
+    public function test_role_changes_are_limited_to_five_per_minute(): void
+    {
+        $owner = User::factory()->create(['admin_role' => User::ROLE_OWNER]);
+        $target = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $auditCount = (int) AdminAuditLog::query()->count();
+        for ($i = 0; $i < 5; $i++) {
+            $role = $i % 2 === 0 ? User::ROLE_ADMIN : User::ROLE_USER;
+            $this->patchJson("/api/admin/team/{$target->id}", ['role' => $role])
+                ->assertOk();
+        }
+
+        $this->patchJson("/api/admin/team/{$target->id}", ['role' => User::ROLE_USER])
+            ->assertTooManyRequests()
+            ->assertHeader('Retry-After')
+            ->assertHeader('X-RateLimit-Limit', '5');
+        $this->assertSame(User::ROLE_ADMIN, $target->fresh()->admin_role);
+        $this->assertDatabaseCount('admin_audit_logs', $auditCount + 5);
+    }
+
+    public function test_concurrent_demotions_cannot_remove_the_last_effective_owner(): void
+    {
+        if (config('database.default') !== 'pgsql') {
+            $this->markTestSkipped('Requires PostgreSQL transactions and row-lock behavior.');
+        }
+        if (! function_exists('proc_open')) {
+            $this->markTestSkipped('Requires proc_open to run two independent database clients.');
+        }
+
+        config(['gpa.admin_emails' => '']);
+        $owners = User::factory()->count(2)->create(['admin_role' => User::ROLE_OWNER]);
+        $barrier = sys_get_temp_dir().'/igroscan-owner-race-'.Str::uuid();
+        mkdir($barrier, 0700);
+
+        $worker = <<<'PHP'
+$basePath = $argv[1];
+$actorId = (int) $argv[2];
+$readyPath = $argv[3];
+$goPath = $argv[4];
+require $basePath.'/vendor/autoload.php';
+$app = require $basePath.'/bootstrap/app.php';
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+config(['gpa.admin_emails' => '']);
+App\Models\User::updating(function (): void {
+    Illuminate\Support\Facades\DB::select('SELECT pg_sleep(0.5)');
+});
+file_put_contents($readyPath, 'ready');
+$deadline = microtime(true) + 10;
+while (! is_file($goPath) && microtime(true) < $deadline) {
+    usleep(10000);
+}
+if (! is_file($goPath)) {
+    fwrite(STDERR, 'barrier timeout');
+    exit(2);
+}
+try {
+    $actor = App\Models\User::query()->findOrFail($actorId);
+    app(App\Services\Admin\AdminRoleService::class)->changeRole(
+        $actor,
+        $actor,
+        App\Models\User::ROLE_ADMIN,
+        'password',
+    );
+    echo 'success';
+} catch (Illuminate\Validation\ValidationException|Illuminate\Auth\Access\AuthorizationException $exception) {
+    echo 'rejected';
+} catch (Throwable $exception) {
+    fwrite(STDERR, $exception::class.': '.$exception->getMessage());
+    exit(3);
+}
+PHP;
+
+        $processes = [];
+        try {
+            foreach ($owners as $index => $owner) {
+                $process = new Process([
+                    PHP_BINARY,
+                    '-r',
+                    $worker,
+                    base_path(),
+                    (string) $owner->id,
+                    "{$barrier}/ready-{$index}",
+                    "{$barrier}/go",
+                ], base_path());
+                $process->start();
+                $processes[] = $process;
+            }
+
+            $deadline = microtime(true) + 10;
+            while ((! is_file("{$barrier}/ready-0") || ! is_file("{$barrier}/ready-1")) && microtime(true) < $deadline) {
+                usleep(10000);
+            }
+            $this->assertFileExists("{$barrier}/ready-0", 'First database client did not reach the barrier.');
+            $this->assertFileExists("{$barrier}/ready-1", 'Second database client did not reach the barrier.');
+            file_put_contents("{$barrier}/go", 'go');
+
+            $outcomes = [];
+            foreach ($processes as $process) {
+                $process->wait();
+                $this->assertTrue($process->isSuccessful(), $process->getErrorOutput());
+                $outcomes[] = trim($process->getOutput());
+            }
+
+            sort($outcomes);
+            $this->assertSame(['rejected', 'success'], $outcomes);
+            $this->assertSame(1, User::query()->get()->filter->canManageAdminTeam()->count());
+        } finally {
+            foreach ($processes as $process) {
+                if ($process->isRunning()) {
+                    $process->stop();
+                }
+            }
+            foreach (['ready-0', 'ready-1', 'go'] as $file) {
+                @unlink("{$barrier}/{$file}");
+            }
+            @rmdir($barrier);
+        }
+    }
+}

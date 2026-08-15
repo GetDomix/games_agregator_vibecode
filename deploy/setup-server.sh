@@ -37,7 +37,7 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 echo "==> Done. Next:"
-echo "  1) Add GitHub Secrets (DEPLOY_HOST=IP, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH=${DEPLOY_PATH})"
-echo "  2) Configure required reviewers for the GitHub environment: production"
-echo "  3) Run Actions → Pipeline manually on main/master with deploy_production=true"
-echo "  4) Open https://gpa.YOUR_IP.sslip.io/"
+echo "  1) Do not deploy until explicit release approval is recorded"
+echo "  2) Prepare ${DEPLOY_PATH}/deploy/.env.production with mode 600"
+echo "  3) Run deploy/preflight-production.sh before any Compose up"
+echo "  4) Configure the final DNS hostname and production approval gate"
