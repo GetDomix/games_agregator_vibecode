@@ -103,6 +103,7 @@ class TelegramBotInterfaceTest extends TestCase
 
     public function test_plain_bot_payload_leaves_an_existing_price_signal_unchanged(): void
     {
+        Queue::fake();
         $user = $this->botUser();
         $favorite = Favorite::query()->create(['user_id' => $user->id, 'appid' => 783, 'game_name' => 'Existing signal']);
         $alert = $favorite->alert()->create(['condition_type' => 'target_price', 'target_value' => 777, 'status' => 'triggered', 'cycle' => 4, 'triggered_at' => now()]);
