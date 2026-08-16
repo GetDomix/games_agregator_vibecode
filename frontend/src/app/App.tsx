@@ -1970,20 +1970,23 @@ export default function App() {
           <span className="m-tab-ico" aria-hidden><IconSearch size={20} /></span>
           {tr('Поиск', 'Search')}
         </button>
-        <button
-          type="button"
-          className={view === 'radar' ? 'active' : ''}
-          onClick={() => {
-            if (loggedIn) setView('radar')
-            else {
-              setAuthTab('login')
-              setAuthOpen(true)
-            }
-          }}
-        >
-          <span className="m-tab-ico" aria-hidden><IconRadar size={20} /></span>
-          {tr('Радар', 'Radar')}
-        </button>
+        {/* TODO [Mobile radar] Временно вырезано из MVP */}
+        {SHOW_POST_MVP_FEATURES && (
+          <button
+            type="button"
+            className={view === 'radar' ? 'active' : ''}
+            onClick={() => {
+              if (loggedIn) setView('radar')
+              else {
+                setAuthTab('login')
+                setAuthOpen(true)
+              }
+            }}
+          >
+            <span className="m-tab-ico" aria-hidden><IconRadar size={20} /></span>
+            {tr('Радар', 'Radar')}
+          </button>
+        )}
         <button
           type="button"
           className={view === 'favorites' ? 'active' : ''}

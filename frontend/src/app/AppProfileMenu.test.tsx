@@ -217,25 +217,14 @@ describe('profile admin navigation', () => {
     expect(screen.queryByRole('list', { name: 'Подходящие игры' })).not.toBeInTheDocument()
   })
 
-  it('explains all radar conditions and keeps a plain favorite condition-neutral', async () => {
-    const user = userEvent.setup()
+  it('hides radar controls and price-signal statistics in MVP', async () => {
     renderApp(regularUser, (path) => path === '/api/me/favorites' ? json({ items: [{ appid: 8, game_name: 'Plain game', alert: null }] }) : undefined)
 
-    await user.click(screen.getAllByRole('button', { name: 'Радар' })[0])
-    expect(await screen.findByText('Своя цена')).toBeInTheDocument()
-    expect(screen.getByText('Скидка Steam')).toBeInTheDocument()
-    expect(screen.getByText('Новый минимум')).toBeInTheDocument()
-    expect(screen.getByText(/не исторический минимум Steam/)).toBeInTheDocument()
-
-    const profileButton = screen.getByRole('button', { name: /Пользователь/ })
-    await user.click(profileButton)
-    await user.click(within(profileButton.closest('.profile-wrap') as HTMLElement).getByRole('menuitem', { name: 'Кабинет' }))
-    expect(await screen.findByText('Сигнал не настроен')).toBeInTheDocument()
-    expect(screen.getByText('Ценовых сигналов')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Радар' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Ценовых сигналов')).not.toBeInTheDocument()
   })
 
-  it('keeps a top-level favorite suggestion when cabinet Configure opens the modal', async () => {
-    const user = userEvent.setup()
+  it('hides alert configuration in MVP', async () => {
     renderApp(regularUser, (path) => path === '/api/me/favorites' ? json({ items: [{
       id: 8,
       appid: 8,
@@ -251,13 +240,8 @@ describe('profile admin navigation', () => {
       },
     }] }) : undefined)
 
-    const profileButton = screen.getByRole('button', { name: /Пользователь/ })
-    await user.click(profileButton)
-    await user.click(within(profileButton.closest('.profile-wrap') as HTMLElement).getByRole('menuitem', { name: 'Кабинет' }))
-    await user.click(await screen.findByRole('button', { name: 'Настроить' }))
-
-    expect(screen.getByText(/10% ниже текущей сохранённой цены: 900 RUB/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Подставить' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Настроить' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/10% ниже текущей сохранённой цены: 900 RUB/)).not.toBeInTheDocument()
   })
 
   it('requires an explicit candidate click before an ambiguous price response uses an appid', async () => {
@@ -329,7 +313,7 @@ describe('profile admin navigation', () => {
     expect(screen.queryByRole('button', { name: 'Admin' })).not.toBeInTheDocument()
   })
 
-  it('shows a marketplace alert hit instead of the legacy Steam target', async () => {
+  it('hides triggered price signals in MVP', async () => {
     const user = userEvent.setup()
     renderApp(regularUser)
 
@@ -337,7 +321,7 @@ describe('profile admin navigation', () => {
     await user.click(profileButton)
     await user.click(within(profileButton.closest('.profile-wrap') as HTMLElement).getByRole('menuitem', { name: 'Кабинет' }))
 
-    expect(await screen.findByText(/Plati: гифт/)).toHaveTextContent(/цель/)
-    expect(within(screen.getByText('Ценовых сигналов').closest('.cabinet-stat') as HTMLElement).getByText('1')).toBeInTheDocument()
+    expect(screen.queryByText(/Plati: гифт/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Ценовых сигналов')).not.toBeInTheDocument()
   })
 })
