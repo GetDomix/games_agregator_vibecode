@@ -19,6 +19,7 @@ import './styles.css'
 
 type RecentItem = { q: string; appid?: number | null; at: number }
 const RECENT_KEY = 'gpa_recent_v1'
+const SHOW_POST_MVP_FEATURES = false
 function loadRecents(): RecentItem[] {
   try {
     return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') as RecentItem[]
@@ -88,6 +89,8 @@ type WeeklyDeals = {
   source?: string
   items: WeeklyDeal[]
 }
+
+// TODO [spinRoulette] Временно вырезано из MVP
 type PlatiRoulettePick = { appid: number; name: string; header_image?: string | null; offer_kind?: string | null; price_rub?: number | null; url?: string | null; source?: 'saved_plati' | 'steam_showcase' }
 const ROULETTE_HISTORY_KEY = 'igroscan_roulette_history_v1'
 
@@ -167,7 +170,9 @@ export default function App() {
   const [dealsLoading, setDealsLoading] = useState(true)
   const [releasesLoading, setReleasesLoading] = useState(true)
   const [releaseRefreshMinutes, setReleaseRefreshMinutes] = useState(30)
+
   const [rouletteBusy, setRouletteBusy] = useState(false)
+
   const [marketTab, setMarketTab] = useState<'plati' | 'ggsel'>('plati')
   const [aboutOpen, setAboutOpen] = useState(false)
   const [suggests, setSuggests] = useState<SuggestItem[]>([])
@@ -189,7 +194,9 @@ export default function App() {
   const lastSearchRef = useRef<{ q: string; appid: number | null } | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const suggestListRef = useRef<HTMLUListElement>(null)
+
   const rouletteHistoryRef = useRef<number[]>(loadRouletteHistory())
+
   const livePollRef = useRef(0)
   const [marketPollingTimedOut, setMarketPollingTimedOut] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -489,6 +496,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.refreshing, result?.steam?.appid])
 
+  // TODO [Share] Временно вырезано из MVP
   function shareResult() {
     if (!result) return
     const url = window.location.href
@@ -700,7 +708,7 @@ export default function App() {
           </button>
           {loggedIn ? (
             <div className="profile-cluster m-only">
-              <LanguageCurrencyControls compact />
+              {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls compact />}
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
               </button>
@@ -723,7 +731,7 @@ export default function App() {
             </div>
           ) : (
             <div className="profile-cluster m-only">
-              <LanguageCurrencyControls compact />
+              {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls compact />}
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
               </button>
@@ -733,20 +741,27 @@ export default function App() {
             <button type="button" className="btn ghost sm" onClick={() => setView('guide')}>
               {tr('Как пользоваться', 'How it works')}
             </button>
-            <button
-              type="button"
-              className="btn ghost sm"
-              onClick={() => {
-                if (loggedIn) setView('radar')
-                else {
-                  setAuthTab('login')
-                  setAuthOpen(true)
-                }
-              }}
-            >
-              <IconRadar size={16} /> {tr('Радар', 'Radar')}
-            </button>
-            <LanguageCurrencyControls />
+
+            {/* TODO Временно вырезано из MVP */}
+            {SHOW_POST_MVP_FEATURES && (
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => {
+                  if (loggedIn) setView('radar')
+                  else {
+                    setAuthTab('login')
+                    setAuthOpen(true)
+                  }
+                }}
+              >
+                <IconRadar size={16} /> {tr('Радар', 'Radar')}
+              </button>
+            )}
+
+            {/* TODO Временно вырезано из MVP */}
+            {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls />}
+
             {loggedIn ? (
               <div className="profile-cluster">
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
@@ -903,10 +918,13 @@ export default function App() {
                     'Prices are cached per source and refresh about every 3 hours. A newly searched game is queued on its first search.',
                   )}
                 </p>
-                <button type="button" className={`roulette-btn ${rouletteBusy ? 'spinning' : ''}`} onClick={spinRoulette} disabled={rouletteBusy || loading}>
-                  <span className="roulette-orb" aria-hidden="true"><i /><i /><i /></span>
-                  <span><strong>{rouletteBusy || loading ? tr('Подбираем…', 'Picking…') : tr('Во что поиграть?', 'What should I play?')}</strong><small>{tr('Случайная игра', 'Random game')}</small></span>
-                </button>
+                {/* TODO [spinRoulette] Временно вырезано из MVP */}
+                {SHOW_POST_MVP_FEATURES && (
+                  <button type="button" className={`roulette-btn ${rouletteBusy ? 'spinning' : ''}`} onClick={spinRoulette} disabled={rouletteBusy || loading}>
+                    <span className="roulette-orb" aria-hidden="true"><i /><i /><i /></span>
+                    <span><strong>{rouletteBusy || loading ? tr('Подбираем…', 'Picking…') : tr('Во что поиграть?', 'What should I play?')}</strong><small>{tr('Случайная игра', 'Random game')}</small></span>
+                  </button>
+                )}
               </div>
 
               {loading && <div className="search-progress"><span className="spinner" aria-hidden="true" />{tr('Ищем игру в каталоге', 'Searching the game catalog')}</div>}
@@ -992,12 +1010,15 @@ export default function App() {
                           <button type="button" className={`btn ${result.is_favorite ? 'primary' : 'ghost'}`} onClick={toggleFavorite}>
                             {result.is_favorite ? tr('★ В избранном', '★ Watching') : tr('☆ В избранное', '☆ Watch')}
                           </button>
-                          <button type="button" className="btn ghost" onClick={shareResult}>
-                            {tr('Поделиться', 'Share')}
-                          </button>
+                          {/* TODO [Share] Временно вырезано из MVP */}
+                          {SHOW_POST_MVP_FEATURES && (
+                            <button type="button" className="btn ghost" onClick={shareResult}>
+                              {tr('Поделиться', 'Share')}
+                            </button>
+                          )}
                         </div>
                       </div>
-                      {result.deal && result.steam.is_free && result.deal.market_min_rub != null ? (
+                      {SHOW_POST_MVP_FEATURES && result.deal && result.steam.is_free && result.deal.market_min_rub != null ? (
                         <div className="deal-card paid-content-card">
                           <span className="paid-content-kicker">{tr('платный контент', 'paid content')}</span>
                           <strong>{tr('База бесплатна', 'Base game is free')}</strong>
@@ -1005,7 +1026,7 @@ export default function App() {
                             {tr('предложения от', 'offers from')} {money(result.deal.market_min_rub)} · {result.deal.market_source === 'plati' ? 'Plati.Market' : 'GGsel'}
                           </span>
                         </div>
-                      ) : result.deal && !result.steam.is_free ? (
+                      ) : SHOW_POST_MVP_FEATURES && result.deal && !result.steam.is_free ? (
                         <div className={`deal-card ${result.deal.is_better ? 'hot' : ''}`}>
                           <div className="deal-score" aria-label={`${tr('Оценка выгоды', 'Value score')}: ${result.deal.score} ${tr('из 100', 'out of 100')}`}>
                             <span>{tr('выгода', 'value')}</span>
@@ -1081,7 +1102,8 @@ export default function App() {
               )}
             </section>
 
-            {(popularLoading || popularChips.length > 0) && (
+            {/* TODO [Popular] Временно вырезано из MVP */}
+            {SHOW_POST_MVP_FEATURES && (popularLoading || popularChips.length > 0) && (
               <section className="section panel home-rail-section" data-reveal="home-popular">
                 <div className="section-heading"><div><p className="eyebrow">{tr('В фокусе', 'In focus')}</p><h2>{tr('Популярные игры', 'Popular games')}</h2></div><span className="muted">{tr('Лента листается автоматически', 'Auto-rotating')}</span></div>
                 {popularLoading ? <RailSkeleton /> : <GameRail
@@ -1098,7 +1120,9 @@ export default function App() {
               </section>
             )}
 
-            <section className="section panel home-rail-section" data-reveal="home-releases">
+            {/* TODO [New releases] Временно вырезано из MVP */}
+            {SHOW_POST_MVP_FEATURES && (
+              <section className="section panel home-rail-section" data-reveal="home-releases">
                 <div className="section-heading"><div><p className="eyebrow">Steam</p><h2>{tr('Свежие релизы', 'New releases')}</h2></div><span className="muted">{tr(`Витрина обновляется каждые ${releaseRefreshMinutes} мин.`, `Showcase refreshes every ${releaseRefreshMinutes} min.`)}</span></div>
                 {releasesLoading ? <RailSkeleton /> : releases.length > 0 ? <GameRail
                   previousLabel={tr('Предыдущие новинки', 'Previous releases')}
@@ -1113,8 +1137,10 @@ export default function App() {
                   }))}
                 /> : <p className="rail-placeholder">{tr('Витрина Steam обновляется — новинки появятся здесь автоматически.', 'The Steam showcase is refreshing—new releases will appear here automatically.')}</p>}
               </section>
+            )}
 
-            {(dealsLoading || deals.length > 0) && (
+            {/* TODO [Weekly deals] Временно вырезано из MVP */}
+            {SHOW_POST_MVP_FEATURES && (dealsLoading || deals.length > 0) && (
               <section className="section panel" data-reveal="home-deals">
                 <h2 className="sale-title">{tr('Скидки недели', 'Deals of the week')}</h2>
                 {dealsLoading ? <RailSkeleton compact /> : <div className="sale-grid">
@@ -1162,7 +1188,9 @@ export default function App() {
               </div>
             </section>
 
-            <section className="section radar-cta" data-reveal="home-radar">
+            {/* TODO [Radar CTA] Временно вырезано из MVP */}
+            {SHOW_POST_MVP_FEATURES && (
+              <section className="section radar-cta" data-reveal="home-radar">
               <div className="radar-cta-copy">
                 <p className="eyebrow">{tr('Радар цен', 'Price radar')}</p>
                 <h2>{tr('Не пропусти выгодную цену', 'Never miss a good price')}</h2>
@@ -1190,7 +1218,8 @@ export default function App() {
                 <span></span>
                 <i></i>
               </div>
-            </section>
+              </section>
+            )}
           </>
         )}
 
@@ -1557,8 +1586,9 @@ export default function App() {
                 <div className="cabinet-stats stagger" aria-label="Статистика аккаунта">
                   <div className="cabinet-stat"><b>{dashboard.searches_total}</b><span>{tr('Всего поисков', 'Total searches')}</span></div>
                   <div className="cabinet-stat"><b>{dashboard.searches_this_week}</b><span>{tr('За 7 дней', 'Last 7 days')}</span></div>
-                  <div className="cabinet-stat"><b>{dashboard.favorites_count}</b><span>{tr('В избранном', 'Watching')}</span></div>
-                  <div className="cabinet-stat"><b>{dashboard.alerts_count}</b><span>{tr('Ценовых сигналов', 'Price alerts')}</span></div>
+                  {/* TODO [Cabinet stats] Временно вырезано из MVP */}
+                  {SHOW_POST_MVP_FEATURES && <div className="cabinet-stat"><b>{dashboard.favorites_count}</b><span>{tr('В избранном', 'Watching')}</span></div>}
+                  {SHOW_POST_MVP_FEATURES && <div className="cabinet-stat"><b>{dashboard.alerts_count}</b><span>{tr('Ценовых сигналов', 'Price alerts')}</span></div>}
                 </div>
               )}
               {dashboard?.ctas?.length ? (
@@ -1614,7 +1644,7 @@ export default function App() {
                           {f.freshness?.map((source) => <span className="offer-meta" key={source.source}>{source.source}: {source.status}{source.last_error ? ` · ${source.last_error}` : ''}</span>)}
                           <div className="actions cabinet-card-actions">
                             <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>{tr('Цены', 'Prices')}</button>
-                            <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>
+                            {SHOW_POST_MVP_FEATURES && <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>}
                             <button
                               type="button"
                               className="btn ghost sm"
@@ -1636,22 +1666,25 @@ export default function App() {
                   </div>
                 </div>
 
-                <WatchlistAlerts
-                  favorites={watchlist}
-                  alerts={alertItems}
-                  onEdit={(favorite) => setAlertModal(favorite)}
-                  onSearch={runSearch}
-                  onRearm={async (alert) => {
-                    await api(`/api/me/favorites/${alert.favorite.appid}/alert/rearm`, { method: 'POST' })
-                    await loadWatchlist()
-                    setToast('Алерт снова активен')
-                  }}
-                  onRemove={async (alert) => {
-                    await api(`/api/me/favorites/${alert.favorite.appid}/alert`, { method: 'DELETE' })
-                    await loadWatchlist()
-                    setToast('Алерт удалён')
-                  }}
-                />
+                {/* TODO [Watchlist alerts] Временно вырезано из MVP */}
+                {SHOW_POST_MVP_FEATURES && (
+                  <WatchlistAlerts
+                    favorites={watchlist}
+                    alerts={alertItems}
+                    onEdit={(favorite) => setAlertModal(favorite)}
+                    onSearch={runSearch}
+                    onRearm={async (alert) => {
+                      await api(`/api/me/favorites/${alert.favorite.appid}/alert/rearm`, { method: 'POST' })
+                      await loadWatchlist()
+                      setToast('Алерт снова активен')
+                    }}
+                    onRemove={async (alert) => {
+                      await api(`/api/me/favorites/${alert.favorite.appid}/alert`, { method: 'DELETE' })
+                      await loadWatchlist()
+                      setToast('Алерт удалён')
+                    }}
+                  />
+                )}
 
                 <div className="panel cabinet-history">
                   <div className="panel-head">
@@ -1696,8 +1729,10 @@ export default function App() {
                 </div>
               </main>
 
-              <aside className="cabinet-rail">
-                <div className={`panel cabinet-radar ${tgStatus?.linked ? 'is-online' : ''}`}>
+              {SHOW_POST_MVP_FEATURES && (
+                <aside className="cabinet-rail">
+                {/* TODO [Cabinet radar] Временно вырезано из MVP */}
+                  <div className={`panel cabinet-radar ${tgStatus?.linked ? 'is-online' : ''}`}>
                   <div className="cabinet-rail-icon" aria-hidden="true"><IconRadar size={20} /></div>
                   <div className="cabinet-rail-title">
                     <p className="panel-kicker">{tr('Уведомления', 'Notifications')}</p>
@@ -1714,7 +1749,8 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="panel cabinet-gift">
+                {/* TODO [Gift] Временно вырезано из MVP */}
+                  <div className="panel cabinet-gift">
                   <div className="cabinet-rail-icon" aria-hidden="true"><IconGift size={20} /></div>
                   <div className="cabinet-rail-title">
                     <p className="panel-kicker">{tr('Дроп раз в 3 дня', 'Drop every 3 days')}</p>
@@ -1770,7 +1806,8 @@ export default function App() {
                     </div>
                   </div>
                 )}
-              </aside>
+                </aside>
+              )}
             </div>
           </section>
         )}
@@ -1791,7 +1828,7 @@ export default function App() {
                       {f.release_status === 'announced' ? <span className="offer-meta">Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
                       <div className="actions">
                         <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>{tr('Цены', 'Prices')}</button>
-                        <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>
+                        {SHOW_POST_MVP_FEATURES && <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>}
                         <button
                           type="button"
                           className="btn ghost sm"
@@ -1884,7 +1921,7 @@ export default function App() {
         )}
       </main>
 
-      {alertModal && (
+      {SHOW_POST_MVP_FEATURES && alertModal && (
         <AlertSettingsModal
           favorite={alertModal}
           initialPrefs={(user as (User & { alert_prefs?: AlertPrefs | null }) | null)?.alert_prefs ?? null}
