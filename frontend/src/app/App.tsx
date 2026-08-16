@@ -1059,7 +1059,8 @@ export default function App() {
                       onTrack={trackClick}
                     />
                   )}
-                  {result.steam && (
+                  {/* TODO [Price history] Временно вырезано из MVP */}
+                  {SHOW_POST_MVP_FEATURES && result.steam && (
                     <PriceHistory
                       appid={result.steam.appid}
                       authenticated={loggedIn}
