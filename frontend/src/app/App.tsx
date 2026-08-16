@@ -708,6 +708,7 @@ export default function App() {
           </button>
           {loggedIn ? (
             <div className="profile-cluster m-only">
+              {/* TODO [Mobile language] Временно вырезано из MVP */}
               {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls compact />}
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
@@ -731,6 +732,7 @@ export default function App() {
             </div>
           ) : (
             <div className="profile-cluster m-only">
+              {/* TODO [Mobile language] Временно вырезано из MVP */}
               {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls compact />}
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
@@ -1018,6 +1020,7 @@ export default function App() {
                           )}
                         </div>
                       </div>
+                      {/* TODO [Deal score] Временно вырезано из MVP */}
                       {SHOW_POST_MVP_FEATURES && result.deal && result.steam.is_free && result.deal.market_min_rub != null ? (
                         <div className="deal-card paid-content-card">
                           <span className="paid-content-kicker">{tr('платный контент', 'paid content')}</span>
@@ -1644,6 +1647,7 @@ export default function App() {
                           {f.freshness?.map((source) => <span className="offer-meta" key={source.source}>{source.source}: {source.status}{source.last_error ? ` · ${source.last_error}` : ''}</span>)}
                           <div className="actions cabinet-card-actions">
                             <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>{tr('Цены', 'Prices')}</button>
+                            {/* TODO [Cabinet configure] Временно вырезано из MVP */}
                             {SHOW_POST_MVP_FEATURES && <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>}
                             <button
                               type="button"
@@ -1774,6 +1778,7 @@ export default function App() {
                   )}
                 </div>
 
+                {/* TODO [Cabinet price hits] Временно вырезано из MVP */}
                 {dashboard?.price_hits && dashboard.price_hits.length > 0 && (
                   <div className="panel cabinet-hits">
                     <div className="panel-head">
@@ -1828,6 +1833,7 @@ export default function App() {
                       {f.release_status === 'announced' ? <span className="offer-meta">Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
                       <div className="actions">
                         <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>{tr('Цены', 'Prices')}</button>
+                        {/* TODO [Watchlist configure] Временно вырезано из MVP */}
                         {SHOW_POST_MVP_FEATURES && <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>}
                         <button
                           type="button"
@@ -1921,6 +1927,7 @@ export default function App() {
         )}
       </main>
 
+      {/* TODO [Alert settings modal] Временно вырезано из MVP */}
       {SHOW_POST_MVP_FEATURES && alertModal && (
         <AlertSettingsModal
           favorite={alertModal}
