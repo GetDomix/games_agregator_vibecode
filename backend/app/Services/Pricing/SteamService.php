@@ -3,6 +3,7 @@
 namespace App\Services\Pricing;
 
 use App\Services\Catalog\GameCandidateKindClassifier;
+use App\Services\Catalog\SearchCandidateRanker;
 use Carbon\CarbonImmutable;
 
 class SteamService
@@ -10,16 +11,26 @@ class SteamService
     public function __construct(
         private readonly ExchangeRateService $exchangeRates,
         private readonly GameCandidateKindClassifier $candidateKinds,
+        private readonly SearchCandidateRanker $candidateRanker,
     ) {}
 
     public function search(string $query, int $limit = 8): array
     {
-        $candidates = $this->storeSearch($query, 'ru', 'russian', true, $limit);
-        if ($candidates !== []) {
-            return $candidates;
+        // RU search omits games that are unavailable in the region, even when
+        // they are the strongest title match. Keep Steam's global US ordering,
+        // then enrich duplicates with live RU availability and price fields.
+        $merged = [];
+        foreach ($this->storeSearch($query, 'us', 'english', false, $limit) as $candidate) {
+            $merged[(int) $candidate['appid']] = $candidate;
+        }
+        foreach ($this->storeSearch($query, 'ru', 'russian', true, $limit) as $candidate) {
+            $appid = (int) $candidate['appid'];
+            $merged[$appid] = isset($merged[$appid])
+                ? array_replace($merged[$appid], $candidate)
+                : $candidate;
         }
 
-        return $this->storeSearch($query, 'us', 'english', false, $limit);
+        return $this->candidateRanker->rank(array_values($merged), $query, $limit);
     }
 
     private function storeSearch(string $query, string $cc, string $lang, bool $availableInRu, int $limit): array

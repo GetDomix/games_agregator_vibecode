@@ -166,6 +166,33 @@ describe('profile admin navigation', () => {
     expect(within(list).getByRole('button', { name: /Scrollable Game 12/ })).toBeInTheDocument()
   })
 
+  it('submits an exact autocomplete title with its appid', async () => {
+    const user = userEvent.setup()
+    const priceRequests: string[] = []
+    renderApp(regularUser, (path) => {
+      if (path.includes('/api/search?q=Cyberpunk%202077')) return json({ candidates: [
+        { appid: 1091500, name: 'Cyberpunk 2077', candidate_kind: 'game', available_in_ru: false },
+        { appid: 2138330, name: 'Cyberpunk 2077: Phantom Liberty', candidate_kind: 'game', available_in_ru: false },
+      ] })
+      if (path.startsWith('/api/prices?')) {
+        priceRequests.push(path)
+        return json({
+          query: 'Cyberpunk 2077',
+          steam: { appid: 1091500, name: 'Cyberpunk 2077', price_rub: null, available_in_ru: false, regional_prices: [] },
+          candidates: [], plati: { by_kind: [] }, ggsel: { by_kind: [] }, warnings: [], refreshing: false,
+        })
+      }
+      return undefined
+    })
+
+    await user.type(screen.getByRole('textbox', { name: 'Название игры' }), 'Cyberpunk 2077')
+    await screen.findByRole('button', { name: /^Cyberpunk 2077Игра/ })
+    await user.click(screen.getByRole('button', { name: 'Сравнить' }))
+
+    await waitFor(() => expect(priceRequests).toHaveLength(1))
+    expect(priceRequests[0]).toContain('appid=1091500')
+  })
+
   it('refreshes the visible suggestion price from the selected game result', async () => {
     const user = userEvent.setup()
     renderApp(regularUser, (path) => {

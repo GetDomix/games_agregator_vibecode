@@ -841,7 +841,9 @@ export default function App() {
                 onSubmit={(e) => {
                   e.preventDefault()
                   setSuggestOpen(false)
-                  runSearch(query)
+                  const normalizedQuery = query.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+                  const exactSuggestion = suggests.find((candidate) => candidate.name.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === normalizedQuery)
+                  runSearch(exactSuggestion?.name ?? query, exactSuggestion?.appid)
                 }}
               >
                 <div className="search-field search-field--suggest">

@@ -10,6 +10,7 @@ use App\Models\GameSourceState;
 use App\Models\SteamRegionalPrice;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
@@ -176,6 +177,52 @@ class StoredPriceSearchTest extends TestCase
             ->assertJsonPath('candidates.0.appid', 1401)
             ->assertJsonPath('candidates.0.price_rub', 132)
             ->assertJsonPath('candidates.1.appid', 1402)
+            ->assertJsonPath('meta.discovery_used', true);
+    }
+
+    public function test_browser_discovery_keeps_a_region_blocked_exact_title_ahead_of_ru_keyword_matches(): void
+    {
+        Http::fake(function (Request $request) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return ($query['cc'] ?? null) === 'US'
+                ? Http::response(['items' => [
+                    ['id' => 1091500, 'name' => 'Cyberpunk 2077', 'type' => 'app'],
+                    ['id' => 2138330, 'name' => 'Cyberpunk 2077: Phantom Liberty', 'type' => 'app'],
+                ]])
+                : Http::response(['items' => [
+                    ['id' => 4348910, 'name' => 'Probably Stolen - Cyberpunk Shopkeeper Sim', 'type' => 'app'],
+                    ['id' => 1465260, 'name' => 'Cyberpunk SFX', 'type' => 'app'],
+                ]]);
+        });
+
+        $this->getJson('/api/search?q=cyberpunk&discover=1')->assertOk()
+            ->assertJsonPath('candidates.0.appid', 1091500)
+            ->assertJsonPath('candidates.0.name', 'Cyberpunk 2077')
+            ->assertJsonPath('candidates.0.available_in_ru', false)
+            ->assertJsonPath('meta.discovery_used', true);
+    }
+
+    public function test_explicit_discovery_is_not_skipped_when_local_keyword_matches_fill_the_limit(): void
+    {
+        for ($i = 1; $i <= 20; $i++) {
+            Game::query()->create([
+                'steam_appid' => 8000 + $i,
+                'name' => sprintf('Cyberpunk Local Match %02d', $i),
+                'release_status' => 'released',
+            ]);
+        }
+        Http::fake(function (Request $request) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return ($query['cc'] ?? null) === 'US'
+                ? Http::response(['items' => [['id' => 1091500, 'name' => 'Cyberpunk 2077', 'type' => 'app']]])
+                : Http::response(['items' => []]);
+        });
+
+        $this->getJson('/api/search?q=cyberpunk&discover=1')->assertOk()
+            ->assertJsonCount(20, 'candidates')
+            ->assertJsonPath('candidates.0.appid', 1091500)
             ->assertJsonPath('meta.discovery_used', true);
     }
 
