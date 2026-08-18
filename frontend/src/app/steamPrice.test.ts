@@ -8,7 +8,7 @@ describe('selectSteamDisplayPrice', () => {
       regional_prices: [
         { region: 'US', label: 'United States', currency: 'USD', amount: 59.99, price_rub: 4955.53 },
       ],
-    }, 'RUB')).toEqual({ kind: 'rub', value: 4955.53, regionLabel: 'United States' })
+    }, 'RUB')).toEqual({ kind: 'rub', value: 4955.53, regionLabel: 'United States', sourceCurrency: 'USD' })
   })
 
   it('uses the selected Steam region even when that storefront returns another currency', () => {
@@ -18,7 +18,7 @@ describe('selectSteamDisplayPrice', () => {
         { region: 'US', label: 'United States', currency: 'USD', amount: 59.99, price_rub: 4955.53 },
         { region: 'TR', label: 'Turkey', currency: 'USD', amount: 44.99, price_rub: 3716.53 },
       ],
-    }, 'TRY')).toEqual({ kind: 'rub', value: 3716.53, regionLabel: 'Turkey' })
+    }, 'TRY')).toEqual({ kind: 'rub', value: 3716.53, regionLabel: 'Turkey', sourceCurrency: 'USD' })
   })
 
   it('does not confuse another USD storefront with the selected US region', () => {
@@ -32,6 +32,21 @@ describe('selectSteamDisplayPrice', () => {
       value: 59.99,
       currency: 'USD',
       regionLabel: 'United States',
+    })
+  })
+
+  it('prioritizes the converted US dollar price for a RUB fallback', () => {
+    expect(selectSteamDisplayPrice({
+      price_rub: null,
+      regional_prices: [
+        { region: 'DE', label: 'Germany', currency: 'EUR', amount: 49.99, price_rub: 5100 },
+        { region: 'US', label: 'United States', currency: 'USD', amount: 59.99, price_rub: 4955.53 },
+      ],
+    }, 'RUB')).toEqual({
+      kind: 'rub',
+      value: 4955.53,
+      regionLabel: 'United States',
+      sourceCurrency: 'USD',
     })
   })
 })

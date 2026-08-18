@@ -912,7 +912,7 @@ export default function App() {
                                     : s.price_rub != null
                                       ? money(s.price_rub)
                                       : s.available_in_ru === false
-                                        ? tr('Нет цены RU', 'No RU price')
+                                        ? tr('Недоступно в регионе RU', 'Unavailable in the RU region')
                                         : tr('Цена уточняется', 'Price pending')}
                               </span>
                             </button>
@@ -984,7 +984,7 @@ export default function App() {
                   )}
 
                   {!result.steam && result.candidates?.length > 0 && (
-                    <div className="panel suggest-hint"><p>{tr('Выберите точный вариант игры.', 'Choose the exact game variant.')}</p><ul className="candidates" aria-label={tr('Варианты игры', 'Game variants')}>{result.candidates.map((candidate) => <li key={candidate.appid}><button type="button" className="suggest-item" onClick={() => runSearch(candidate.name, candidate.appid, { force: true })}><span className="suggest-art" aria-hidden="true"><img src={candidate.tiny_image || candidate.header_image || steamCandidateImage(candidate.appid)} alt="" onError={repairCandidateImg(candidate.appid)} /></span><span className="suggest-copy"><span className="suggest-name">{candidate.name}</span><small>{({ game: tr('Игра', 'Game'), demo: tr('Демоверсия', 'Demo'), dlc: tr('Дополнение', 'Add-on'), remaster: tr('Ремастер', 'Remaster'), edition: tr('Издание', 'Edition'), soundtrack: tr('Саундтрек', 'Soundtrack') }[candidate.candidate_kind || 'game'])}</small></span><span className={`suggest-price ${candidate.price_rub == null && candidate.release_status !== 'announced' ? 'muted' : ''}`}>{candidate.release_status === 'announced' ? tr('Ещё не вышла', 'Coming soon') : candidate.is_free || candidate.price_rub === 0 ? tr('Бесплатно', 'Free') : candidate.price_rub != null ? money(candidate.price_rub) : candidate.available_in_ru === false ? tr('Нет цены RU', 'No RU price') : tr('Цена уточняется', 'Price pending')}</span></button></li>)}</ul></div>
+                    <div className="panel suggest-hint"><p>{tr('Выберите точный вариант игры.', 'Choose the exact game variant.')}</p><ul className="candidates" aria-label={tr('Варианты игры', 'Game variants')}>{result.candidates.map((candidate) => <li key={candidate.appid}><button type="button" className="suggest-item" onClick={() => runSearch(candidate.name, candidate.appid, { force: true })}><span className="suggest-art" aria-hidden="true"><img src={candidate.tiny_image || candidate.header_image || steamCandidateImage(candidate.appid)} alt="" onError={repairCandidateImg(candidate.appid)} /></span><span className="suggest-copy"><span className="suggest-name">{candidate.name}</span><small>{({ game: tr('Игра', 'Game'), demo: tr('Демоверсия', 'Demo'), dlc: tr('Дополнение', 'Add-on'), remaster: tr('Ремастер', 'Remaster'), edition: tr('Издание', 'Edition'), soundtrack: tr('Саундтрек', 'Soundtrack') }[candidate.candidate_kind || 'game'])}</small></span><span className={`suggest-price ${candidate.price_rub == null && candidate.release_status !== 'announced' ? 'muted' : ''}`}>{candidate.release_status === 'announced' ? tr('Ещё не вышла', 'Coming soon') : candidate.is_free || candidate.price_rub === 0 ? tr('Бесплатно', 'Free') : candidate.price_rub != null ? money(candidate.price_rub) : candidate.available_in_ru === false ? tr('Недоступно в регионе RU', 'Unavailable in the RU region') : tr('Цена уточняется', 'Price pending')}</span></button></li>)}</ul></div>
                   )}
 
                   {result.steam && (
@@ -996,7 +996,7 @@ export default function App() {
                             {result.steam.available_in_ru === true
                               ? 'Steam RU'
                               : result.steam.available_in_ru === false
-                                ? tr('нет цены RU', 'no RU price')
+                                ? tr('Недоступно в регионе RU', 'Unavailable in the RU region')
                                 : tr('Steam · проверяем', 'Steam · checking')}
                           </span>
                           {(result.steam.discount_percent || 0) > 0 && (
@@ -1020,7 +1020,12 @@ export default function App() {
                         </div>
                         {!result.steam.is_free && steamDisplayPrice?.regionLabel && (
                           <p className="steam-price-source">
-                            {tr('Регион цены Steam', 'Steam price region')}: {steamDisplayPrice.regionLabel}
+                            {result.steam.available_in_ru === false && steamDisplayPrice.kind === 'rub'
+                              ? tr(
+                                  `Цена Steam ${steamDisplayPrice.regionLabel} · пересчёт из ${steamDisplayPrice.sourceCurrency === 'USD' ? '$' : steamDisplayPrice.sourceCurrency ?? 'иностранной валюты'} в ₽`,
+                                  `Steam ${steamDisplayPrice.regionLabel} price · converted from ${steamDisplayPrice.sourceCurrency ?? 'foreign currency'} to RUB`,
+                                )
+                              : <>{tr('Регион цены Steam', 'Steam price region')}: {steamDisplayPrice.regionLabel}</>}
                           </p>
                         )}
                         {result.steam.note && <p className="muted">{result.steam.note}</p>}

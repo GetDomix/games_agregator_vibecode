@@ -11,7 +11,7 @@
 - Single-minded proposition: Игроскан turns noisy marketplace prices into a trustworthy purchase decision.
 - References: Stripe Dashboard for calm numeric hierarchy; Linear for compact interaction states; avoid oversized decorative charts and generic rounded-card stacks.
 - Mode: dark and light. Density: balanced on search, dense inside price data.
-- Constraints: React with plain CSS tokens, Laravel API, WCAG 2.2 AA, mobile support, existing Golos Text / Unbounded / JetBrains Mono identity.
+- Constraints: React with plain CSS tokens, Laravel API, WCAG 2.2 AA, mobile support, existing Golos Text / Unbounded / JetBrains Mono identity. While language and currency selectors remain outside the MVP, the interface is fixed to Russian and all customer-facing prices are RUB.
 
 ## Aesthetic
 
@@ -72,7 +72,8 @@
 - Radar condition ledger: the alert modal presents three plain, mutually exclusive conditions: a manually entered RUB threshold, Steam official discount percentage, and a new observed low. The current-price suggestion is provenance text plus an explicit apply action; it never fills a threshold by itself.
 - Progressive disclosure: platform and offer-kind controls live in one native `details` element labelled “Дополнительные настройки”. Steam discount keeps its fixed official-Steam scope visible as copy, rather than showing a redundant matrix.
 - Candidate selection: ambiguous titles are a ruled, explicit list with artwork, candidate kind, and known stored price. Browser autocomplete merges canonical local matches with live Steam discovery, deduplicates by appid, and may expose up to 20 current-query matches inside one bounded scroll area; changing the query clears the old list immediately. Empty focused search can show up to four appid-backed local recents and makes no discovery request.
-- Candidate rows use a fixed artwork rail, left-aligned title/type copy, and a right-aligned honest price state (`Бесплатно`, `Ещё не вышла`, `Нет цены RU`, or `Цена уточняется`). `Нет цены RU` is reserved for a completed successful Steam scan; pending, failed and never-scanned states remain `Цена уточняется`. Missing art retries a deterministic Steam capsule before falling back to the neutral rail.
+- Candidate rows use a fixed artwork rail, left-aligned title/type copy, and a right-aligned honest price state (`Бесплатно`, `Ещё не вышла`, `Недоступно в регионе RU`, or `Цена уточняется`). `Недоступно в регионе RU` is reserved for a completed successful Steam scan; pending, failed and never-scanned states remain `Цена уточняется`. Missing art retries a deterministic Steam capsule before falling back to the neutral rail.
+- When Steam RU is unavailable, the resolved game card prioritizes the official Steam US price, displays its stored exchange-rate conversion in RUB, and keeps provenance visible as `Цена Steam США · пересчёт из $ в ₽`. The amber availability badge communicates regional absence; it does not suppress the usable fallback price.
 - The desktop profile control ends in a square notched terminal joint. This preserves the intentionally unrounded right edge when the control is no longer flush with the viewport.
 - Price alerts use a compact icon-only bell control immediately before the profile, matching the theme control's 36px footprint. Its accessible name carries the full meaning; the restrained signal tint appears only on hover, focus and the active Radar view. Mobile keeps the same bell in the header and a labelled destination in the four-item bottom navigation so the feature remains discoverable without implying unread-message counts.
 - Radar conditions form one compact three-position register. Bulk offer-kind controls across marketplaces and per-market select-all actions remain inside the advanced disclosure.
@@ -146,6 +147,7 @@
 - Radar audit: pass. The condition picker is a ruled ledger with native radio controls; advanced source/type controls remain one collapsed disclosure and candidates retain compact metadata. No gradient, glow, side accent, or layout animation was introduced.
 - Search audit (2026-08-14): pass. The existing ruled candidate family was retained; the list gained bounded scrolling and keyboard navigation without adding ornamental surfaces. Pending Steam data is neutral rather than styled as a warning.
 - Notification navigation audit (2026-08-18): pass. The control reuses the existing 24px/1.9px icon grid, defined-edge button family and signal token; it has explicit hover, active and focus states, a 36px header target, an accessible name, a labelled mobile navigation target, and no decorative badge that could be mistaken for an unread count. The desktop label was removed after visual review showed excess toolbar density.
+- MVP locale and Steam fallback audit (2026-08-18): pass. Stale EN/non-RUB browser preferences no longer create an invisible mode without controls. Regional unavailability, converted price and source provenance remain separate text signals; the price is not presented as a Steam RU amount and pending scans are not mislabeled as unavailable.
 
 ## Changelog
 
@@ -157,3 +159,4 @@
 - 2026-08-13: tightened search candidates into an aligned price ledger, added honest no-price/release states and artwork recovery, terminated the detached profile edge, restored radar bulk scope controls, and exposed read-only observed-low baselines.
 - 2026-08-14: made Steam availability tri-state, removed stale autocomplete caching, expanded discovery to 20 scrollable matches, and added responsive loading plus keyboard navigation.
 - 2026-08-18: restored price-alert navigation beside the profile with a compact custom bell icon and a matching mobile Signals destination; removed the desktop label after visual density review.
+- 2026-08-18: fixed the selector-free MVP to Russian/RUB and added an explicit Steam RU-unavailable state with a USD-to-RUB official-price fallback.

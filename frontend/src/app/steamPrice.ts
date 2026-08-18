@@ -15,7 +15,7 @@ type SteamPriceData = {
 
 export type SteamDisplayPrice =
   | { kind: 'amount'; value: number; currency: Currency; regionLabel?: string }
-  | { kind: 'rub'; value: number; regionLabel?: string }
+  | { kind: 'rub'; value: number; regionLabel?: string; sourceCurrency?: Currency }
   | null
 
 const REGION_BY_CURRENCY: Record<Currency, string> = {
@@ -39,7 +39,7 @@ export function selectSteamDisplayPrice(steam: SteamPriceData, currency: Currenc
     }
   }
   if (preferredRegion?.price_rub != null && Number.isFinite(Number(preferredRegion.price_rub))) {
-    return { kind: 'rub', value: Number(preferredRegion.price_rub), regionLabel: preferredRegion.label }
+    return { kind: 'rub', value: Number(preferredRegion.price_rub), regionLabel: preferredRegion.label, sourceCurrency: preferredRegion.currency }
   }
 
   const exactRegionalPrice = steam.regional_prices?.find(
@@ -59,9 +59,11 @@ export function selectSteamDisplayPrice(steam: SteamPriceData, currency: Currenc
   }
 
   const convertedRegionalPrice = steam.regional_prices?.find(
+    (price) => price.region.toUpperCase() === 'US' && price.currency === 'USD' && price.price_rub != null && Number.isFinite(Number(price.price_rub)),
+  ) ?? steam.regional_prices?.find(
     (price) => price.price_rub != null && Number.isFinite(Number(price.price_rub)),
   )
   return convertedRegionalPrice
-    ? { kind: 'rub', value: Number(convertedRegionalPrice.price_rub), regionLabel: convertedRegionalPrice.label }
+    ? { kind: 'rub', value: Number(convertedRegionalPrice.price_rub), regionLabel: convertedRegionalPrice.label, sourceCurrency: convertedRegionalPrice.currency }
     : null
 }

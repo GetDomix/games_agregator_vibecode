@@ -187,7 +187,7 @@ describe('profile admin navigation', () => {
 
     const input = screen.getByRole('textbox', { name: 'Название игры' })
     await user.type(input, 'outpost4')
-    await user.click(await screen.findByRole('button', { name: /outpost4.*Нет цены RU/ }))
+    await user.click(await screen.findByRole('button', { name: /outpost4.*Недоступно в регионе RU/ }))
     expect(await screen.findByRole('heading', { name: 'outpost4' })).toBeInTheDocument()
 
     await user.click(input)
@@ -230,6 +230,36 @@ describe('profile admin navigation', () => {
     expect(screen.getByRole('heading', { name: 'Радар цен' })).toBeInTheDocument()
     expect(notificationButton).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByText('Ценовых сигналов')).not.toBeInTheDocument()
+  })
+
+  it('shows a converted USD price in rubles when Steam RU is unavailable', async () => {
+    const user = userEvent.setup()
+    renderApp(regularUser, (path) => path.startsWith('/api/prices?') ? json({
+      query: 'Unavailable Game',
+      steam: {
+        appid: 404,
+        name: 'Unavailable Game',
+        store_url: 'https://store.steampowered.com/app/404/',
+        price_rub: null,
+        available_in_ru: false,
+        is_free: false,
+        regional_prices: [
+          { region: 'US', label: 'США', currency: 'USD', amount: 59.99, price_rub: 4955.53 },
+        ],
+      },
+      candidates: [],
+      plati: { marketplace: 'plati', label: 'Plati.Market', total_offers: 0, scanned_offers: 0, by_kind: [] },
+      ggsel: { marketplace: 'ggsel', label: 'GGsel', total_offers: 0, scanned_offers: 0, by_kind: [] },
+      warnings: [],
+      refreshing: false,
+    }) : undefined)
+
+    await user.type(screen.getByRole('textbox', { name: 'Название игры' }), 'Unavailable Game')
+    await user.click(screen.getByRole('button', { name: 'Сравнить' }))
+
+    expect(await screen.findByText('Недоступно в регионе RU')).toBeInTheDocument()
+    expect(screen.getByText(/4\s956\s₽/)).toBeInTheDocument()
+    expect(screen.getByText('Цена Steam США · пересчёт из $ в ₽')).toBeInTheDocument()
   })
 
   it('hides alert configuration in MVP', async () => {
