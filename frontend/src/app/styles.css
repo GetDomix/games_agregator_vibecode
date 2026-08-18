@@ -295,6 +295,31 @@ strong { color: var(--ink); }
 .icon-btn svg { width: 17px; height: 17px; }
 .icon-btn:hover { border-color: var(--border-strong); color: var(--ink); }
 
+.notification-btn {
+  position: relative;
+  min-height: 36px;
+  padding-inline: 0.72rem;
+  border-color: color-mix(in srgb, var(--signal) 24%, var(--border));
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.notification-btn svg { flex: 0 0 auto; }
+.notification-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--signal) 58%, var(--border));
+  color: var(--ink);
+}
+.notification-btn:active { transform: translateY(1px); }
+.notification-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--signal);
+}
+.notification-btn.is-active {
+  border-color: color-mix(in srgb, var(--signal) 55%, var(--border));
+  background: var(--signal-soft);
+  color: var(--signal);
+}
+.notification-btn.compact { width: 36px; padding: 0; }
+
 /* ---------- кнопки ---------- */
 .btn {
   display: inline-flex;
@@ -326,6 +351,8 @@ strong { color: var(--ink); }
 }
 .btn.ghost:hover:not(:disabled) { border-color: var(--border-strong); background: var(--card-2); }
 .btn.sm { min-height: 32px; padding: 0.28rem 0.75rem; font-size: 0.8rem; border-radius: 7px; }
+.btn.notification-btn { min-height: 36px; }
+.btn.notification-btn.compact { width: 36px; min-width: 36px; padding: 0; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
 
 /* ---------- панели ---------- */
@@ -2072,6 +2099,8 @@ strong { color: var(--ink); }
   .header-inner { width: calc(100% - 1.4rem); flex-wrap: wrap; }
   .region-controls.compact select { max-width: 58px; }
   .header-actions { width: 100%; justify-content: flex-start; }
+  .profile-cluster.m-only { gap: 0.4rem; }
+  .profile-cluster.m-only .profile-btn { min-width: 36px; min-height: 36px; padding: 0.28rem 0.35rem; border-right: 1px solid var(--border); border-radius: 9px; }
   .footer { padding-bottom: calc(1.2rem + env(safe-area-inset-bottom)); }
   .hero-utility-row { align-items: stretch; flex-direction: column-reverse; gap: 0.65rem; }
   .hero-utility-row .price-refresh-note { flex: 0 0 auto; }

@@ -217,10 +217,18 @@ describe('profile admin navigation', () => {
     expect(screen.queryByRole('list', { name: 'Подходящие игры' })).not.toBeInTheDocument()
   })
 
-  it('hides radar controls and price-signal statistics in MVP', async () => {
+  it('opens price alerts from the notification control beside the profile', async () => {
+    const user = userEvent.setup()
     renderApp(regularUser, (path) => path === '/api/me/favorites' ? json({ items: [{ appid: 8, game_name: 'Plain game', alert: null }] }) : undefined)
 
-    expect(screen.queryByRole('button', { name: 'Радар' })).not.toBeInTheDocument()
+    const profileButton = screen.getByRole('button', { name: /Пользователь/ })
+    const profileCluster = profileButton.closest('.profile-cluster') as HTMLElement
+    const notificationButton = within(profileCluster).getByRole('button', { name: 'Ценовые уведомления' })
+
+    expect(notificationButton).toBeInTheDocument()
+    await user.click(notificationButton)
+    expect(screen.getByRole('heading', { name: 'Радар цен' })).toBeInTheDocument()
+    expect(notificationButton).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByText('Ценовых сигналов')).not.toBeInTheDocument()
   })
 

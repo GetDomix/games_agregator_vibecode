@@ -4,7 +4,7 @@ import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from '../shared/api/client'
 import type { User } from '../shared/api/client'
 import { BrandMark } from '../shared/ui/BrandMark'
-import { IconClose, IconGift, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from '../shared/ui/icons'
+import { IconBell, IconClose, IconGift, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from '../shared/ui/icons'
 import { useLocale } from '../shared/i18n/LocaleProvider'
 import { AlertSettingsModal } from '../features/alerts/AlertSettingsModal'
 import { AdminPanel } from '../features/admin/AdminPanel'
@@ -686,6 +686,16 @@ export default function App() {
     window.requestAnimationFrame(() => window.scrollTo({ top: 0 }))
   }
 
+  const openPriceAlerts = () => {
+    setProfileOpen(false)
+    if (loggedIn) {
+      setView('radar')
+      return
+    }
+    setAuthTab('login')
+    setAuthOpen(true)
+  }
+
   return (
     <>
       <BootSplash ready={currencyReady && !popularLoading && !dealsLoading && !releasesLoading} />
@@ -712,6 +722,15 @@ export default function App() {
               {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls compact />}
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+              </button>
+              <button
+                type="button"
+                className={`btn ghost sm icon-btn notification-btn compact ${view === 'radar' ? 'is-active' : ''}`}
+                onClick={openPriceAlerts}
+                aria-label={tr('Ценовые уведомления', 'Price alerts')}
+                aria-current={view === 'radar' ? 'page' : undefined}
+              >
+                <IconBell size={18} />
               </button>
               <div className="profile-wrap">
                 <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
@@ -745,29 +764,21 @@ export default function App() {
             </button>
 
             {/* TODO Временно вырезано из MVP */}
-            {SHOW_POST_MVP_FEATURES && (
-              <button
-                type="button"
-                className="btn ghost sm"
-                onClick={() => {
-                  if (loggedIn) setView('radar')
-                  else {
-                    setAuthTab('login')
-                    setAuthOpen(true)
-                  }
-                }}
-              >
-                <IconRadar size={16} /> {tr('Радар', 'Radar')}
-              </button>
-            )}
-
-            {/* TODO Временно вырезано из MVP */}
             {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls />}
 
             {loggedIn ? (
               <div className="profile-cluster">
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                   {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+                </button>
+                <button
+                  type="button"
+                  className={`btn ghost sm icon-btn notification-btn compact ${view === 'radar' ? 'is-active' : ''}`}
+                  onClick={openPriceAlerts}
+                  aria-label={tr('Ценовые уведомления', 'Price alerts')}
+                  aria-current={view === 'radar' ? 'page' : undefined}
+                >
+                  <IconBell size={17} />
                 </button>
                 <div className="profile-wrap">
                   <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
@@ -792,6 +803,14 @@ export default function App() {
               <>
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                   {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm icon-btn notification-btn compact"
+                  onClick={openPriceAlerts}
+                  aria-label={tr('Ценовые уведомления', 'Price alerts')}
+                >
+                  <IconBell size={17} />
                 </button>
                 <button type="button" className="btn ghost" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>{tr('Войти', 'Sign in')}</button>
                 <button type="button" className="btn primary" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>
@@ -1978,23 +1997,15 @@ export default function App() {
           <span className="m-tab-ico" aria-hidden><IconSearch size={20} /></span>
           {tr('Поиск', 'Search')}
         </button>
-        {/* TODO [Mobile radar] Временно вырезано из MVP */}
-        {SHOW_POST_MVP_FEATURES && (
-          <button
-            type="button"
-            className={view === 'radar' ? 'active' : ''}
-            onClick={() => {
-              if (loggedIn) setView('radar')
-              else {
-                setAuthTab('login')
-                setAuthOpen(true)
-              }
-            }}
-          >
-            <span className="m-tab-ico" aria-hidden><IconRadar size={20} /></span>
-            {tr('Радар', 'Radar')}
-          </button>
-        )}
+        <button
+          type="button"
+          className={view === 'radar' ? 'active' : ''}
+          onClick={openPriceAlerts}
+          aria-current={view === 'radar' ? 'page' : undefined}
+        >
+          <span className="m-tab-ico" aria-hidden><IconBell size={20} /></span>
+          {tr('Сигналы', 'Alerts')}
+        </button>
         <button
           type="button"
           className={view === 'favorites' ? 'active' : ''}

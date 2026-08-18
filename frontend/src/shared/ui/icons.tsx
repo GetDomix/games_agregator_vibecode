@@ -37,6 +37,16 @@ export function IconRadar(props: IconProps) {
   )
 }
 
+export function IconBell(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6.8 9.8a5.2 5.2 0 0 1 10.4 0c0 5 2.1 5.8 2.1 5.8H4.7s2.1-.8 2.1-5.8Z" />
+      <path d="M9.7 19a2.6 2.6 0 0 0 4.6 0" />
+      <path d="M12 3.2V2" opacity="0.58" />
+    </svg>
+  )
+}
+
 export function IconUser(props: IconProps) {
   return (
     <svg {...base(props)}>
