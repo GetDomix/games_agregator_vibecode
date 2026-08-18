@@ -2244,7 +2244,7 @@ export function MarketCard({ market, onTrack, steamPrice }: { market: Market; on
       )}
       <div className="market-table-wrap">
         <table className="market-table">
-          <thead><tr><th>{tr('Тип', 'Type')}</th><th>{tr('Минимум', 'Minimum')}</th><th>{tr('Средняя', 'Average')}</th><th>{tr('Популярный', 'Popular')}</th><th>{tr('Дешёвый лот', 'Cheapest offer')}</th></tr></thead>
+          <thead><tr><th>{tr('Тип', 'Type')}</th><th>{tr('Средняя', 'Average')}</th><th>{tr('Популярный', 'Popular')}</th><th>{tr('Дешёвый лот', 'Cheapest offer')}</th></tr></thead>
           <tbody>
         {visibleKinds.map((k) => {
             const popular = k.popular
@@ -2255,7 +2255,6 @@ export function MarketCard({ market, onTrack, steamPrice }: { market: Market; on
                 <strong>{({ official: tr('Официальная версия', 'Official'), key: tr('Ключ', 'Key'), gift: tr('Гифт', 'Gift'), account: tr('Аккаунт', 'Account'), rent: tr('Аренда', 'Rental') } as Record<string, string>)[k.kind] || k.label}</strong>
                 <span className="offer-meta">{k.count} {tr('шт.', 'items')}</span>
               </td>
-              <td className="market-price-min" data-label={tr('Минимум', 'Minimum')}>{money(k.min_price)}</td>
               <td data-label={tr('Средняя', 'Average')}>{money(k.avg_price)}</td>
               <td data-label={tr('Популярный', 'Popular')}>
                 {popular ? (
@@ -2267,7 +2266,9 @@ export function MarketCard({ market, onTrack, steamPrice }: { market: Market; on
                       onClick={() => onTrack(market.marketplace, popular.url, popular.price_rub)}
                     >
                       {money(popular.price_rub)}
-                      <small>{popular.sales || 0} {tr('продаж', 'sales')}</small>
+                      <small>{popular.sales != null
+                        ? `${popular.sales.toLocaleString('ru-RU')} ${tr('продаж', 'sales')}`
+                        : tr('Продажи не указаны', 'Sales not provided')}</small>
                     </a>
                 ) : (
                   '—'

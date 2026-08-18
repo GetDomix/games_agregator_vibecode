@@ -116,7 +116,9 @@ class StoredPriceSearchService
             'min_price' => $p->min_price_rub, 'avg_price' => $p->avg_price_rub,
             'currency_prices' => $p->currency_prices,
             'cheapest' => ['title' => $p->cheapest_offer_title, 'url' => $p->cheapest_offer_url, 'price_rub' => $p->min_price_rub],
-            'popular' => ['title' => $p->popular_offer_title, 'url' => $p->popular_offer_url, 'price_rub' => $p->popular_offer_price_rub, 'sales' => $p->popular_offer_sales],
+            'popular' => $p->popular_offer_url !== null && $p->popular_offer_price_rub !== null
+                ? ['title' => $p->popular_offer_title, 'url' => $p->popular_offer_url, 'price_rub' => $p->popular_offer_price_rub, 'sales' => $p->popular_offer_sales]
+                : null,
         ])->values()->all();
 
         return ['marketplace' => $source, 'label' => $label, 'total_offers' => array_sum(array_column($groups, 'count')), 'scanned_offers' => array_sum(array_column($groups, 'count')), 'by_kind' => $groups, 'error' => $state?->status === 'failed' ? 'Источник временно недоступен' : null];

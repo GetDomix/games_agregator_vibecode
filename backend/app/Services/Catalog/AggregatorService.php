@@ -117,8 +117,11 @@ class AggregatorService
             $ggselErr = $e->getMessage();
         }
 
-        // Lots already scoped to the platform game card / category chip.
-        // Title heuristics are not applied: sellers name products arbitrarily.
+        // Game cards scope identity, but marketplaces may mix Steam and console
+        // products inside one card. Keep generic/Steam lots and drop explicit
+        // Xbox, PlayStation, Nintendo and competing PC-store offers.
+        $platiOffers = SteamOfferEligibility::filter($platiOffers, $marketAnchor);
+        $ggselOffers = SteamOfferEligibility::filter($ggselOffers, $marketAnchor);
 
         if ($platiErr) {
             $warnings[] = 'Plati: '.$platiErr;
@@ -188,13 +191,17 @@ class AggregatorService
             }
             $prices = array_column($bucket, 'price_rub');
             $cheapest = $bucket[0];
-            $popular = $bucket[0];
+            $popular = null;
             foreach ($bucket as $o) {
                 if ($o['price_rub'] < $cheapest['price_rub']) {
                     $cheapest = $o;
                 }
-                if (($o['sales'] ?? 0) > ($popular['sales'] ?? 0)
-                    || (($o['sales'] ?? 0) === ($popular['sales'] ?? 0) && $o['price_rub'] < $popular['price_rub'])) {
+                if (! isset($o['sales']) || ! is_numeric($o['sales'])) {
+                    continue;
+                }
+                if ($popular === null
+                    || (int) $o['sales'] > (int) $popular['sales']
+                    || ((int) $o['sales'] === (int) $popular['sales'] && $o['price_rub'] < $popular['price_rub'])) {
                     $popular = $o;
                 }
             }
@@ -204,7 +211,7 @@ class AggregatorService
                 'count' => count($bucket),
                 'min_price' => round(min($prices), 2),
                 'avg_price' => round(array_sum($prices) / count($prices), 2),
-                'popular' => $this->stripInternal($popular),
+                'popular' => $popular === null ? null : $this->stripInternal($popular),
                 'cheapest' => $this->stripInternal($cheapest),
             ];
         }

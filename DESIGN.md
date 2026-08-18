@@ -76,6 +76,7 @@
 - When Steam RU is unavailable, the resolved game card prioritizes the official Steam US price, displays its stored exchange-rate conversion in RUB, and keeps provenance visible as `Цена Steam США · пересчёт из $ в ₽`. The amber availability badge communicates regional absence; it does not suppress the usable fallback price.
 - The desktop profile control ends in a square notched terminal joint. This preserves the intentionally unrounded right edge when the control is no longer flush with the viewport.
 - Price alerts use a compact icon-only bell control immediately before the profile, matching the theme control's 36px footprint. Its accessible name carries the full meaning; the restrained signal tint appears only on hover, focus and the active Radar view. Mobile keeps the same bell in the header and a labelled destination in the four-item bottom navigation so the feature remains discoverable without implying unread-message counts.
+- Marketplace ledgers keep one source of truth for the low price: the linked `Дешёвый лот` column. The duplicate unlinked `Минимум` column is omitted. `Популярный` is selected only from marketplace-provided sales counts; missing counts remain unknown instead of appearing as zero sales. Marketplace game cards may mix platforms, so explicitly labelled console and competing PC-store lots are excluded while generic and Steam lots remain eligible.
 - Radar conditions form one compact three-position register. Bulk offer-kind controls across marketplaces and per-market select-all actions remain inside the advanced disclosure.
 - New-low settings show stored per-scope observation baselines as read-only evidence; there is deliberately no editable price threshold for this condition.
 
@@ -149,6 +150,7 @@
 - Notification navigation audit (2026-08-18): pass. The control reuses the existing 24px/1.9px icon grid, defined-edge button family and signal token; it has explicit hover, active and focus states, a 36px header target, an accessible name, a labelled mobile navigation target, and no decorative badge that could be mistaken for an unread count. The desktop label was removed after visual review showed excess toolbar density.
 - MVP locale and Steam fallback audit (2026-08-18): pass. Stale EN/non-RUB browser preferences no longer create an invisible mode without controls. Regional unavailability, converted price and source provenance remain separate text signals; the price is not presented as a Steam RU amount and pending scans are not mislabeled as unavailable.
 - Search relevance audit (2026-08-18): pass. Region-blocked titles remain discoverable through the global Steam catalog, while RU results retain their live price and availability fields. Exact submit resolution is limited to a normalized title equality and therefore does not silently choose among partial matches.
+- Marketplace popularity audit (2026-08-18): pass. Plati card sales are parsed from source markup for every resolved catalog game, unknown sales remain nullable, and the popular slot no longer falls back to the cheapest offer. Explicit console and competing PC-store lots are removed from both marketplace adapters before aggregation. Removing the duplicate minimum column improves scan density without hiding the linked cheapest offer.
 
 ## Changelog
 
@@ -162,3 +164,4 @@
 - 2026-08-18: restored price-alert navigation beside the profile with a compact custom bell icon and a matching mobile Signals destination; removed the desktop label after visual density review.
 - 2026-08-18: fixed the selector-free MVP to Russian/RUB and added an explicit Steam RU-unavailable state with a USD-to-RUB official-price fallback.
 - 2026-08-18: combined global and RU Steam discovery, ranked exact/prefix/phrase matches, and made the compare action retain an exact autocomplete appid.
+- 2026-08-18: restored Plati sales-based popularity across catalog games, preserved unknown sales honestly, removed explicit non-Steam lots from comparisons, and removed the duplicate marketplace minimum column.

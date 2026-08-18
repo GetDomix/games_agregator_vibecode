@@ -176,7 +176,9 @@ class PlatiService
                         'USD' => $this->positivePrice($item['price_usd'] ?? null),
                         'EUR' => $this->positivePrice($item['price_eur'] ?? null),
                     ], static fn ($value): bool => $value !== null),
-                    'sales' => (int) ($item['numsold'] ?? 0),
+                    'sales' => isset($item['numsold']) && is_numeric($item['numsold'])
+                        ? max(0, (int) $item['numsold'])
+                        : null,
                     'seller_name' => $item['seller_name'] ?? null,
                     'kind' => Classifier::fromText($title, (string) ($item['description'] ?? '')),
                     'external_id' => isset($item['id']) ? (string) $item['id'] : null,
@@ -456,7 +458,7 @@ class PlatiService
                     'url' => $url,
                     'price_rub' => $price,
                     'prices' => ['RUB' => $price],
-                    'sales' => 0,
+                    'sales' => $this->parseSales($chunk),
                     'seller_name' => $seller,
                     'kind' => Classifier::fromText($title),
                     'external_id' => $id,
@@ -486,5 +488,25 @@ class PlatiService
         }
 
         return null;
+    }
+
+    private function parseSales(string $html): ?int
+    {
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/[\s\x{00A0}]+/u', ' ', $text) ?? $text;
+
+        // Plati publishes both exact counts ("Продано 7 632") and lower bounds
+        // ("Продано 100+"). A lower bound is still useful for popularity ranking.
+        // "Продано менее 10" is not an exact or safe lower bound, so keep it unknown.
+        if (preg_match('/продано\s+менее\s+\d+/ui', $text)) {
+            return null;
+        }
+        if (! preg_match('/продано\s+([\d\s]+)\+?/ui', $text, $match)) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D+/u', '', $match[1]);
+
+        return $digits !== null && $digits !== '' ? (int) $digits : null;
     }
 }

@@ -29,7 +29,9 @@ class StoredPriceSearchTest extends TestCase
 
         $this->getJson('/api/prices?q=Stored%20Game&appid=10')->assertOk()
             ->assertJsonPath('steam.name', 'Stored Game')->assertJsonPath('steam.price_rub', '500.00')
-            ->assertJsonPath('plati.by_kind.0.kind', 'key')->assertJsonPath('refreshing', false);
+            ->assertJsonPath('plati.by_kind.0.kind', 'key')
+            ->assertJsonPath('plati.by_kind.0.popular', null)
+            ->assertJsonPath('refreshing', false);
     }
 
     public function test_unknown_appid_is_queued_without_waiting_for_source(): void
