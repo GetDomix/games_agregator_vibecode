@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Favorite;
 use App\Models\Game;
+use App\Models\GameSourceState;
 use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
 use App\Models\User;
 use App\Services\Catalog\AggregatorService;
+use App\Services\Catalog\SearchCandidateRanker;
 use App\Services\Catalog\StoredPriceSearchService;
 use App\Services\Pricing\GameRefreshRequestService;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +22,7 @@ class PriceController extends Controller
     public function __construct(
         private readonly AggregatorService $aggregator,
         private readonly StoredPriceSearchService $stored,
+        private readonly SearchCandidateRanker $candidateRanker,
     ) {}
 
     public function search(Request $request): JsonResponse
@@ -31,39 +34,42 @@ class PriceController extends Controller
         $suggestionLimit = 20;
         $candidates = $this->stored->candidates($q, $suggestionLimit);
         $discovery = false;
-        if ($candidates === [] || ($request->boolean('discover') && count($candidates) < $suggestionLimit)) {
+        if ($candidates === [] || $request->boolean('discover')) {
             $discovered = $this->aggregator->searchCandidates($q, $suggestionLimit);
-            $candidates = $this->mergeSearchCandidates($candidates, $discovered, $suggestionLimit);
+            $candidates = $this->mergeSearchCandidates($candidates, $discovered, $q, $suggestionLimit);
             $discovery = true;
         }
 
         return response()->json(['query' => $q, 'candidates' => $candidates, 'meta' => ['discovery_used' => $discovery]]);
     }
 
-    private function mergeSearchCandidates(array $stored, array $discovered, int $limit): array
+    private function mergeSearchCandidates(array $stored, array $discovered, string $query, int $limit): array
     {
         $merged = [];
-        foreach ($stored as $candidate) {
+        // Steam's global catalog supplies the relevance order. Stored rows are
+        // still merged back in for durable metadata and as offline fallbacks.
+        foreach ($discovered as $candidate) {
             $merged[(int) $candidate['appid']] = $candidate;
         }
-        foreach ($discovered as $candidate) {
+        foreach ($stored as $candidate) {
             $appid = (int) $candidate['appid'];
             if (! isset($merged[$appid])) {
                 $merged[$appid] = $candidate;
+
                 continue;
             }
 
-            $known = $merged[$appid];
+            $discovery = $merged[$appid];
             // Store search owns the live price fields; the canonical catalog owns
             // durable release/type metadata and its best full-size artwork.
-            $merged[$appid] = array_replace($known, $candidate, [
-                'release_status' => $known['release_status'] ?? $candidate['release_status'] ?? null,
-                'candidate_kind' => $known['candidate_kind'] ?? $candidate['candidate_kind'] ?? 'game',
-                'header_image' => $known['header_image'] ?? $candidate['header_image'] ?? null,
+            $merged[$appid] = array_replace($candidate, $discovery, [
+                'release_status' => $candidate['release_status'] ?? $discovery['release_status'] ?? null,
+                'candidate_kind' => $candidate['candidate_kind'] ?? $discovery['candidate_kind'] ?? 'game',
+                'header_image' => $candidate['header_image'] ?? $discovery['header_image'] ?? null,
             ]);
         }
 
-        return array_slice(array_values($merged), 0, $limit);
+        return $this->candidateRanker->rank(array_values($merged), $query, $limit);
     }
 
     public function prices(Request $request, GameRefreshRequestService $refresh): JsonResponse
@@ -103,7 +109,7 @@ class PriceController extends Controller
         // A browser request must never wait for three external stores. Manual
         // refresh only places work on the same background queue as first search.
         if ($force && ! $queuedOnThisRequest) {
-            $refresh->request($game, \App\Models\GameSourceState::SOURCES);
+            $refresh->request($game, GameSourceState::SOURCES);
         }
 
         $result = $this->stored->result($game, $q);

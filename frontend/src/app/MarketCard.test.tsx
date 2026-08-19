@@ -46,6 +46,9 @@ describe('MarketCard', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Показана последняя успешно сохранённая цена')
     expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Минимум' })).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Дешёвый лот' })).toBeInTheDocument()
+    expect(screen.getByText('10 продаж')).toBeInTheDocument()
     expect(screen.getAllByText(/499/).length).toBeGreaterThan(0)
   })
 })

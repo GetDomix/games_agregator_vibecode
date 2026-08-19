@@ -36,7 +36,7 @@ describe('AlertSettingsModal', () => {
     expect(screen.getByText('Введите корректное значение.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Сохранить алерт' })).toBeDisabled()
   })
-  it('converts an explicitly applied suggestion through a non-RUB display currency', async () => {
+  it('ignores a stale non-RUB preference while MVP region controls are hidden', async () => {
     const user = userEvent.setup()
     const save = vi.fn().mockResolvedValue(undefined)
     prepareLocale('USD', { RUB: 1, USD: 100 })
@@ -44,9 +44,9 @@ describe('AlertSettingsModal', () => {
 
     const input = screen.getByLabelText('Цена не выше') as HTMLInputElement
     expect(input.value).toBe('')
-    expect(screen.getByText(/10% ниже текущей сохранённой цены: 9 USD/)).toBeInTheDocument()
+    expect(screen.getByText(/10% ниже текущей сохранённой цены: 900 RUB/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Подставить' }))
-    expect(input.value).toBe('9')
+    expect(input.value).toBe('900')
     await user.click(screen.getByRole('button', { name: 'Сохранить алерт' }))
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ condition_type: 'target_price', target_value: 900 }))
   })

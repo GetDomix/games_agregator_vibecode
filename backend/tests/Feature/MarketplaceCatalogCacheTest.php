@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Game;
 use App\Services\Pricing\GgselService;
 use App\Services\Pricing\PlatiService;
+use App\Services\Pricing\PriceSourceRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -38,6 +39,63 @@ class MarketplaceCatalogCacheTest extends TestCase
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'suggest.ashx'));
         Http::assertSent(fn ($request) => str_contains($request->url(), 'block_goods_category_2.asp')
             && ($request['id_cb'] ?? null) == 948);
+    }
+
+    public function test_plati_catalog_sales_determine_popular_offer_instead_of_price(): void
+    {
+        $game = Game::query()->create([
+            'steam_appid' => 1091500,
+            'name' => 'Cyberpunk 2077',
+            'plati_id_cb' => 831,
+            'plati_catalog_name' => 'Cyberpunk 2077',
+            'plati_catalog_resolved_at' => now(),
+        ]);
+
+        Http::fake([
+            'https://plati.market/asp/block_goods_category_2.asp*' => Http::response(
+                '3|350|116|'
+                .'<a href="/itm/cheap/1" title="Cyberpunk 2077 Steam Account" product_id="1">'
+                .'<span class="title-bold color-text-title">100&nbsp;₽</span>'
+                .'<span>Продано 12</span></a>'
+                .'<a href="/itm/popular/2" title="Cyberpunk 2077 Steam Account Deluxe" product_id="2">'
+                .'<span class="title-bold color-text-title">200&nbsp;₽</span>'
+                .'<span>Продано 1&nbsp;234</span></a>'
+                .'<a href="/itm/xbox/3" title="Cyberpunk 2077 Xbox Account" product_id="3">'
+                .'<span class="title-bold color-text-title">50&nbsp;₽</span>'
+                .'<span>Продано 99&nbsp;999</span></a>'
+            ),
+        ]);
+
+        $result = app(PriceSourceRegistry::class)->for('plati')->refresh($game);
+        $account = collect($result->offerGroups)->firstWhere('kind', 'account');
+
+        $this->assertNotNull($account);
+        $this->assertSame('Cyberpunk 2077 Steam Account', $account['cheapest']['title']);
+        $this->assertSame('Cyberpunk 2077 Steam Account Deluxe', $account['popular']['title']);
+        $this->assertSame(1234, $account['popular']['sales']);
+        $this->assertSame(2, $account['offer_count']);
+    }
+
+    public function test_marketplace_does_not_invent_a_popular_offer_when_sales_are_missing(): void
+    {
+        $game = Game::query()->create([
+            'steam_appid' => 1145360,
+            'name' => 'Hades',
+            'plati_id_cb' => 948,
+            'plati_catalog_name' => 'Hades',
+            'plati_catalog_resolved_at' => now(),
+        ]);
+
+        Http::fake([
+            'https://plati.market/asp/block_goods_category_2.asp*' => Http::response(
+                '1|100|100|<a href="/itm/hades/1" title="Hades Steam Key" product_id="1">'
+                .'<span class="title-bold color-text-title">100&nbsp;₽</span></a>'
+            ),
+        ]);
+
+        $result = app(PriceSourceRegistry::class)->for('plati')->refresh($game);
+
+        $this->assertNull($result->offerGroups[0]['popular']);
     }
 
     public function test_plati_negative_card_cache_skips_suggest_but_keeps_full_title_fallback(): void

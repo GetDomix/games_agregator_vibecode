@@ -319,7 +319,9 @@ class GgselService
                     'USD' => $this->positivePrice($item['price_wmz'] ?? null),
                     'EUR' => $this->positivePrice($item['price_wme'] ?? null),
                 ], static fn ($value): bool => $value !== null),
-                'sales' => (int) ($item['cnt_sell'] ?? 0),
+                'sales' => isset($item['cnt_sell']) && is_numeric($item['cnt_sell'])
+                    ? max(0, (int) $item['cnt_sell'])
+                    : null,
                 'seller_name' => $item['seller_name'] ?? null,
                 'kind' => Classifier::ggsel($contentTypeId, $name, $searchTitle),
                 'external_id' => $id !== null ? (string) $id : null,

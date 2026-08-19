@@ -4,6 +4,7 @@ namespace App\Services\Pricing\Adapters;
 
 use App\Data\PriceSourceResult;
 use App\Models\Game;
+use App\Services\Catalog\SteamOfferEligibility;
 
 abstract class AbstractMarketplacePriceSourceAdapter
 {
@@ -28,6 +29,7 @@ abstract class AbstractMarketplacePriceSourceAdapter
         if ($offers === [] && $lastError) {
             throw new \RuntimeException((string) $lastError);
         }
+        $offers = SteamOfferEligibility::filter($offers, (string) $game->name);
 
         return new PriceSourceResult($this->sourceId(), $this->aggregate($offers));
     }
@@ -45,13 +47,17 @@ abstract class AbstractMarketplacePriceSourceAdapter
         foreach ($groups as $kind => $items) {
             $prices = array_column($items, 'price_rub');
             $cheapest = $items[0];
-            $popular = $items[0];
+            $popular = null;
             foreach ($items as $item) {
                 if ((float) $item['price_rub'] < (float) $cheapest['price_rub']) {
                     $cheapest = $item;
                 }
-                if (($item['sales'] ?? 0) > ($popular['sales'] ?? 0)
-                    || (($item['sales'] ?? 0) === ($popular['sales'] ?? 0)
+                if (! isset($item['sales']) || ! is_numeric($item['sales'])) {
+                    continue;
+                }
+                if ($popular === null
+                    || (int) $item['sales'] > (int) $popular['sales']
+                    || ((int) $item['sales'] === (int) $popular['sales']
                         && (float) $item['price_rub'] < (float) $popular['price_rub'])) {
                     $popular = $item;
                 }
@@ -80,9 +86,15 @@ abstract class AbstractMarketplacePriceSourceAdapter
                 continue;
             }
             usort($priced, static fn (array $a, array $b): int => (float) $a['prices'][$currency] <=> (float) $b['prices'][$currency]);
-            $popular = $priced[0];
+            $popular = null;
             foreach ($priced as $item) {
-                if (($item['sales'] ?? 0) > ($popular['sales'] ?? 0)) {
+                if (! isset($item['sales']) || ! is_numeric($item['sales'])) {
+                    continue;
+                }
+                if ($popular === null
+                    || (int) $item['sales'] > (int) $popular['sales']
+                    || ((int) $item['sales'] === (int) $popular['sales']
+                        && (float) $item['prices'][$currency] < (float) $popular['prices'][$currency])) {
                     $popular = $item;
                 }
             }
@@ -91,7 +103,7 @@ abstract class AbstractMarketplacePriceSourceAdapter
                 'min' => round(min($values), 2),
                 'avg' => round(array_sum($values) / count($values), 2),
                 'cheapest' => $this->currencyOffer($priced[0], $currency),
-                'popular' => $this->currencyOffer($popular, $currency),
+                'popular' => $popular === null ? null : $this->currencyOffer($popular, $currency),
             ];
         }
 
@@ -105,7 +117,9 @@ abstract class AbstractMarketplacePriceSourceAdapter
             'url' => $offer['url'] ?? null,
             'price' => round((float) $offer['prices'][$currency], 2),
             'price_rub' => round((float) $offer['price_rub'], 2),
-            'sales' => (int) ($offer['sales'] ?? 0),
+            'sales' => isset($offer['sales']) && is_numeric($offer['sales'])
+                ? max(0, (int) $offer['sales'])
+                : null,
         ];
     }
 }

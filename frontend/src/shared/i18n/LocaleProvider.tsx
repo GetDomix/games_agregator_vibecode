@@ -9,6 +9,10 @@ const LOCALE_STORAGE_KEY = 'igroscan_locale_v1'
 const CURRENCY_STORAGE_KEY = 'igroscan_currency_v1'
 const RATES_STORAGE_KEY = 'igroscan_currency_rates_v1'
 export const CURRENCIES: Currency[] = ['RUB', 'USD', 'EUR', 'KZT', 'TRY']
+// MVP ships without visible region controls. Ignore stale/browser-derived
+// preferences until the selectors return so the UI cannot silently start in
+// an unavailable language or currency.
+const MVP_REGION_CONTROLS_ENABLED = false
 const CIS_LANGUAGE_CODES = new Set(['ru', 'uk', 'be', 'kk', 'hy', 'az', 'ka', 'ky', 'tg', 'tk', 'uz'])
 const CIS_TIMEZONES = new Set([
   'Europe/Kaliningrad', 'Europe/Kirov', 'Europe/Minsk', 'Europe/Moscow', 'Europe/Samara',
@@ -34,6 +38,7 @@ function isCurrency(value: string | null): value is Currency {
 }
 
 function detectInitialLocale(): Locale {
+  if (!MVP_REGION_CONTROLS_ENABLED) return 'ru'
   if (typeof window === 'undefined') return 'ru'
 
   const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY)
@@ -47,6 +52,7 @@ function detectInitialLocale(): Locale {
 }
 
 function detectInitialCurrency(): Currency {
+  if (!MVP_REGION_CONTROLS_ENABLED) return 'RUB'
   if (typeof window === 'undefined') return 'RUB'
 
   const saved = window.localStorage.getItem(CURRENCY_STORAGE_KEY)
@@ -116,6 +122,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    if (!MVP_REGION_CONTROLS_ENABLED) return
     const localeWasChosen = window.localStorage.getItem(LOCALE_STORAGE_KEY) !== null
     const currencyWasChosen = window.localStorage.getItem(CURRENCY_STORAGE_KEY) !== null
     if (localeWasChosen && currencyWasChosen) return

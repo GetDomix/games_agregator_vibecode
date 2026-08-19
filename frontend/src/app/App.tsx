@@ -4,7 +4,7 @@ import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from '../shared/api/client'
 import type { User } from '../shared/api/client'
 import { BrandMark } from '../shared/ui/BrandMark'
-import { IconClose, IconGift, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from '../shared/ui/icons'
+import { IconBell, IconClose, IconGift, IconMoon, IconRadar, IconSearch, IconStar, IconSun, IconUser } from '../shared/ui/icons'
 import { useLocale } from '../shared/i18n/LocaleProvider'
 import { AlertSettingsModal } from '../features/alerts/AlertSettingsModal'
 import { AdminPanel } from '../features/admin/AdminPanel'
@@ -686,6 +686,16 @@ export default function App() {
     window.requestAnimationFrame(() => window.scrollTo({ top: 0 }))
   }
 
+  const openPriceAlerts = () => {
+    setProfileOpen(false)
+    if (loggedIn) {
+      setView('radar')
+      return
+    }
+    setAuthTab('login')
+    setAuthOpen(true)
+  }
+
   return (
     <>
       <BootSplash ready={currencyReady && !popularLoading && !dealsLoading && !releasesLoading} />
@@ -712,6 +722,15 @@ export default function App() {
               {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls compact />}
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+              </button>
+              <button
+                type="button"
+                className={`btn ghost sm icon-btn notification-btn compact ${view === 'radar' ? 'is-active' : ''}`}
+                onClick={openPriceAlerts}
+                aria-label={tr('Ценовые уведомления', 'Price alerts')}
+                aria-current={view === 'radar' ? 'page' : undefined}
+              >
+                <IconBell size={18} />
               </button>
               <div className="profile-wrap">
                 <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
@@ -745,29 +764,21 @@ export default function App() {
             </button>
 
             {/* TODO Временно вырезано из MVP */}
-            {SHOW_POST_MVP_FEATURES && (
-              <button
-                type="button"
-                className="btn ghost sm"
-                onClick={() => {
-                  if (loggedIn) setView('radar')
-                  else {
-                    setAuthTab('login')
-                    setAuthOpen(true)
-                  }
-                }}
-              >
-                <IconRadar size={16} /> {tr('Радар', 'Radar')}
-              </button>
-            )}
-
-            {/* TODO Временно вырезано из MVP */}
             {SHOW_POST_MVP_FEATURES && <LanguageCurrencyControls />}
 
             {loggedIn ? (
               <div className="profile-cluster">
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                   {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+                </button>
+                <button
+                  type="button"
+                  className={`btn ghost sm icon-btn notification-btn compact ${view === 'radar' ? 'is-active' : ''}`}
+                  onClick={openPriceAlerts}
+                  aria-label={tr('Ценовые уведомления', 'Price alerts')}
+                  aria-current={view === 'radar' ? 'page' : undefined}
+                >
+                  <IconBell size={17} />
                 </button>
                 <div className="profile-wrap">
                   <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
@@ -792,6 +803,14 @@ export default function App() {
               <>
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                   {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm icon-btn notification-btn compact"
+                  onClick={openPriceAlerts}
+                  aria-label={tr('Ценовые уведомления', 'Price alerts')}
+                >
+                  <IconBell size={17} />
                 </button>
                 <button type="button" className="btn ghost" onClick={() => { setAuthTab('login'); setAuthOpen(true) }}>{tr('Войти', 'Sign in')}</button>
                 <button type="button" className="btn primary" onClick={() => { setAuthTab('register'); setAuthOpen(true) }}>
@@ -822,7 +841,9 @@ export default function App() {
                 onSubmit={(e) => {
                   e.preventDefault()
                   setSuggestOpen(false)
-                  runSearch(query)
+                  const normalizedQuery = query.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+                  const exactSuggestion = suggests.find((candidate) => candidate.name.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === normalizedQuery)
+                  runSearch(exactSuggestion?.name ?? query, exactSuggestion?.appid)
                 }}
               >
                 <div className="search-field search-field--suggest">
@@ -893,7 +914,7 @@ export default function App() {
                                     : s.price_rub != null
                                       ? money(s.price_rub)
                                       : s.available_in_ru === false
-                                        ? tr('Нет цены RU', 'No RU price')
+                                        ? tr('Недоступно в регионе RU', 'Unavailable in the RU region')
                                         : tr('Цена уточняется', 'Price pending')}
                               </span>
                             </button>
@@ -965,7 +986,7 @@ export default function App() {
                   )}
 
                   {!result.steam && result.candidates?.length > 0 && (
-                    <div className="panel suggest-hint"><p>{tr('Выберите точный вариант игры.', 'Choose the exact game variant.')}</p><ul className="candidates" aria-label={tr('Варианты игры', 'Game variants')}>{result.candidates.map((candidate) => <li key={candidate.appid}><button type="button" className="suggest-item" onClick={() => runSearch(candidate.name, candidate.appid, { force: true })}><span className="suggest-art" aria-hidden="true"><img src={candidate.tiny_image || candidate.header_image || steamCandidateImage(candidate.appid)} alt="" onError={repairCandidateImg(candidate.appid)} /></span><span className="suggest-copy"><span className="suggest-name">{candidate.name}</span><small>{({ game: tr('Игра', 'Game'), demo: tr('Демоверсия', 'Demo'), dlc: tr('Дополнение', 'Add-on'), remaster: tr('Ремастер', 'Remaster'), edition: tr('Издание', 'Edition'), soundtrack: tr('Саундтрек', 'Soundtrack') }[candidate.candidate_kind || 'game'])}</small></span><span className={`suggest-price ${candidate.price_rub == null && candidate.release_status !== 'announced' ? 'muted' : ''}`}>{candidate.release_status === 'announced' ? tr('Ещё не вышла', 'Coming soon') : candidate.is_free || candidate.price_rub === 0 ? tr('Бесплатно', 'Free') : candidate.price_rub != null ? money(candidate.price_rub) : candidate.available_in_ru === false ? tr('Нет цены RU', 'No RU price') : tr('Цена уточняется', 'Price pending')}</span></button></li>)}</ul></div>
+                    <div className="panel suggest-hint"><p>{tr('Выберите точный вариант игры.', 'Choose the exact game variant.')}</p><ul className="candidates" aria-label={tr('Варианты игры', 'Game variants')}>{result.candidates.map((candidate) => <li key={candidate.appid}><button type="button" className="suggest-item" onClick={() => runSearch(candidate.name, candidate.appid, { force: true })}><span className="suggest-art" aria-hidden="true"><img src={candidate.tiny_image || candidate.header_image || steamCandidateImage(candidate.appid)} alt="" onError={repairCandidateImg(candidate.appid)} /></span><span className="suggest-copy"><span className="suggest-name">{candidate.name}</span><small>{({ game: tr('Игра', 'Game'), demo: tr('Демоверсия', 'Demo'), dlc: tr('Дополнение', 'Add-on'), remaster: tr('Ремастер', 'Remaster'), edition: tr('Издание', 'Edition'), soundtrack: tr('Саундтрек', 'Soundtrack') }[candidate.candidate_kind || 'game'])}</small></span><span className={`suggest-price ${candidate.price_rub == null && candidate.release_status !== 'announced' ? 'muted' : ''}`}>{candidate.release_status === 'announced' ? tr('Ещё не вышла', 'Coming soon') : candidate.is_free || candidate.price_rub === 0 ? tr('Бесплатно', 'Free') : candidate.price_rub != null ? money(candidate.price_rub) : candidate.available_in_ru === false ? tr('Недоступно в регионе RU', 'Unavailable in the RU region') : tr('Цена уточняется', 'Price pending')}</span></button></li>)}</ul></div>
                   )}
 
                   {result.steam && (
@@ -977,7 +998,7 @@ export default function App() {
                             {result.steam.available_in_ru === true
                               ? 'Steam RU'
                               : result.steam.available_in_ru === false
-                                ? tr('нет цены RU', 'no RU price')
+                                ? tr('Недоступно в регионе RU', 'Unavailable in the RU region')
                                 : tr('Steam · проверяем', 'Steam · checking')}
                           </span>
                           {(result.steam.discount_percent || 0) > 0 && (
@@ -1001,7 +1022,12 @@ export default function App() {
                         </div>
                         {!result.steam.is_free && steamDisplayPrice?.regionLabel && (
                           <p className="steam-price-source">
-                            {tr('Регион цены Steam', 'Steam price region')}: {steamDisplayPrice.regionLabel}
+                            {result.steam.available_in_ru === false && steamDisplayPrice.kind === 'rub'
+                              ? tr(
+                                  `Цена Steam ${steamDisplayPrice.regionLabel} · пересчёт из ${steamDisplayPrice.sourceCurrency === 'USD' ? '$' : steamDisplayPrice.sourceCurrency ?? 'иностранной валюты'} в ₽`,
+                                  `Steam ${steamDisplayPrice.regionLabel} price · converted from ${steamDisplayPrice.sourceCurrency ?? 'foreign currency'} to RUB`,
+                                )
+                              : <>{tr('Регион цены Steam', 'Steam price region')}: {steamDisplayPrice.regionLabel}</>}
                           </p>
                         )}
                         {result.steam.note && <p className="muted">{result.steam.note}</p>}
@@ -1978,23 +2004,15 @@ export default function App() {
           <span className="m-tab-ico" aria-hidden><IconSearch size={20} /></span>
           {tr('Поиск', 'Search')}
         </button>
-        {/* TODO [Mobile radar] Временно вырезано из MVP */}
-        {SHOW_POST_MVP_FEATURES && (
-          <button
-            type="button"
-            className={view === 'radar' ? 'active' : ''}
-            onClick={() => {
-              if (loggedIn) setView('radar')
-              else {
-                setAuthTab('login')
-                setAuthOpen(true)
-              }
-            }}
-          >
-            <span className="m-tab-ico" aria-hidden><IconRadar size={20} /></span>
-            {tr('Радар', 'Radar')}
-          </button>
-        )}
+        <button
+          type="button"
+          className={view === 'radar' ? 'active' : ''}
+          onClick={openPriceAlerts}
+          aria-current={view === 'radar' ? 'page' : undefined}
+        >
+          <span className="m-tab-ico" aria-hidden><IconBell size={20} /></span>
+          {tr('Сигналы', 'Alerts')}
+        </button>
         <button
           type="button"
           className={view === 'favorites' ? 'active' : ''}
@@ -2226,7 +2244,7 @@ export function MarketCard({ market, onTrack, steamPrice }: { market: Market; on
       )}
       <div className="market-table-wrap">
         <table className="market-table">
-          <thead><tr><th>{tr('Тип', 'Type')}</th><th>{tr('Минимум', 'Minimum')}</th><th>{tr('Средняя', 'Average')}</th><th>{tr('Популярный', 'Popular')}</th><th>{tr('Дешёвый лот', 'Cheapest offer')}</th></tr></thead>
+          <thead><tr><th>{tr('Тип', 'Type')}</th><th>{tr('Средняя', 'Average')}</th><th>{tr('Популярный', 'Popular')}</th><th>{tr('Дешёвый лот', 'Cheapest offer')}</th></tr></thead>
           <tbody>
         {visibleKinds.map((k) => {
             const popular = k.popular
@@ -2237,7 +2255,6 @@ export function MarketCard({ market, onTrack, steamPrice }: { market: Market; on
                 <strong>{({ official: tr('Официальная версия', 'Official'), key: tr('Ключ', 'Key'), gift: tr('Гифт', 'Gift'), account: tr('Аккаунт', 'Account'), rent: tr('Аренда', 'Rental') } as Record<string, string>)[k.kind] || k.label}</strong>
                 <span className="offer-meta">{k.count} {tr('шт.', 'items')}</span>
               </td>
-              <td className="market-price-min" data-label={tr('Минимум', 'Minimum')}>{money(k.min_price)}</td>
               <td data-label={tr('Средняя', 'Average')}>{money(k.avg_price)}</td>
               <td data-label={tr('Популярный', 'Popular')}>
                 {popular ? (
@@ -2249,7 +2266,9 @@ export function MarketCard({ market, onTrack, steamPrice }: { market: Market; on
                       onClick={() => onTrack(market.marketplace, popular.url, popular.price_rub)}
                     >
                       {money(popular.price_rub)}
-                      <small>{popular.sales || 0} {tr('продаж', 'sales')}</small>
+                      <small>{popular.sales != null
+                        ? `${popular.sales.toLocaleString('ru-RU')} ${tr('продаж', 'sales')}`
+                        : tr('Продажи не указаны', 'Sales not provided')}</small>
                     </a>
                 ) : (
                   '—'
