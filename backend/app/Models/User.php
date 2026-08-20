@@ -50,6 +50,7 @@ class User extends Authenticatable
             'telegram_linked_at' => 'datetime',
             'radar_enabled' => 'boolean',
             'alert_prefs' => 'array',
+            'notifications_read_through_id' => 'integer',
         ];
     }
 

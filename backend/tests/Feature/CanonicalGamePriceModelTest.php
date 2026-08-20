@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\CurrentGamePrice;
 use App\Models\Favorite;
 use App\Models\Game;
-use App\Models\GamePriceObservation;
 use App\Models\GameSourceState;
 use App\Models\PriceSnapshot;
 use App\Models\SearchHistory;
@@ -150,6 +149,7 @@ class CanonicalGamePriceModelTest extends TestCase
         $migration = $this->canonicalMigration();
         // This test temporarily rolls back the old canonical schema by itself.
         // Newer tables depend on games, so remove only those test-local dependents first.
+        Schema::dropIfExists('site_notifications');
         Schema::dropIfExists('alert_deliveries');
         Schema::dropIfExists('alert_events');
         Schema::dropIfExists('steam_regional_prices');

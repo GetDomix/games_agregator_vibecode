@@ -121,11 +121,22 @@ class TelegramAccountMergeService
                 ])->save();
             }
 
+            // A merge must never turn an unread notification into a read one.
+            // Keep the earlier cursor; at worst this can re-show an item that was
+            // already read on one of the two profiles, but it cannot hide one.
+            $website->forceFill([
+                'notifications_read_through_id' => min(
+                    (int) $website->notifications_read_through_id,
+                    (int) $telegram->notifications_read_through_id,
+                ),
+            ])->save();
+
             DB::table('search_histories')->where('user_id', $telegram->id)->update(['user_id' => $website->id]);
             DB::table('price_snapshots')->where('user_id', $telegram->id)->update(['user_id' => $website->id]);
             DB::table('partner_clicks')->where('user_id', $telegram->id)->update(['user_id' => $website->id]);
             DB::table('radar_events')->where('user_id', $telegram->id)->update(['user_id' => $website->id]);
             DB::table('alert_events')->where('user_id', $telegram->id)->update(['user_id' => $website->id]);
+            DB::table('site_notifications')->where('recipient_user_id', $telegram->id)->update(['recipient_user_id' => $website->id]);
             DB::table('oidc_transactions')->where('user_id', $telegram->id)->update(['user_id' => $website->id]);
             ExternalIdentity::query()->where('user_id', $telegram->id)->orderBy('id')->lockForUpdate()->update(['user_id' => $website->id]);
 

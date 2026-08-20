@@ -10,10 +10,11 @@ use App\Models\FavoriteAlert;
 use App\Models\FavoriteAlertScope;
 use App\Models\Game;
 use App\Models\GamePriceObservation;
-use App\Services\Alerts\AlertEvaluationService;
+use App\Models\SiteNotification;
 use App\Models\User;
-use App\Services\Telegram\TelegramAccountMergeService;
+use App\Services\Alerts\AlertEvaluationService;
 use App\Services\Alerts\FavoriteAlertSettingsService;
+use App\Services\Telegram\TelegramAccountMergeService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -184,6 +185,9 @@ class TelegramAccountMergeTest extends TestCase
             'attempts' => 2,
             'last_error' => 'temporary',
         ]);
+        $websiteNotification = $this->siteNotification($websiteEvent, $site, 'Website signal');
+        $telegramNotification = $this->siteNotification($telegramEvent, $telegram, 'Telegram signal');
+        $site->forceFill(['notifications_read_through_id' => $websiteNotification->id])->save();
 
         app(TelegramAccountMergeService::class)->merge($site, $telegram);
 
@@ -204,6 +208,9 @@ class TelegramAccountMergeTest extends TestCase
         ]);
         $this->assertDatabaseHas('alert_deliveries', ['id' => $websiteDelivery->id, 'alert_event_id' => $websiteEvent->id]);
         $this->assertDatabaseHas('alert_deliveries', ['id' => $telegramDelivery->id, 'alert_event_id' => $telegramEvent->id, 'status' => 'failed']);
+        $this->assertDatabaseHas('site_notifications', ['id' => $websiteNotification->id, 'recipient_user_id' => $site->id]);
+        $this->assertDatabaseHas('site_notifications', ['id' => $telegramNotification->id, 'recipient_user_id' => $site->id]);
+        $this->assertDatabaseHas('users', ['id' => $site->id, 'notifications_read_through_id' => 0]);
         $this->assertDatabaseHas('favorite_alerts', ['id' => $websiteAlert->id, 'cycle' => 2, 'status' => 'triggered', 'triggered_at' => null, 'condition_type' => 'target_price', 'target_value' => 500]);
         app(FavoriteAlertSettingsService::class)->rearm($websiteFavorite->fresh());
         $this->assertDatabaseHas('favorite_alerts', ['id' => $websiteAlert->id, 'cycle' => 3, 'status' => 'active']);
@@ -308,6 +315,19 @@ class TelegramAccountMergeTest extends TestCase
             'offer_kind' => 'official',
             'offer_price_rub' => $price,
             'observed_at' => now(),
+        ]);
+    }
+
+    private function siteNotification(AlertEvent $event, User $recipient, string $title): SiteNotification
+    {
+        return SiteNotification::query()->create([
+            'type' => SiteNotification::TYPE_GAME_ALERT,
+            'recipient_user_id' => $recipient->id,
+            'alert_event_id' => $event->id,
+            'title' => $title,
+            'body' => 'Preserved after account merge.',
+            'data' => ['appid' => $event->game_id],
+            'published_at' => now(),
         ]);
     }
 }

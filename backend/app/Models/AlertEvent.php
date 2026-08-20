@@ -42,4 +42,9 @@ class AlertEvent extends Model
     {
         return $this->hasOne(AlertDelivery::class);
     }
+
+    public function siteNotification(): HasOne
+    {
+        return $this->hasOne(SiteNotification::class);
+    }
 }

@@ -9,11 +9,14 @@ use App\Models\FavoriteAlert;
 use App\Models\Game;
 use App\Models\GamePriceObservation;
 use App\Models\GameSourceState;
-use Illuminate\Support\Facades\DB;
+use App\Services\Notifications\SiteNotificationService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class AlertEvaluationService
 {
+    public function __construct(private readonly SiteNotificationService $siteNotifications) {}
+
     /** @param array<int, int> $freshObservationIds */
     public function evaluate(Game $game, string $refreshedSource, array $freshObservationIds = []): int
     {
@@ -122,6 +125,7 @@ class AlertEvaluationService
     private function newLowCandidate(FavoriteAlert $alert, Collection $fresh, array $priorMinimums): ?GamePriceObservation
     {
         $scopeKeys = $alert->scopes->map(fn ($scope) => $scope->source.':'.$scope->offer_kind)->all();
+
         return $fresh
             ->filter(fn (GamePriceObservation $price) => in_array($price->source.':'.$price->offer_kind, $scopeKeys, true))
             ->filter(fn (GamePriceObservation $price) => ($priorMinimums[$price->id] ?? null) !== null
@@ -207,6 +211,7 @@ class AlertEvaluationService
             }
 
             $alert->update(['status' => 'triggered', 'triggered_at' => now()]);
+            $this->siteNotifications->publishAlert($event, $alert);
             $canDeliver = $alert->favorite->user->telegram_chat_id && $alert->favorite->user->radar_enabled;
             AlertDelivery::query()->create([
                 'alert_event_id' => $event->id,

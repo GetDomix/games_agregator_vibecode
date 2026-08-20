@@ -244,19 +244,81 @@ describe('profile admin navigation', () => {
     expect(screen.queryByRole('list', { name: 'Подходящие игры' })).not.toBeInTheDocument()
   })
 
-  it('opens price alerts from the notification control beside the profile', async () => {
+  it('opens the notification ledger from the control beside the profile', async () => {
     const user = userEvent.setup()
     renderApp(regularUser, (path) => path === '/api/me/favorites' ? json({ items: [{ appid: 8, game_name: 'Plain game', alert: null }] }) : undefined)
 
     const profileButton = screen.getByRole('button', { name: /Пользователь/ })
     const profileCluster = profileButton.closest('.profile-cluster') as HTMLElement
-    const notificationButton = within(profileCluster).getByRole('button', { name: 'Ценовые уведомления' })
+    const notificationButton = within(profileCluster).getByRole('button', { name: 'Уведомления' })
 
     expect(notificationButton).toBeInTheDocument()
     await user.click(notificationButton)
-    expect(screen.getByRole('heading', { name: 'Радар цен' })).toBeInTheDocument()
-    expect(notificationButton).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: 'Уведомления' })).toBeInTheDocument()
+    expect(notificationButton).toHaveAttribute('aria-expanded', 'true')
     expect(screen.queryByText('Ценовых сигналов')).not.toBeInTheDocument()
+  })
+
+  it('guides notification settings to the favorites library instead of Telegram', async () => {
+    const user = userEvent.setup()
+    Element.prototype.scrollIntoView = vi.fn()
+    renderApp(regularUser, (path) => path === '/api/me/favorites' ? json({ items: [{ appid: 8, game_name: 'Plain game', alert: null }] }) : undefined)
+
+    const profileButton = screen.getByRole('button', { name: /Пользователь/ })
+    const profileCluster = profileButton.closest('.profile-cluster') as HTMLElement
+    await user.click(within(profileCluster).getByRole('button', { name: 'Уведомления' }))
+    await user.click(screen.getByRole('button', { name: 'Настроить уведомления' }))
+
+    expect(await screen.findByRole('heading', { name: 'Избранное' })).toBeInTheDocument()
+    expect(await screen.findByText('Добавляйте игры через поиск, а уведомления настраивайте здесь.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Радар цен' })).not.toBeInTheDocument()
+
+    await user.click(profileButton)
+    await user.click(within(profileButton.closest('.profile-wrap') as HTMLElement).getByRole('menuitem', { name: 'Настройки' }))
+    await waitFor(() => expect(screen.queryByText('Добавляйте игры через поиск, а уведомления настраивайте здесь.')).not.toBeInTheDocument())
+
+    await user.click(profileButton)
+    await user.click(within(profileButton.closest('.profile-wrap') as HTMLElement).getByRole('menuitem', { name: 'Кабинет' }))
+    expect(await screen.findByRole('heading', { name: 'Избранное' })).toBeInTheDocument()
+    expect(screen.queryByText('Добавляйте игры через поиск, а уведомления настраивайте здесь.')).not.toBeInTheDocument()
+  })
+
+  it('shows favorite confirmation in the notification area', async () => {
+    const user = userEvent.setup()
+    renderApp(regularUser, (path) => {
+      if (path.startsWith('/api/games/620/price-history')) return json({
+        period_days: 90, available_periods: [90], current: { price_rub: 99, source: 'steam', offer_kind: 'official' },
+        statistics: { minimum_price_rub: 99, median_price_rub: 99 },
+        coverage: { observations: 1, checks: 1, observed_days: 1, sufficient: false }, verdict: 'insufficient', changes: [],
+      })
+      if (path.startsWith('/api/prices?')) return json({
+        query: 'Portal 2',
+        steam: { appid: 620, name: 'Portal 2', price_rub: 99, regional_prices: [] },
+        candidates: [], plati: { by_kind: [] }, ggsel: { by_kind: [] }, warnings: [], refreshing: false, is_favorite: false,
+      })
+      return undefined
+    })
+
+    await user.type(screen.getByRole('textbox', { name: 'Название игры' }), 'Portal 2')
+    await user.click(screen.getByRole('button', { name: 'Сравнить' }))
+    await user.click(await screen.findByRole('button', { name: '☆ В избранное' }))
+
+    const feedback = await screen.findByRole('status', { name: '' })
+    expect(feedback).toHaveTextContent('Добавлено в избранное')
+    expect(feedback).toHaveClass('notification-area-feedback')
+  })
+
+  it('does not guide the favorites library on a regular cabinet visit', async () => {
+    const user = userEvent.setup()
+    renderApp(regularUser)
+
+    const profileButton = screen.getByRole('button', { name: /Пользователь/ })
+    await user.click(profileButton)
+    await user.click(within(profileButton.closest('.profile-wrap') as HTMLElement).getByRole('menuitem', { name: 'Кабинет' }))
+
+    const library = (await screen.findByRole('heading', { name: 'Избранное' })).closest('#cabinet-favorites-library')
+    expect(library).not.toHaveClass('is-guided')
+    expect(screen.queryByText('Добавляйте игры через поиск, а уведомления настраивайте здесь.')).not.toBeInTheDocument()
   })
 
   it('shows a converted USD price in rubles when Steam RU is unavailable', async () => {

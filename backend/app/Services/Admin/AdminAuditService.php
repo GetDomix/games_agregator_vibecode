@@ -15,6 +15,7 @@ class AdminAuditService
     private const CONTEXT_KEYS = [
         'admin.role_changed' => ['old_role', 'new_role'],
         'game.refresh_requested' => ['sources'],
+        'notification.broadcast_sent' => ['title', 'priority', 'audience_count'],
     ];
 
     public function record(

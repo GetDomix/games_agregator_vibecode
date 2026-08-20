@@ -3,17 +3,19 @@ import type { KeyboardEvent } from 'react'
 import type { User } from '../../shared/api/client'
 import { AdminAuditTab } from './AdminAuditTab'
 import { AdminCatalogTab } from './AdminCatalogTab'
+import { AdminBroadcastTab } from './AdminBroadcastTab'
 import { AdminOverviewTab } from './AdminOverviewTab'
 import { AdminTeamTab } from './AdminTeamTab'
 import { AdminUsersTab } from './AdminUsersTab'
 
-type AdminTab = 'overview' | 'catalog' | 'users' | 'team' | 'audit'
+type AdminTab = 'overview' | 'catalog' | 'users' | 'broadcast' | 'team' | 'audit'
 type TabDefinition = { id: AdminTab; label: string; hint: string }
 
 const standardTabs: TabDefinition[] = [
   { id: 'overview', label: 'Обзор', hint: 'Состояние системы' },
   { id: 'catalog', label: 'Каталог', hint: 'Игры и источники' },
   { id: 'users', label: 'Пользователи', hint: 'Поиск аккаунтов' },
+  { id: 'broadcast', label: 'Рассылка', hint: 'Сообщение всем' },
   { id: 'audit', label: 'Аудит', hint: 'История действий' },
 ]
 
@@ -22,7 +24,7 @@ const teamTab: TabDefinition = { id: 'team', label: 'Команда', hint: 'Р�
 export function AdminShell({ currentUser }: { currentUser: User }) {
   const tabs = useMemo(() => {
     if (!currentUser.can_manage_admin_team) return standardTabs
-    return [...standardTabs.slice(0, 3), teamTab, standardTabs[3]]
+    return [...standardTabs.slice(0, 4), teamTab, standardTabs[4]]
   }, [currentUser.can_manage_admin_team])
   const [selected, setSelected] = useState<AdminTab>('overview')
   const [error, setError] = useState('')
@@ -101,6 +103,7 @@ export function AdminShell({ currentUser }: { currentUser: User }) {
         {selected === 'overview' && <AdminOverviewTab onError={showError} onNotice={showNotice} />}
         {selected === 'catalog' && <AdminCatalogTab onError={showError} onNotice={showNotice} />}
         {selected === 'users' && <AdminUsersTab onError={showError} onNotice={showNotice} />}
+        {selected === 'broadcast' && <AdminBroadcastTab onError={showError} onNotice={showNotice} />}
         {selected === 'team' && currentUser.can_manage_admin_team && (
           <AdminTeamTab currentUser={currentUser} onError={showError} onNotice={showNotice} />
         )}

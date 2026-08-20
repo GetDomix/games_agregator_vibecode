@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, authHeaders, getStoredUser, getToken, setSession } from '../shared/api/client'
@@ -11,9 +11,10 @@ import { AdminPanel } from '../features/admin/AdminPanel'
 import { GameRail } from '../features/catalog/GameRail'
 import { PriceHistory } from '../features/catalog/PriceHistory'
 import { useRevealOnScroll } from '../shared/hooks/useRevealOnScroll'
-import { WatchlistAlerts } from '../features/alerts/WatchlistAlerts'
-import type { AlertItem, AlertPrefs, AlertScope, ConditionType, FavoriteItem } from '../features/alerts/types'
+import type { AlertPrefs, AlertScope, ConditionType, FavoriteItem } from '../features/alerts/types'
 import { scopeLabel } from '../features/alerts/types'
+import { NotificationBell, NotificationCenter } from '../features/notifications/NotificationCenter'
+import { useNotifications } from '../features/notifications/useNotifications'
 import { selectSteamDisplayPrice } from './steamPrice'
 import './styles.css'
 
@@ -138,6 +139,7 @@ function useTheme() {
 
 export default function App() {
   const { theme, toggle } = useTheme()
+  const reduceMotion = useReducedMotion()
   const { locale, currency, currencyReady, formatPrice: money, formatAmount, tr } = useLocale()
   const [user, setUser] = useState<User | null>(getStoredUser())
   const [token, setToken] = useState<string | null>(getToken())
@@ -188,8 +190,10 @@ export default function App() {
   } | null>(null)
   const [tgBusy, setTgBusy] = useState(false)
   const [watchlist, setWatchlist] = useState<FavoriteItem[]>([])
-  const [alertItems, setAlertItems] = useState<AlertItem[]>([])
   const [alertModal, setAlertModal] = useState<FavoriteItem | null>(null)
+  const [libraryGuideRequest, setLibraryGuideRequest] = useState(0)
+  const [libraryHighlighted, setLibraryHighlighted] = useState(false)
+  const handledLibraryGuideRequestRef = useRef(0)
   const [gift, setGift] = useState<GiftGame | null>(() => loadGift())
   const lastSearchRef = useRef<{ q: string; appid: number | null } | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -207,9 +211,33 @@ export default function App() {
   const [pwdSaving, setPwdSaving] = useState(false)
 
   const loggedIn = Boolean(token && user)
+  const notifications = useNotifications(loggedIn)
   useRevealOnScroll(view === 'home', `${popular.length}:${releases.length}:${deals.length}:${result ? 1 : 0}`)
 
   const giftReady = !gift || Date.now() - gift.received_at >= GIFT_COOLDOWN_MS
+
+  useEffect(() => {
+    if (view !== 'cabinet') {
+      setLibraryHighlighted(false)
+      return
+    }
+    if (libraryGuideRequest === 0 || handledLibraryGuideRequestRef.current === libraryGuideRequest) return
+    let highlightTimer = 0
+    const frame = window.requestAnimationFrame(() => {
+      const library = document.querySelector<HTMLElement>('#cabinet-favorites-library')
+      if (!library) return
+      handledLibraryGuideRequestRef.current = libraryGuideRequest
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      library.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' })
+      library.focus({ preventScroll: true })
+      setLibraryHighlighted(true)
+      highlightTimer = window.setTimeout(() => setLibraryHighlighted(false), 1900)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(highlightTimer)
+    }
+  }, [libraryGuideRequest, view])
   function receiveGift() {
     if (!tgStatus?.linked) {
       setToast(tr('Сначала привяжи Telegram в Радаре', 'Connect Telegram in Radar first'))
@@ -346,12 +374,8 @@ export default function App() {
 
   const loadWatchlist = useCallback(async () => {
     if (!getToken()) return
-    const [favorites, alerts] = await Promise.all([
-      api<{ items: FavoriteItem[] }>('/api/me/favorites'),
-      api<{ items: AlertItem[] }>('/api/me/alerts'),
-    ])
+    const favorites = await api<{ items: FavoriteItem[] }>('/api/me/favorites')
     setWatchlist(favorites.items)
-    setAlertItems(alerts.items)
   }, [])
 
   useEffect(() => {
@@ -686,14 +710,20 @@ export default function App() {
     window.requestAnimationFrame(() => window.scrollTo({ top: 0 }))
   }
 
-  const openPriceAlerts = () => {
+  const openNotifications = () => {
     setProfileOpen(false)
     if (loggedIn) {
-      setView('radar')
+      notifications.toggle()
       return
     }
     setAuthTab('login')
     setAuthOpen(true)
+  }
+
+  const openNotificationLibrary = () => {
+    setProfileOpen(false)
+    setView('cabinet')
+    setLibraryGuideRequest((current) => current + 1)
   }
 
   return (
@@ -723,15 +753,7 @@ export default function App() {
               <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                 {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
               </button>
-              <button
-                type="button"
-                className={`btn ghost sm icon-btn notification-btn compact ${view === 'radar' ? 'is-active' : ''}`}
-                onClick={openPriceAlerts}
-                aria-label={tr('Ценовые уведомления', 'Price alerts')}
-                aria-current={view === 'radar' ? 'page' : undefined}
-              >
-                <IconBell size={18} />
-              </button>
+              <NotificationBell unreadCount={notifications.unreadCount} open={notifications.open} onClick={openNotifications} size={18} />
               <div className="profile-wrap">
                 <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
                   <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
@@ -771,15 +793,7 @@ export default function App() {
                 <button type="button" className="btn ghost sm icon-btn theme-toggle" onClick={toggle} aria-label={tr('Тема', 'Theme')}>
                   {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
                 </button>
-                <button
-                  type="button"
-                  className={`btn ghost sm icon-btn notification-btn compact ${view === 'radar' ? 'is-active' : ''}`}
-                  onClick={openPriceAlerts}
-                  aria-label={tr('Ценовые уведомления', 'Price alerts')}
-                  aria-current={view === 'radar' ? 'page' : undefined}
-                >
-                  <IconBell size={17} />
-                </button>
+                <NotificationBell unreadCount={notifications.unreadCount} open={notifications.open} onClick={openNotifications} />
                 <div className="profile-wrap">
                   <button type="button" className="profile-btn" onClick={() => setProfileOpen((v) => !v)} aria-haspopup="menu" aria-expanded={profileOpen}>
                     <span className="avatar">{(user?.display_name || user?.email || '?').charAt(0).toUpperCase()}</span>
@@ -807,7 +821,7 @@ export default function App() {
                 <button
                   type="button"
                   className="btn ghost sm icon-btn notification-btn compact"
-                  onClick={openPriceAlerts}
+                  onClick={openNotifications}
                   aria-label={tr('Ценовые уведомления', 'Price alerts')}
                 >
                   <IconBell size={17} />
@@ -821,6 +835,23 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {loggedIn && (
+        <NotificationCenter
+          open={notifications.open}
+          loading={notifications.loading}
+          loadingEarlier={notifications.loadingEarlier}
+          hasEarlier={notifications.hasEarlier}
+          unreadCount={notifications.unreadCount}
+          items={notifications.items}
+          liveNotification={notifications.liveNotification}
+          onClose={notifications.close}
+          onDismissLive={notifications.dismissLive}
+          onOpenGame={(name, appid) => { runSearch(name, appid).catch(() => {}) }}
+          onOpenLibrary={openNotificationLibrary}
+          onLoadEarlier={notifications.loadEarlier}
+        />
+      )}
 
       <main className="shell has-tabbar">
         {view === 'home' && (
@@ -1323,7 +1354,7 @@ export default function App() {
               <p className="eyebrow">{tr('Уведомления', 'Notifications')}</p>
               <h2>{tr('Радар цен', 'Price radar')}</h2>
               <p className="lead">
-                {tr('Бот', 'The bot')} <strong>@igroscan_bot</strong> {tr('пишет в Telegram, когда выполняется выбранное условие ценового сигнала.', 'sends a Telegram message when your selected price-alert condition is met.')}
+                {tr('Игроскан сохраняет сработавшие сигналы в центре уведомлений сайта. Telegram остаётся дополнительным каналом и настраивается отдельно.', 'Igroscan stores triggered alerts in the site notification center. Telegram remains an optional channel configured separately.')}
               </p>
             </div>
 
@@ -1355,16 +1386,16 @@ export default function App() {
                   </article>
                   <article className="panel radar-step">
                     <span className="radar-step-n">2</span>
-                    <h3>{tr('Привяжи Telegram', 'Connect Telegram')}</h3>
+                    <h3>{tr('Получай на сайте', 'Receive on the site')}</h3>
                     <p className="muted">
-                      {tr('Подтверди Telegram и открой бота', 'Confirm Telegram and open the bot')} <strong>@igroscan_bot</strong>.
+                      {tr('Новый сигнал появится у колокольчика со звуком и останется там до просмотра.', 'A new alert appears by the bell with sound and stays there until viewed.')}
                     </p>
                   </article>
                   <article className="panel radar-step">
                     <span className="radar-step-n">3</span>
-                    <h3>{tr('Жди уведомления', 'Wait for an alert')}</h3>
+                    <h3>{tr('Telegram — по желанию', 'Telegram is optional')}</h3>
                     <p className="muted">
-                      {tr('Сервер обновляет цены по расписанию и отправляет уведомление, когда выполняется условие.', 'The server refreshes prices on schedule and notifies you when the condition is met.')}
+                      {tr('Привяжи бота, если нужен второй канал доставки вне сайта.', 'Connect the bot if you want a second delivery channel outside the site.')}
                     </p>
                   </article>
                 </div>
@@ -1568,7 +1599,7 @@ export default function App() {
                       <strong>{tr('Источники', 'Sources')}</strong> — {tr('для своей цены и нового минимума выбери Steam, Plati.Market и GGsel; скидка — только официальная цена Steam.', 'choose Steam, Plati.Market, and GGsel for custom price and new low; discounts use official Steam only.')}
                     </li>
                     <li>{tr('Выпущенные игры обновляются примерно раз в 3 часа.', 'Released games refresh about every 3 hours.')}</li>
-                    <li>{tr('Без привязки Telegram уведомлений не будет.', 'Telegram must be connected to receive notifications.')}</li>
+                    <li>{tr('Уведомления сайта работают без Telegram; бот остаётся дополнительным каналом.', 'Site notifications work without Telegram; the bot remains an optional channel.')}</li>
                   </ul>
                   <button type="button" className="btn ghost" style={{ marginTop: '0.75rem' }} onClick={() => setView('cabinet')}>
                     {tr('К избранному в кабинете', 'Open dashboard watchlist')}
@@ -1630,11 +1661,21 @@ export default function App() {
 
             <div className="cabinet-workspace">
               <main className="cabinet-main">
-                <div className="panel cabinet-favorites">
+                <div
+                  id="cabinet-favorites-library"
+                  className={`panel cabinet-favorites ${libraryHighlighted ? 'is-guided' : ''}`}
+                  tabIndex={-1}
+                  aria-describedby={libraryHighlighted ? 'cabinet-library-guide' : undefined}
+                >
                   <div className="panel-head cabinet-panel-head">
                     <div>
                       <p className="panel-kicker"><IconStar size={14} /> {tr('Библиотека', 'Library')}</p>
                       <h3>{tr('Избранное', 'Watchlist')}</h3>
+                      {libraryHighlighted && (
+                        <p id="cabinet-library-guide" className="cabinet-library-guide" role="status">
+                          {tr('Добавляйте игры через поиск, а уведомления настраивайте здесь.', 'Add games through search, then configure notifications here.')}
+                        </p>
+                      )}
                     </div>
                     <div className="cabinet-panel-tools">
                       <span className="cabinet-count">{watchlist.length}</span>
@@ -1674,8 +1715,19 @@ export default function App() {
                           {f.freshness?.map((source) => <span className="offer-meta" key={source.source}>{source.source}: {source.status}{source.last_error ? ` · ${source.last_error}` : ''}</span>)}
                           <div className="actions cabinet-card-actions">
                             <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>{tr('Цены', 'Prices')}</button>
-                            {/* TODO [Cabinet configure] Временно вырезано из MVP */}
-                            {SHOW_POST_MVP_FEATURES && <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>}
+                            <button
+                              type="button"
+                              className={`btn ghost sm favorite-alert-control ${f.alert?.status === 'active' ? 'is-active' : f.alert?.status === 'triggered' ? 'is-triggered' : ''}`}
+                              aria-pressed={f.alert?.status === 'active'}
+                              onClick={() => setAlertModal(f)}
+                            >
+                              <IconBell size={15} />
+                              {f.alert?.status === 'active'
+                                ? tr('Уведомления включены', 'Notifications enabled')
+                                : f.alert?.status === 'triggered'
+                                  ? tr('Сигнал сработал', 'Alert triggered')
+                                  : tr('Добавить уведомление', 'Add notification')}
+                            </button>
                             <button
                               type="button"
                               className="btn ghost sm"
@@ -1696,26 +1748,6 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
-                {/* TODO [Watchlist alerts] Временно вырезано из MVP */}
-                {SHOW_POST_MVP_FEATURES && (
-                  <WatchlistAlerts
-                    favorites={watchlist}
-                    alerts={alertItems}
-                    onEdit={(favorite) => setAlertModal(favorite)}
-                    onSearch={runSearch}
-                    onRearm={async (alert) => {
-                      await api(`/api/me/favorites/${alert.favorite.appid}/alert/rearm`, { method: 'POST' })
-                      await loadWatchlist()
-                      setToast('Алерт снова активен')
-                    }}
-                    onRemove={async (alert) => {
-                      await api(`/api/me/favorites/${alert.favorite.appid}/alert`, { method: 'DELETE' })
-                      await loadWatchlist()
-                      setToast('Алерт удалён')
-                    }}
-                  />
-                )}
 
                 <div className="panel cabinet-history">
                   <div className="panel-head">
@@ -1860,8 +1892,19 @@ export default function App() {
                       {f.release_status === 'announced' ? <span className="offer-meta">Ожидаем релиз в Steam — маркетплейсы пока не запрашиваются.</span> : null}
                       <div className="actions">
                         <button type="button" className="btn ghost sm" onClick={() => runSearch(f.game_name, f.appid)}>{tr('Цены', 'Prices')}</button>
-                        {/* TODO [Watchlist configure] Временно вырезано из MVP */}
-                        {SHOW_POST_MVP_FEATURES && <button type="button" className="btn ghost sm" onClick={() => setAlertModal(f)}>{tr('Настроить', 'Configure')}</button>}
+                        <button
+                          type="button"
+                          className={`btn ghost sm favorite-alert-control ${f.alert?.status === 'active' ? 'is-active' : f.alert?.status === 'triggered' ? 'is-triggered' : ''}`}
+                          aria-pressed={f.alert?.status === 'active'}
+                          onClick={() => setAlertModal(f)}
+                        >
+                          <IconBell size={15} />
+                          {f.alert?.status === 'active'
+                            ? tr('Уведомления включены', 'Notifications enabled')
+                            : f.alert?.status === 'triggered'
+                              ? tr('Сигнал сработал', 'Alert triggered')
+                              : tr('Добавить уведомление', 'Add notification')}
+                        </button>
                         <button
                           type="button"
                           className="btn ghost sm"
@@ -1954,8 +1997,7 @@ export default function App() {
         )}
       </main>
 
-      {/* TODO [Alert settings modal] Временно вырезано из MVP */}
-      {SHOW_POST_MVP_FEATURES && alertModal && (
+      {alertModal && (
         <AlertSettingsModal
           favorite={alertModal}
           initialPrefs={(user as (User & { alert_prefs?: AlertPrefs | null }) | null)?.alert_prefs ?? null}
@@ -1980,6 +2022,11 @@ export default function App() {
             loadWatchlist().catch(() => {})
             setToast(tr('Алерт удалён', 'Alert deleted'))
           }}
+          onRearmAlert={async () => {
+            await api(`/api/me/favorites/${alertModal.appid}/alert/rearm`, { method: 'POST' })
+            await loadWatchlist()
+            setToast(tr('Уведомления по игре снова включены', 'Game notifications reactivated'))
+          }}
         />
       )}
 
@@ -1994,7 +2041,16 @@ export default function App() {
 
       <AnimatePresence>
         {toast && (
-          <motion.div className="toast" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+          <motion.div
+            className="toast notification-area-feedback"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            initial={{ opacity: 0, x: reduceMotion ? 0 : 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: reduceMotion ? 0 : 12 }}
+            transition={{ duration: reduceMotion ? 0.1 : 0.22, ease: [0.22, 0.61, 0.2, 1] }}
+          >
             {toast}
           </motion.div>
         )}
@@ -2006,12 +2062,15 @@ export default function App() {
         </button>
         <button
           type="button"
-          className={view === 'radar' ? 'active' : ''}
-          onClick={openPriceAlerts}
-          aria-current={view === 'radar' ? 'page' : undefined}
+          className={notifications.open ? 'active' : ''}
+          onClick={openNotifications}
+          aria-expanded={notifications.open}
         >
-          <span className="m-tab-ico" aria-hidden><IconBell size={20} /></span>
-          {tr('Сигналы', 'Alerts')}
+          <span className="m-tab-ico notification-tab-icon" aria-hidden>
+            <IconBell size={20} />
+            {notifications.unreadCount > 0 && <span className="notification-badge">{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</span>}
+          </span>
+          {tr('Уведомления', 'Notifications')}
         </button>
         <button
           type="button"

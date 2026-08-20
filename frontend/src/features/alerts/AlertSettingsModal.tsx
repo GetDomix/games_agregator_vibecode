@@ -12,6 +12,7 @@ type Props = {
   onSave: (value: { condition_type: ConditionType; target_value: number | null; scopes: AlertScope[] }) => Promise<void>
   onSavedPrefs: (prefs: AlertPrefs) => void
   onRemoveAlert?: () => Promise<void>
+  onRearmAlert?: () => Promise<void>
 }
 
 const DEFAULT_SCOPES: AlertScope[] = [{ source: 'steam', offer_kind: 'official' }]
@@ -28,7 +29,7 @@ function initialScopes(favorite: Props['favorite'], prefs?: AlertPrefs | null): 
   ]
 }
 
-export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, onSavedPrefs, onRemoveAlert }: Props) {
+export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, onSavedPrefs, onRemoveAlert, onRearmAlert }: Props) {
   const { currency, currencyReady, fromRub, toRub, tr } = useLocale()
   const initialCondition = (favorite.alert?.condition_type as ConditionType | undefined) ?? 'target_price'
   const [condition, setCondition] = useState<ConditionType>(initialCondition)
@@ -38,11 +39,12 @@ export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, on
   const [scopes, setScopes] = useState<AlertScope[]>(() => initialScopes(favorite, initialPrefs))
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const [rearming, setRearming] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [valueTouched, setValueTouched] = useState(false)
   const dialogRef = useRef<HTMLElement>(null)
   const returnFocus = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null)
-  const busy = saving || removing
+  const busy = saving || removing || rearming
   const busyRef = useRef(busy)
   const onCloseRef = useRef(onClose)
   busyRef.current = busy
@@ -121,6 +123,11 @@ export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, on
     setRemoving(true); setSubmitError('')
     try { await onRemoveAlert() } catch (error) { setSubmitError(error instanceof Error ? error.message : tr('Не удалось удалить алерт.', 'Could not delete the alert.')); setRemoving(false) }
   }
+  const rearm = async () => {
+    if (!onRearmAlert) return
+    setRearming(true); setSubmitError('')
+    try { await onRearmAlert(); onClose() } catch (error) { setSubmitError(error instanceof Error ? error.message : tr('Не удалось включить сигнал снова.', 'Could not reactivate the alert.')); setRearming(false) }
+  }
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={() => !busy && onClose()}>
     <section ref={dialogRef} className="panel alert-modal" role="dialog" aria-modal="true" aria-labelledby="alert-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -166,7 +173,7 @@ export function AlertSettingsModal({ favorite, initialPrefs, onClose, onSave, on
       )}
       {condition !== 'discount_percent' && <details className="alert-sources"><summary><span>{tr('Дополнительные настройки', 'Additional settings')}</span><small>{effectiveScopes.length} · {selectedSources}</small></summary><p>{tr('Площадки и типы предложений', 'Marketplaces and offer types')}</p><div className="alert-quick-picks"><div><strong>{tr('Сразу на обеих площадках', 'Across both marketplaces')}</strong><small>{tr('Быстрый выбор по типу', 'Quick selection by type')}</small></div><div className="alert-quick-grid">{MARKET_KINDS.map((kind) => { const selected = MARKET_SOURCES.filter((source) => has(source, kind)).length; return <button type="button" key={kind} className={`alert-quick-kind ${selected === MARKET_SOURCES.length ? 'active' : ''} ${selected > 0 && selected < MARKET_SOURCES.length ? 'mixed' : ''}`} aria-pressed={selected === MARKET_SOURCES.length} onClick={() => toggleKindAcrossMarkets(kind)}>{offerKindLabel('plati', kind)}<span>{selected}/{MARKET_SOURCES.length}</span></button> })}</div></div><div className="alert-scope-group"><div className="alert-scope-group-head"><strong>Steam</strong></div><div className="alert-scope-options"><label><input type="checkbox" checked={has('steam', 'official')} onChange={() => toggle('steam', 'official')} /> {offerKindLabel('steam', 'official')}</label></div></div>{MARKETPLACES.map((source) => { const selected = MARKET_KINDS.filter((kind) => has(source, kind)).length; return <div className="alert-scope-group" key={source}><div className="alert-scope-group-head"><strong>{sourceLabel(source)}</strong><button type="button" className="btn link sm" onClick={() => toggleMarketplace(source)}>{selected === MARKET_KINDS.length ? tr('Снять все', 'Clear all') : tr('Выбрать все', 'Select all')}</button></div><div className="alert-scope-options alert-scope-options--kinds">{MARKET_KINDS.map((kind) => <label key={`${source}:${kind}`}><input type="checkbox" checked={has(source, kind)} onChange={() => toggle(source, kind)} /> {offerKindLabel(source, kind)}</label>)}</div></div> })}</details>}
       {valueInvalid && (valueTouched || activeTarget.trim() !== '') && <p className="alert-validation">{tr('Введите корректное значение.', 'Enter a valid value.')}</p>}{effectiveScopes.length === 0 && <p className="alert-validation">{tr('Выберите хотя бы один источник.', 'Select at least one source.')}</p>}{submitError && <p className="alert-validation" role="alert">{submitError}</p>}
-      <div className="alert-modal-actions"><div>{onRemoveAlert && favorite.alert && <button type="button" className="btn link danger" disabled={busy} onClick={remove}>{removing ? tr('Удаляем…', 'Removing…') : tr('Удалить алерт', 'Delete alert')}</button>}</div><div className="actions"><button type="button" className="btn ghost" disabled={busy} onClick={onClose}>{tr('Отмена', 'Cancel')}</button><button type="button" className="btn primary" disabled={!canSave} onClick={save}>{saving ? tr('Сохраняем…', 'Saving…') : tr('Сохранить алерт', 'Save alert')}</button></div></div>
+      <div className="alert-modal-actions"><div>{onRemoveAlert && favorite.alert && <button type="button" className="btn link danger" disabled={busy} onClick={remove}>{removing ? tr('Удаляем…', 'Removing…') : tr('Удалить алерт', 'Delete alert')}</button>}</div><div className="actions">{favorite.alert?.status === 'triggered' && onRearmAlert && <button type="button" className="btn ghost" disabled={busy} onClick={rearm}>{rearming ? tr('Включаем…', 'Reactivating…') : tr('Включить снова', 'Reactivate')}</button>}<button type="button" className="btn ghost" disabled={busy} onClick={onClose}>{tr('Отмена', 'Cancel')}</button><button type="button" className="btn primary" disabled={!canSave} onClick={save}>{saving ? tr('Сохраняем…', 'Saving…') : tr('Сохранить алерт', 'Save alert')}</button></div></div>
     </section>
   </div>
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminAuditController;
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AdminNotificationController;
 use App\Http\Controllers\Api\AdminTeamController;
 use App\Http\Controllers\Api\AdsController;
 use App\Http\Controllers\Api\AlertController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Api\GamePriceController;
 use App\Http\Controllers\Api\GamePriceHistoryController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\HistoryController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PlatiRouletteController;
 use App\Http\Controllers\Api\PriceController;
 use App\Http\Controllers\Api\RegionController;
@@ -77,12 +79,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/me/favorites/{appid}/alert', [FavoriteController::class, 'destroyAlert']);
     Route::get('/me/alerts', [AlertController::class, 'index']);
     Route::get('/me/alerts/events', [AlertController::class, 'events']);
+    Route::get('/me/notifications', [NotificationController::class, 'index']);
+    Route::post('/me/notifications/read-through', [NotificationController::class, 'readThrough']);
     Route::delete('/me/favorites/{appid}', [FavoriteController::class, 'destroy']);
 
     Route::middleware(['admin-role', 'throttle:admin-read'])->group(function () {
         Route::get('/admin/overview', [AdminController::class, 'overview']);
         Route::get('/admin/users', [AdminController::class, 'users']);
         Route::get('/admin/audit', AdminAuditController::class);
+        Route::post('/admin/notifications/broadcast', [AdminNotificationController::class, 'store'])
+            ->middleware('throttle:admin-action');
     });
     Route::get('/admin/team', [AdminTeamController::class, 'index'])
         ->middleware(['owner-role', 'throttle:admin-read']);
