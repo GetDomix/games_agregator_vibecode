@@ -30,7 +30,8 @@ frontend/dist/
 backups/
 *.dump
 *.dump.sha256
-legacy/.venv/
+.codex/
+archive/legacy/.venv/
 
 bot/.env
 .radar_svc_token.tmp
