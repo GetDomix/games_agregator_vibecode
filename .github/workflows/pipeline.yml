@@ -273,7 +273,7 @@ jobs:
           if [ -z "${APP_KEY:-}" ]; then unset APP_KEY || true; fi
           if [ -z "${POSTGRES_PASSWORD:-}" ]; then unset POSTGRES_PASSWORD || true; fi
 
-          docker compose up -d --build --remove-orphans
+          docker compose --profile edge up -d --build --remove-orphans
           docker compose ps
 
           for service in backend scheduler queue-worker; do

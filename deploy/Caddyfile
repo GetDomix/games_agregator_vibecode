@@ -1,5 +1,5 @@
-# Local opt-in edge only. Production uses Caddyfile.production via the strict overlay.
-http://localhost, http://127.0.0.1 {
+# Temporary HTTP edge for IP-based VPS checks. Production uses Caddyfile.production via the strict overlay.
+:80 {
 	encode zstd gzip
 	reverse_proxy frontend:80 {
 		header_up X-Real-IP {remote_host}

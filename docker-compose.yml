@@ -138,9 +138,7 @@ services:
     image: caddy:2-alpine
     profiles: [edge]
     ports:
-      - "127.0.0.1:80:80"
-      - "127.0.0.1:443:443"
-      - "127.0.0.1:443:443/udp"
+      - "80:80"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
