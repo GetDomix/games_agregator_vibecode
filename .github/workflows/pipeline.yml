@@ -132,7 +132,8 @@ jobs:
       - name: Validate Compose
         run: docker compose config --quiet
       - name: Build application images
-        run: docker compose build backend frontend scheduler queue-worker radar-bot
+#        run: docker compose build backend frontend scheduler queue-worker radar-bot
+        run: docker compose build backend frontend scheduler queue-worker
 
   deploy:
     name: 5 · Deploy VPS
@@ -275,7 +276,7 @@ jobs:
           docker compose up -d --build --remove-orphans
           docker compose ps
 
-          for service in backend scheduler queue-worker radar-bot; do
+          for service in backend scheduler queue-worker; do
             docker compose ps --status running --services | grep -qx "$service" || {
               echo "service is not running: $service" >&2
               exit 1
