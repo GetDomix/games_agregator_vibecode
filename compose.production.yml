@@ -60,5 +60,5 @@ services:
 #  tunnel:
 #    profiles: !override [manual-tunnel]
 
-  radar-bot:
-    profiles: !override [telegram]
+#  radar-bot:
+#    profiles: !override [telegram]
