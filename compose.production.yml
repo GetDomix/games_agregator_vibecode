@@ -57,8 +57,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-  tunnel:
-    profiles: !override [manual-tunnel]
+#  tunnel:
+#    profiles: !override [manual-tunnel]
 
   radar-bot:
     profiles: !override [telegram]
