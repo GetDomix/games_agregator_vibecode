@@ -38,7 +38,7 @@ Production Compose запускает отдельные процессы `backe
   ставит штатные фоновые задачи в очередь; цены из админки не редактируются.
 
 Модель угроз, результаты и повторяемые команды находятся в
-[`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
+[`docs/SECURITY_REVIEW.md`](archive/docs/SECURITY_REVIEW.md).
 
 Поиск бесплатен для гостей и зарегистрированных пользователей. Защита API от спама обеспечивается техническими rate limits.
 

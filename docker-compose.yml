@@ -24,7 +24,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-8080}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-18080}:8000"
     # Host /opt/gpa/.env is the source of truth for APP_KEY + DB password.
     # Do not export empty APP_KEY/POSTGRES_PASSWORD in the shell before `compose up`
     # (empty shell vars override the project .env file).
@@ -34,7 +34,7 @@ services:
       APP_NAME: Игроскан
       APP_ENV: ${APP_ENV:-local}
       APP_DEBUG: ${APP_DEBUG:-false}
-      APP_URL: ${APP_URL:-http://127.0.0.1:8080}
+      APP_URL: ${APP_URL:-http://127.0.0.1:18080}
       FRONTEND_URL: ${FRONTEND_URL:-http://127.0.0.1:5173}
       LOG_CHANNEL: stderr
       DB_CONNECTION: pgsql
@@ -152,29 +152,30 @@ services:
   # Free Cloudflare edge access WITHOUT buying a domain (temporary *.trycloudflare.com URL).
   # Traffic goes via Cloudflare anycast → often works without VPN when bare IP is filtered.
   # Permanent custom hostname still needs any domain on a free Cloudflare plan.
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    profiles: [tunnel]
-    command: tunnel --no-autoupdate --url http://frontend:80
-    depends_on:
-      - frontend
-    restart: unless-stopped
+#  tunnel:
+#    image: cloudflare/cloudflared:latest
+#    profiles: [tunnel]
+#    command: tunnel --no-autoupdate --url http://frontend:80
+#    depends_on:
+#      - frontend
+#    restart: unless-stopped
 
   # Telegram interface (aiogram3) — polling only; Laravel owns refresh scheduling
-  radar-bot:
-    build:
-      context: ./bot
-      dockerfile: Dockerfile
-    environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-igroscan_radar_bot}
-      API_BASE_URL: http://backend:8000
-      RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-    profiles: [telegram]
+  # TODO: Вырезано из MVP
+#  radar-bot:
+#    build:
+#      context: ./bot
+#      dockerfile: Dockerfile
+#    environment:
+#      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+#      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-igroscan_radar_bot}
+#      API_BASE_URL: http://backend:8000
+#      RADAR_SERVICE_TOKEN: ${RADAR_SERVICE_TOKEN:-}
+#    depends_on:
+#      backend:
+#        condition: service_healthy
+#    restart: unless-stopped
+#    profiles: [telegram]
 
 volumes:
   gpa_pgdata:

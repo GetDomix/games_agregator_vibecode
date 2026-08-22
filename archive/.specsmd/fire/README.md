@@ -2,7 +2,7 @@
 
 **Fast Intent-Run Engineering** — A simplified AI-native development methodology.
 
-For getting started, see [quick-start.md](./quick-start.md).
+For getting started, see [quick-start.md](quick-start.md).
 
 ## Summary
 
